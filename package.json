@@ -5,11 +5,10 @@
   "scripts": {
     "build": "next build",
     "dev": "next dev",
-    "postinstall": "npm run playwright:install",
     "lint": "eslint .",
     "migrate": "tsx scripts/migrate.ts",
     "migrate:input-type": "tsx scripts/add-input-type-to-transactions.ts",
-    "playwright:install": "npx playwright install chromium --with-deps",
+    "playwright:install": "npx playwright install chromium",
     "scrap": "node scripts/scrap.js",
     "seed": "tsx scripts/seed.ts",
     "start": "next start",

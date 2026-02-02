@@ -19,10 +19,16 @@ npm run playwright:install
 ```
 
 ### Vercel Deployment
-Di Vercel, browsers akan diinstal selama build phase melalui `buildCommand` di `vercel.json`:
-```bash
-npm run playwright:install && next build
-```
+⚠️ **PENTING: Playwright tidak dapat berjalan di Vercel**
+
+Vercel menggunakan Alpine Linux yang tidak memiliki `apt-get` untuk menginstal system dependencies yang dibutuhkan Chromium. Akibatnya:
+- `/api/scrap` endpoint akan return error 503 di Vercel
+- Scrap API hanya bisa dijalankan secara lokal
+
+Jika Anda perlu scrap feature di production, gunakan alternative:
+1. **Hosting lain**: Railway, Render, atau self-hosted yang support system dependencies
+2. **Serverless Browser Service**: Browserless.io, ScraperAPI, Apify, atau Bright Data
+3. **Local Runner**: Setup local machine/VPS untuk menjalankan scrap job secara scheduled
 
 ## Manual Installation
 Jika perlu menginstal manual:
@@ -43,15 +49,11 @@ npx playwright install --with-deps
 npx playwright install chromium --with-deps
 ```
 
-### Error saat di Vercel/Serverless
-**Penyebab:** Kurangnya system dependencies atau disk space
-**Solusi:**
-1. Pastikan `vercel.json` memiliki `buildCommand` yang benar
-2. Gunakan args optimal di `chromium.launch()`:
-   - `--no-sandbox`: Dibutuhkan di containerized env
-   - `--disable-dev-shm-usage`: Menghemat memory di serverless
-   - `--disable-gpu`: Tidak perlu GPU untuk headless
-   - `--single-process`: Hanya untuk testing
+### Error saat di Vercel/Serverless: "apt-get: command not found"
+**Penyebab:** Vercel environment tidak memiliki package manager untuk install system dependencies
+**Solusi:** TIDAK ADA SOLUSI - Playwright tidak dapat berjalan di Vercel
+- Endpoint `/api/scrap` akan return 503 error
+- Gunakan alternative solutions (lihat bagian Vercel Deployment di atas)
 
 ### Memory Issues
 Jika terjadi error OOM (Out of Memory):

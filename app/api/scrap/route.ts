@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { chromium } from 'playwright'
 import { sql } from '@/lib/db'
 
+// Check if we're running in Vercel (serverless environment without browser binaries)
+const isVercelEnv = process.env.VERCEL === '1'
+
 // Helper function untuk parse angka dengan koma (format Indonesia)
 function parseIndonesianNumber(value: string | undefined): number {
   if (!value || value === '-' || value === '0') return 0
@@ -263,6 +266,17 @@ export async function POST(request: NextRequest) {
     const ID_REKENING = (clinic as any).id_rekening || null
 
     console.log(`🚀 Memulai scraping untuk klinik: ${clinic.name}, tanggal: ${tgl_awal} sampai ${tgl_akhir}`)
+
+    // Check if Playwright browsers are available
+    if (isVercelEnv) {
+      return NextResponse.json(
+        {
+          error: 'Scrap API tidak tersedia di environment Vercel (Playwright browsers tidak terinstall)',
+          message: 'Silakan jalankan command berikut secara lokal: npm run playwright:install, kemudian deploy kembali',
+        },
+        { status: 503 }
+      )
+    }
 
     // Launch browser dengan konfigurasi untuk serverless environment
     const browser = await chromium.launch({
