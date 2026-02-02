@@ -6,16 +6,20 @@ on:
   # Jalan tiap 30 menit, Senin–Sabtu
   schedule:
     - cron: "*/30 1-14 * * 1-6"
-  # Bisa dijalankan manual dari UI GitHub
+  # Bisa dijalankan manual dari UI GitHub atau Vercel
   workflow_dispatch:
 
 jobs:
   run-scrap-queue:
     runs-on: ubuntu-latest
+    timeout-minutes: 60  # Timeout 60 menit untuk job yang lama
 
-    # Pastikan hanya satu job scrap queue yang jalan sekaligus
+    # Concurrency strategy:
+    # - Cron jobs: pakai group yang sama (hanya 1 cron job jalan sekaligus)
+    # - Manual/insidental: pakai unique group per run (bisa concurrent dengan cron)
+    #   Ini memungkinkan insidental jalan bersamaan dengan cron tanpa konflik
     concurrency:
-      group: scrap-queue
+      group: ${{ github.event_name == 'schedule' && 'scrap-queue-cron' || format('scrap-queue-manual-{0}', github.run_id) }}
       cancel-in-progress: false
 
     env:
@@ -26,6 +30,8 @@ jobs:
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
       POSTGRES_URL: ${{ secrets.POSTGRES_URL }}
       NEXT_PUBLIC_DATABASE_URL: ${{ secrets.NEXT_PUBLIC_DATABASE_URL }}
+      # Flag untuk bedakan cron vs manual
+      IS_CRON: ${{ github.event_name == 'schedule' && 'true' || 'false' }}
 
     steps:
       - name: Checkout repository
@@ -45,7 +51,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Enqueue today scrap jobs
+      # Hanya enqueue untuk cron (bukan untuk insidental/manual)
+      - name: Enqueue today scrap jobs (cron only)
+        if: github.event_name == 'schedule'
         run: pnpm scrap:enqueue-today
 
       - name: Run scrap queue worker

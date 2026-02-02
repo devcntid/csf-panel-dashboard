@@ -27,39 +27,78 @@ export async function POST() {
       })
     }
 
-    // Trigger GitHub Actions workflow via API
+    // Trigger GitHub Actions workflow via API dengan retry logic
     const workflowId = 'scrap-queue.yml' // Nama file workflow
     const apiUrl = `https://api.github.com/repos/${githubRepo}/actions/workflows/${workflowId}/dispatches`
 
-    const response = await fetch(apiUrl, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${githubToken}`,
-        'Accept': 'application/vnd.github+json',
-        'X-GitHub-Api-Version': '2022-11-28',
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        ref: githubRef, // Branch yang akan di-trigger
-        inputs: {}, // Optional: bisa kirim parameter tambahan kalau perlu
-      }),
-    })
+    // Retry logic: coba sampai 3 kali dengan delay
+    let lastError: any = null
+    let success = false
 
-    if (!response.ok) {
-      const errorText = await response.text()
-      console.error('[scrap:queue] GitHub Actions API error:', response.status, errorText)
-      
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        const response = await fetch(apiUrl, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${githubToken}`,
+            'Accept': 'application/vnd.github+json',
+            'X-GitHub-Api-Version': '2022-11-28',
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            ref: githubRef, // Branch yang akan di-trigger
+            inputs: {}, // Optional: bisa kirim parameter tambahan kalau perlu
+          }),
+        })
+
+        if (response.ok) {
+          console.log(`[scrap:queue] GitHub Actions workflow triggered successfully (attempt ${attempt})`)
+          success = true
+          break
+        }
+
+        // Jika 429 (rate limit) atau 503 (service unavailable), retry dengan delay
+        if (response.status === 429 || response.status === 503) {
+          const errorText = await response.text()
+          console.warn(`[scrap:queue] GitHub API rate limit/service unavailable (attempt ${attempt}/3):`, errorText)
+          
+          if (attempt < 3) {
+            // Exponential backoff: 2s, 4s, 8s
+            const delayMs = Math.pow(2, attempt) * 1000
+            console.log(`[scrap:queue] Retrying in ${delayMs}ms...`)
+            await new Promise(resolve => setTimeout(resolve, delayMs))
+            continue
+          }
+        }
+
+        // Error lain, langsung throw
+        const errorText = await response.text()
+        lastError = { status: response.status, message: errorText }
+        console.error(`[scrap:queue] GitHub Actions API error (attempt ${attempt}):`, response.status, errorText)
+        break
+
+      } catch (fetchError: any) {
+        lastError = fetchError
+        console.error(`[scrap:queue] Fetch error (attempt ${attempt}):`, fetchError.message)
+        
+        if (attempt < 3) {
+          const delayMs = Math.pow(2, attempt) * 1000
+          await new Promise(resolve => setTimeout(resolve, delayMs))
+        }
+      }
+    }
+
+    if (!success) {
       return NextResponse.json(
         {
           success: false,
-          message: 'Gagal trigger GitHub Actions workflow',
-          error: `GitHub API returned ${response.status}: ${errorText}`,
+          message: 'Gagal trigger GitHub Actions workflow setelah 3 kali percobaan',
+          error: lastError?.message || `GitHub API returned ${lastError?.status || 'unknown error'}`,
+          note: 'Job akan tetap diproses pada cron berikutnya (30 menit) atau trigger manual di GitHub Actions',
         },
         { status: 500 }
       )
     }
-
-    console.log('[scrap:queue] GitHub Actions workflow triggered successfully')
 
     return NextResponse.json({
       success: true,
