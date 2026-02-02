@@ -17,9 +17,9 @@ Kita sudah menambahkan file `nixpacks.toml` yang menginstruksikan Railway untuk 
 ### File yang Ditambahkan/Dimodifikasi
 
 1. **`nixpacks.toml`** (NEW)
-   - Konfigurasi untuk install Python 3, pip, gcc, dan make
-   - Setup Node.js 18
+   - Konfigurasi untuk install Python 3, gcc, dan make
    - Install dependencies dengan `pnpm install --frozen-lockfile`
+   - Node.js akan di-detect otomatis oleh Nixpacks
 
 2. **`railway.json`** (UPDATED)
    - Disederhanakan, karena build command sekarang di-handle oleh `nixpacks.toml`
