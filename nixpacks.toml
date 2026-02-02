@@ -2,7 +2,7 @@
 # Install Python dan build tools untuk compile native dependencies
 
 [phases.setup]
-nixPkgs = ["python3", "gcc", "make"]
+nixPkgs = ["python3", "gcc", "gnumake"]
 
 [phases.install]
 cmds = [
