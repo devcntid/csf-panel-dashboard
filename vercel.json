@@ -1,0 +1,12 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/create-partition",
+      "schedule": "0 0 25 * *"
+    },
+    {
+      "path": "/api/cron/refresh-materialized-view",
+      "schedule": "0 2 * * *"
+    }
+  ]
+}
