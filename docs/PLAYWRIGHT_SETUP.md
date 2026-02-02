@@ -1,7 +1,9 @@
 # Playwright Setup Guide
 
 ## Overview
-Aplikasi ini menggunakan Playwright untuk web scraping di route `/api/scrap`. Playwright memerlukan browser executables (Chromium) untuk berjalan.
+⚠️ **DEPRECATED**: Scraping has been moved to GitHub Actions. See [GitHub Actions Setup](./GITHUB_ACTIONS_SETUP.md) for the current implementation.
+
+This guide remains for local development and testing purposes. Production scraping now runs via GitHub Actions workflows instead of the API endpoint.
 
 ## Installation
 
@@ -18,17 +20,16 @@ Script `postinstall` di `package.json` akan menjalankan:
 npm run playwright:install
 ```
 
-### Vercel Deployment
-⚠️ **PENTING: Playwright tidak dapat berjalan di Vercel**
+### Production Scraping (GitHub Actions)
+Scraping di production sekarang dilakukan via GitHub Actions dengan schedule otomatis.
 
-Vercel menggunakan Alpine Linux yang tidak memiliki `apt-get` untuk menginstal system dependencies yang dibutuhkan Chromium. Akibatnya:
-- `/api/scrap` endpoint akan return error 503 di Vercel
-- Scrap API hanya bisa dijalankan secara lokal
+**Lihat: [GitHub Actions Setup Documentation](./GITHUB_ACTIONS_SETUP.md)**
 
-Jika Anda perlu scrap feature di production, gunakan alternative:
-1. **Hosting lain**: Railway, Render, atau self-hosted yang support system dependencies
-2. **Serverless Browser Service**: Browserless.io, ScraperAPI, Apify, atau Bright Data
-3. **Local Runner**: Setup local machine/VPS untuk menjalankan scrap job secara scheduled
+Keuntungan:
+- ✅ Tidak tergantung pada Vercel environment
+- ✅ Berjalan konsisten dengan schedule
+- ✅ Support full Playwright features
+- ✅ Free minutes (2,000 min/bulan di GitHub Free tier)
 
 ## Manual Installation
 Jika perlu menginstal manual:

@@ -10,6 +10,7 @@
     "migrate:input-type": "tsx scripts/add-input-type-to-transactions.ts",
     "playwright:install": "npx playwright install chromium",
     "scrap": "node scripts/scrap.js",
+    "scrap:github": "tsx scripts/scrap-github.ts",
     "seed": "tsx scripts/seed.ts",
     "start": "next start",
     "test": "playwright test",

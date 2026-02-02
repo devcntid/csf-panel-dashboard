@@ -28,3 +28,22 @@ Continue building your app on:
 2. Deploy your chats from the v0 interface
 3. Changes are automatically pushed to this repository
 4. Vercel deploys the latest version from this repository
+
+## Scraping with GitHub Actions
+
+This project includes automated web scraping via GitHub Actions:
+
+- **Workflow**: `.github/workflows/scrap-eclinic.yml`
+- **Schedule**: Daily at 6:00 AM UTC
+- **Script**: `scripts/scrap-github.ts`
+- **Features**: Resource blocking, caching, optimized for CI/CD
+
+**Setup Instructions**: See [GitHub Actions Setup Guide](./docs/GITHUB_ACTIONS_SETUP.md)
+
+**Why GitHub Actions instead of Vercel API?**
+- Playwright browsers fully supported
+- Better resource isolation
+- Automated scheduling
+- Free tier: 2,000 minutes/month
+
+For migration details, see [Migration Guide](./docs/MIGRATION_TO_GITHUB_ACTIONS.md)
