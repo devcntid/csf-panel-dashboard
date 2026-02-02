@@ -31,19 +31,32 @@ Continue building your app on:
 
 ## Scraping with GitHub Actions
 
-This project includes automated web scraping via GitHub Actions:
+This project includes two scraping methods via GitHub Actions:
 
+### 1. Scheduled Scraping (Daily)
 - **Workflow**: `.github/workflows/scrap-eclinic.yml`
 - **Schedule**: Daily at 6:00 AM UTC
 - **Script**: `scripts/scrap-github.ts`
-- **Features**: Resource blocking, caching, optimized for CI/CD
+- Scrapes all clinics with predefined credentials
+- Features: Resource blocking, caching, optimized for CI/CD
 
-**Setup Instructions**: See [GitHub Actions Setup Guide](./docs/GITHUB_ACTIONS_SETUP.md)
+### 2. Manual/Queue-based Scraping (Every 30 min)
+- **Workflow**: `.github/workflows/scrap-from-queue.yml`
+- **Schedule**: Every 30 minutes + manual trigger via UI
+- **Script**: `scripts/scrap-github-queue.ts`
+- Trigger scraping directly from `/dashboard/transaksi` page
+- Queue-based: Requests stored in database, processed in order
+- Features: Per-clinic credentials, date range filtering, status tracking
 
-**Why GitHub Actions instead of Vercel API?**
-- Playwright browsers fully supported
-- Better resource isolation
-- Automated scheduling
-- Free tier: 2,000 minutes/month
+**Setup Instructions**:
+- [GitHub Actions Setup](./docs/GITHUB_ACTIONS_SETUP.md) - Scheduled daily scraping
+- [Queue System Setup](./docs/SCRAP_QUEUE_SYSTEM.md) - Manual scraping from UI
 
-For migration details, see [Migration Guide](./docs/MIGRATION_TO_GITHUB_ACTIONS.md)
+**Why GitHub Actions?**
+- ✅ Playwright browsers fully supported
+- ✅ Better resource isolation  
+- ✅ Automated scheduling & manual triggers
+- ✅ Free tier: 2,000 minutes/month
+- ✅ No serverless limitations
+
+See [Migration Guide](./docs/MIGRATION_TO_GITHUB_ACTIONS.md) for details on switching from Vercel API.

@@ -162,10 +162,10 @@ export function TransaksiSearch({
     }
 
     setIsScraping(true)
-    toast.loading('Memulai proses scraping...', { id: 'scrap' })
+    toast.loading('Menambahkan request ke queue...', { id: 'scrap' })
 
     try {
-      const response = await fetch('/api/scrap', {
+      const response = await fetch('/api/scrap/queue', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -174,24 +174,28 @@ export function TransaksiSearch({
           clinic_id: parseInt(selectedClinic),
           tgl_awal: dateFrom,
           tgl_akhir: dateTo,
+          requested_by: 'UI',
         }),
       })
 
       const data = await response.json()
 
       if (!response.ok) {
-        throw new Error(data.error || 'Gagal melakukan scraping')
+        throw new Error(data.error || 'Gagal menambahkan request')
       }
 
-      toast.success(`Scraping berhasil! ${data.insertedCount || 0} transaksi ditambahkan`, { id: 'scrap' })
+      toast.success(
+        'Scraping request telah ditambahkan ke queue. Data akan diupdate segera melalui GitHub Actions.',
+        { id: 'scrap', duration: 4000 }
+      )
       
-      // Refresh page setelah 2 detik
+      // Refresh page setelah 3 detik
       setTimeout(() => {
         window.location.reload()
-      }, 2000)
+      }, 3000)
     } catch (error: any) {
-      console.error('Error scraping:', error)
-      toast.error(error.message || 'Gagal melakukan scraping', { id: 'scrap' })
+      console.error('Error queueing scrape:', error)
+      toast.error(error.message || 'Gagal menambahkan request ke queue', { id: 'scrap' })
     } finally {
       setIsScraping(false)
     }
@@ -402,7 +406,7 @@ export function TransaksiSearch({
               variant="outline" 
               onClick={handleResetFilter}
               disabled={isPending || isScraping}
-              className="h-9"
+              className="h-9 bg-transparent"
             >
               <X className="w-4 h-4 mr-2" />
               Reset

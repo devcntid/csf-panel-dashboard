@@ -11,6 +11,8 @@
     "playwright:install": "npx playwright install chromium",
     "scrap": "node scripts/scrap.js",
     "scrap:github": "tsx scripts/scrap-github.ts",
+    "scrap:github:queue": "tsx scripts/scrap-github-queue.ts",
+    "scrap:queue:table": "tsx scripts/create-scrap-queue-table.ts",
     "seed": "tsx scripts/seed.ts",
     "start": "next start",
     "test": "playwright test",
