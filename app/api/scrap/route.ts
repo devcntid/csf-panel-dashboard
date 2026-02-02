@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { chromium } from 'playwright'
 import { sql } from '@/lib/db'
 
+// Check if we're running in Vercel (serverless environment without browser binaries)
+const isVercelEnv = process.env.VERCEL === '1'
+
 // Helper function untuk parse angka dengan koma (format Indonesia)
 function parseIndonesianNumber(value: string | undefined): number {
   if (!value || value === '-' || value === '0') return 0
@@ -154,9 +157,9 @@ async function selectDate(page: any, date: Date, isStartDate: boolean) {
     await page.waitForTimeout(300)
   } catch (error) {
     console.warn(`⚠️  Error saat select date: ${error}`)
-    // Fallback: coba langsung isi field
+    // Fallback: coba langsung isi field dengan format dd-mm-yyyy (sesuai UI)
     try {
-      const dateFormatted = `${String(year)}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+      const dateFormatted = `${String(day).padStart(2, '0')}-${String(month).padStart(2, '0')}-${String(year)}`
       if (isStartDate) {
         await page.getByPlaceholder('Tanggal Awal').fill(dateFormatted)
       } else {
@@ -264,10 +267,28 @@ export async function POST(request: NextRequest) {
 
     console.log(`🚀 Memulai scraping untuk klinik: ${clinic.name}, tanggal: ${tgl_awal} sampai ${tgl_akhir}`)
 
-    // Launch browser
+    // Check if Playwright browsers are available
+    if (isVercelEnv) {
+      return NextResponse.json(
+        {
+          error: 'Scrap API tidak tersedia di environment Vercel (Playwright browsers tidak terinstall)',
+          message: 'Silakan jalankan command berikut secara lokal: npm run playwright:install, kemudian deploy kembali',
+        },
+        { status: 503 }
+      )
+    }
+
+    // Launch browser dengan konfigurasi untuk serverless environment
     const browser = await chromium.launch({
-      headless: true, // Set ke true untuk production
+      headless: true,
       slowMo: 500,
+      args: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage', // Penting untuk serverless agar tidak kehabisan memory
+        '--disable-gpu',
+        '--single-process', // Hanya untuk development/testing
+      ],
     })
 
     const context = await browser.newContext()
@@ -320,7 +341,11 @@ export async function POST(request: NextRequest) {
 
       // 8. Scraping data
       console.log('⏳ Menunggu tabel muncul...')
-      await page.waitForSelector('table tbody tr', { timeout: 30000 })
+      try {
+        await page.waitForSelector('table tbody tr', { timeout: 30000 })
+      } catch (e) {
+        console.log('⚠️ Tidak menemukan baris data dalam 30 detik, lanjut dengan 0 row')
+      }
 
       const dataScraped = await page.$eval('table', (table) => {
         // Bangun header multi-level (meng-handle colspan/rowspan)
