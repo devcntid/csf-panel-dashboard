@@ -1,9 +1,6 @@
 # Nixpacks configuration untuk Railway
 # Install Python dan build tools untuk compile native dependencies
 
-[providers]
-node = "18"
-
 [phases.setup]
 nixPkgs = ["python3", "gcc", "make"]
 
