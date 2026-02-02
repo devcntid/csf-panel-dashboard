@@ -16,6 +16,7 @@
     "scrap:queue:table": "tsx scripts/create-scrap-queue-table.ts",
     "seed": "tsx scripts/seed.ts",
     "start": "next start",
+    "railway:worker": "node server.js",
     "test": "playwright test",
     "test:headed": "playwright test --headed",
     "test:ui": "playwright test --ui"
