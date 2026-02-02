@@ -1,7 +1,7 @@
 import { chromium } from 'playwright'
 import { sql } from '@/lib/db'
 
-const GITHUB_RUN_ID = process.env.GITHUB_RUN_ID || 'manual'
+const GITHUB_RUN_ID = process.env.GITHUB_RUN_ID || process.env.RAILWAY_RUN_ID || 'manual'
 const PROCESS_LIMIT = parseInt(process.env.PROCESS_LIMIT || '5')
 
 interface QueueItem {
