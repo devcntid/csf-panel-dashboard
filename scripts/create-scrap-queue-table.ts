@@ -19,7 +19,7 @@ async function createScrapQueueTable() {
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         started_at TIMESTAMP,
         completed_at TIMESTAMP,
-        FOREIGN KEY (clinic_id) REFERENCES klinik(id) ON DELETE CASCADE
+        FOREIGN KEY (clinic_id) REFERENCES clinics(id) ON DELETE CASCADE
       )
     `
     

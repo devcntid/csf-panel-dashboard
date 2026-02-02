@@ -18,6 +18,7 @@ import { CRUDInsuranceMapping } from './crud-insurance-mapping'
 import { CRUDInsuranceType } from './crud-insurance-type'
 import { CRUDPublicHoliday } from './crud-public-holiday'
 import { useRouter } from 'next/navigation'
+import { toast } from 'sonner'
 
 export function KonfigurasiTabs({
   masterPolies,
@@ -47,10 +48,35 @@ export function KonfigurasiTabs({
   }
 }) {
   const [activeTab, setActiveTab] = useState('mapping')
+  const [runningQueue, setRunningQueue] = useState(false)
   const router = useRouter()
 
   const handleRefresh = () => {
     router.refresh()
+  }
+
+  const handleRunScrapQueue = async () => {
+    setRunningQueue(true)
+    try {
+      const res = await fetch('/api/scrap/run-queue', { method: 'POST' })
+      let data: any = {}
+      try {
+        data = await res.json()
+      } catch {
+        // ignore json error
+      }
+
+      if (!res.ok || !data?.success) {
+        toast.error(data?.message || 'Gagal men-trigger scrap queue')
+        return
+      }
+
+      toast.success('Scrap queue berhasil dijalankan di background')
+    } catch (error: any) {
+      toast.error(error?.message || 'Gagal men-trigger scrap queue')
+    } finally {
+      setRunningQueue(false)
+    }
   }
 
   return (
@@ -355,10 +381,22 @@ export function KonfigurasiTabs({
         {activeTab === 'logs' && (
           <Card>
             <CardHeader>
-              <CardTitle>System Logs</CardTitle>
-              <CardDescription>
-                Monitoring proses scraping, sinkronisasi, dan aktivitas sistem per klinik
-              </CardDescription>
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <CardTitle>System Logs</CardTitle>
+                  <CardDescription>
+                    Monitoring proses scraping, sinkronisasi, dan aktivitas sistem per klinik
+                  </CardDescription>
+                </div>
+                <Button
+                  size="sm"
+                  onClick={handleRunScrapQueue}
+                  disabled={runningQueue}
+                  className="whitespace-nowrap"
+                >
+                  {runningQueue ? 'Menjalankan...' : 'Jalankan Scrap Queue'}
+                </Button>
+              </div>
             </CardHeader>
             <CardContent>
               <SystemLogs clinics={clinics} initialData={initialData?.systemLogs} />

@@ -157,9 +157,9 @@ async function selectDate(page: any, date: Date, isStartDate: boolean) {
     await page.waitForTimeout(300)
   } catch (error) {
     console.warn(`⚠️  Error saat select date: ${error}`)
-    // Fallback: coba langsung isi field
+    // Fallback: coba langsung isi field dengan format dd-mm-yyyy (sesuai UI)
     try {
-      const dateFormatted = `${String(year)}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+      const dateFormatted = `${String(day).padStart(2, '0')}-${String(month).padStart(2, '0')}-${String(year)}`
       if (isStartDate) {
         await page.getByPlaceholder('Tanggal Awal').fill(dateFormatted)
       } else {
@@ -341,7 +341,11 @@ export async function POST(request: NextRequest) {
 
       // 8. Scraping data
       console.log('⏳ Menunggu tabel muncul...')
-      await page.waitForSelector('table tbody tr', { timeout: 30000 })
+      try {
+        await page.waitForSelector('table tbody tr', { timeout: 30000 })
+      } catch (e) {
+        console.log('⚠️ Tidak menemukan baris data dalam 30 detik, lanjut dengan 0 row')
+      }
 
       const dataScraped = await page.$eval('table', (table) => {
         // Bangun header multi-level (meng-handle colspan/rowspan)
