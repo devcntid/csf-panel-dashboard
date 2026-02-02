@@ -8,5 +8,6 @@
       "path": "/api/cron/refresh-materialized-view",
       "schedule": "0 2 * * *"
     }
-  ]
+  ],
+  "buildCommand": "npm run playwright:install && next build"
 }

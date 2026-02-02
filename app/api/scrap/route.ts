@@ -264,10 +264,17 @@ export async function POST(request: NextRequest) {
 
     console.log(`🚀 Memulai scraping untuk klinik: ${clinic.name}, tanggal: ${tgl_awal} sampai ${tgl_akhir}`)
 
-    // Launch browser
+    // Launch browser dengan konfigurasi untuk serverless environment
     const browser = await chromium.launch({
-      headless: true, // Set ke true untuk production
+      headless: true,
       slowMo: 500,
+      args: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage', // Penting untuk serverless agar tidak kehabisan memory
+        '--disable-gpu',
+        '--single-process', // Hanya untuk development/testing
+      ],
     })
 
     const context = await browser.newContext()
