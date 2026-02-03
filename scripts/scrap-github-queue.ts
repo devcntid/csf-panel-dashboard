@@ -287,35 +287,56 @@ async function performScraping(
       console.log('[v0] 🌐 Connecting to Browserless.io...')
       console.log(`[v0]    Endpoint: wss://chrome.browserless.io`)
       console.log(`[v0]    Token: ${BROWSERLESS_TOKEN?.substring(0, 10)}...`)
-      const browserlessEndpoint = `wss://chrome.browserless.io?token=${BROWSERLESS_TOKEN}`
+      // Coba beberapa format endpoint Browserless
+      const endpoints = [
+        `wss://chrome.browserless.io?token=${BROWSERLESS_TOKEN}`,
+        `wss://chrome.browserless.io/?token=${BROWSERLESS_TOKEN}`,
+        `wss://chrome.browserless.io/chrome?token=${BROWSERLESS_TOKEN}`,
+      ]
       
-      try {
-        // Set timeout untuk koneksi Browserless (30 detik)
-        console.log('[v0]    Attempting connection (timeout: 30s)...')
+      let connected = false
+      let lastError: any = null
+      
+      for (let i = 0; i < endpoints.length && !connected; i++) {
+        const browserlessEndpoint = endpoints[i]
+        console.log(`[v0]    Trying endpoint ${i + 1}/${endpoints.length}: ${browserlessEndpoint.replace(BROWSERLESS_TOKEN!, 'TOKEN')}`)
         
-        // Create timeout promise
-        const timeoutPromise = new Promise<never>((_, reject) => {
-          setTimeout(() => {
-            console.log('[v0]    ⏱️  Timeout reached, rejecting connection...')
-            reject(new Error('Browserless connection timeout after 30 seconds'))
-          }, 30000)
-        })
-        
-        // Create connection promise
-        console.log('[v0]    Starting WebSocket connection...')
-        const connectPromise = chromium.connect(browserlessEndpoint)
-        
-        // Race between connection and timeout
-        browser = await Promise.race([
-          connectPromise,
-          timeoutPromise
-        ]) as any
-        
-        console.log('[v0] ✅ Connected to Browserless.io successfully')
-      } catch (browserlessError: any) {
-        console.error(`[v0] ❌ Failed to connect to Browserless.io: ${browserlessError.message}`)
-        if (browserlessError.stack) {
-          console.error(`[v0]    Stack: ${browserlessError.stack.substring(0, 500)}`)
+        try {
+          // Set timeout untuk koneksi Browserless (15 detik per attempt)
+          console.log('[v0]    Attempting connection (timeout: 15s)...')
+          
+          // Create timeout promise
+          const timeoutPromise = new Promise<never>((_, reject) => {
+            setTimeout(() => {
+              reject(new Error('Browserless connection timeout after 15 seconds'))
+            }, 15000)
+          })
+          
+          // Create connection promise
+          const connectPromise = chromium.connect(browserlessEndpoint)
+          
+          // Race between connection and timeout
+          browser = await Promise.race([
+            connectPromise,
+            timeoutPromise
+          ]) as any
+          
+          console.log('[v0] ✅ Connected to Browserless.io successfully')
+          connected = true
+        } catch (browserlessError: any) {
+          lastError = browserlessError
+          console.error(`[v0]    ❌ Endpoint ${i + 1} failed: ${browserlessError.message}`)
+          if (i < endpoints.length - 1) {
+            console.log(`[v0]    Trying next endpoint...`)
+          }
+        }
+      }
+      
+      if (!connected) {
+        // Semua endpoint gagal, fallback ke local browser
+        console.error(`[v0] ❌ All Browserless endpoints failed`)
+        if (lastError) {
+          console.error(`[v0]    Last error: ${lastError.message}`)
         }
         console.log('[v0] ⚠️  Falling back to local browser...')
         
