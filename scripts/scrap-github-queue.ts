@@ -346,11 +346,11 @@ async function performScraping(
     // playwright-extra-plugin-stealth sudah menangani semua anti-detection secara otomatis
     // Tidak perlu manual addInitScript lagi
 
-    // 1. Navigate ke login page dengan waitUntil: 'networkidle' untuk memastikan semua resources loaded
+    // 1. Navigate ke login page
     console.log(`[v0] 🌐 Navigating to eClinic: ${URL_CLINIC}`)
     try {
-      // Gunakan 'networkidle' untuk memastikan semua network requests selesai (termasuk Cloudflare Turnstile)
-      await page.goto(URL_CLINIC, { waitUntil: 'networkidle', timeout: 120000 })
+      // Gunakan 'domcontentloaded' agar tidak terlalu sensitif terhadap resource 400/timeout lewat proxy
+      await page.goto(URL_CLINIC, { waitUntil: 'domcontentloaded', timeout: 60000 })
       console.log('[v0] ✅ Page navigation completed')
       
       // Wait untuk JavaScript execution (Cloudflare challenge butuh JS)
