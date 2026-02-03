@@ -285,9 +285,62 @@ async function performScraping(
     // Gunakan Browserless.io jika token tersedia, fallback ke local browser
     if (USE_BROWSERLESS) {
       console.log('[v0] 🌐 Connecting to Browserless.io...')
+      console.log(`[v0]    Endpoint: wss://chrome.browserless.io`)
+      console.log(`[v0]    Token: ${BROWSERLESS_TOKEN?.substring(0, 10)}...`)
       const browserlessEndpoint = `wss://chrome.browserless.io?token=${BROWSERLESS_TOKEN}`
-      browser = await chromium.connect(browserlessEndpoint)
-      console.log('[v0] ✅ Connected to Browserless.io')
+      
+      try {
+        // Set timeout untuk koneksi Browserless (30 detik)
+        console.log('[v0]    Attempting connection (timeout: 30s)...')
+        
+        // Create timeout promise
+        const timeoutPromise = new Promise<never>((_, reject) => {
+          setTimeout(() => {
+            console.log('[v0]    ⏱️  Timeout reached, rejecting connection...')
+            reject(new Error('Browserless connection timeout after 30 seconds'))
+          }, 30000)
+        })
+        
+        // Create connection promise
+        console.log('[v0]    Starting WebSocket connection...')
+        const connectPromise = chromium.connect(browserlessEndpoint)
+        
+        // Race between connection and timeout
+        browser = await Promise.race([
+          connectPromise,
+          timeoutPromise
+        ]) as any
+        
+        console.log('[v0] ✅ Connected to Browserless.io successfully')
+      } catch (browserlessError: any) {
+        console.error(`[v0] ❌ Failed to connect to Browserless.io: ${browserlessError.message}`)
+        if (browserlessError.stack) {
+          console.error(`[v0]    Stack: ${browserlessError.stack.substring(0, 500)}`)
+        }
+        console.log('[v0] ⚠️  Falling back to local browser...')
+        
+        // Fallback ke local browser jika Browserless gagal
+        browser = await chromium.launch({
+          headless: true,
+          slowMo: 100,
+          args: [
+            '--no-sandbox',
+            '--disable-setuid-sandbox',
+            '--disable-dev-shm-usage',
+            '--disable-gpu',
+            '--disable-software-rasterizer',
+            '--disable-extensions',
+            '--disable-background-networking',
+            '--disable-background-timer-throttling',
+            '--disable-renderer-backgrounding',
+            '--disable-backgrounding-occluded-windows',
+            '--disable-ipc-flooding-protection',
+            '--memory-pressure-off',
+            '--max_old_space_size=512',
+          ],
+        })
+        console.log('[v0] ✅ Local browser launched (fallback)')
+      }
     } else {
       console.log('[v0] 🖥️  Launching local browser...')
       // Launch browser dengan konfigurasi untuk Railway (optimized untuk limited resources)
