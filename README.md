@@ -78,7 +78,7 @@ DATABASE_URL=<neon_postgres_connection_string>
 POSTGRES_URL=<sama dengan DATABASE_URL>
 NEXT_PUBLIC_DATABASE_URL=<sama dengan DATABASE_URL>
 IDLE_TIMEOUT=300000
-BROWSERLESS_TOKEN=<browserless_api_key>  # Optional: untuk bypass Cloudflare
+SCRAPERAPI_KEY=<scraperapi_api_key>      # Optional: untuk bypass Cloudflare via ScraperAPI proxy
 ```
 
 ### Database Setup

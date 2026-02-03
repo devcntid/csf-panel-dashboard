@@ -1,13 +1,10 @@
 import { chromium } from 'playwright'
 import { sql } from '@/lib/db'
 
-// Menggunakan Browserless.io untuk bypass Cloudflare (jika BROWSERLESS_TOKEN tersedia)
-// Browserless sudah handle Cloudflare bypass dengan environment yang lebih natural
-
 const GITHUB_RUN_ID = process.env.GITHUB_RUN_ID || process.env.RAILWAY_RUN_ID || 'manual'
 const PROCESS_LIMIT = parseInt(process.env.PROCESS_LIMIT || '5')
-const BROWSERLESS_TOKEN = process.env.BROWSERLESS_TOKEN
-const USE_BROWSERLESS = !!BROWSERLESS_TOKEN
+const SCRAPERAPI_KEY = process.env.SCRAPERAPI_KEY
+const USE_SCRAPERAPI = !!SCRAPERAPI_KEY
 
 interface QueueItem {
   id: number
@@ -282,111 +279,37 @@ async function performScraping(
 
   let browser: any = null
   try {
-    // Gunakan Browserless.io jika token tersedia, fallback ke local browser
-    if (USE_BROWSERLESS) {
-      console.log('[v0] 🌐 Connecting to Browserless.io...')
-      console.log(`[v0]    Endpoint: wss://chrome.browserless.io`)
-      console.log(`[v0]    Token: ${BROWSERLESS_TOKEN?.substring(0, 10)}...`)
-      // Coba beberapa format endpoint Browserless
-      const endpoints = [
-        `wss://chrome.browserless.io?token=${BROWSERLESS_TOKEN}`,
-        `wss://chrome.browserless.io/?token=${BROWSERLESS_TOKEN}`,
-        `wss://chrome.browserless.io/chrome?token=${BROWSERLESS_TOKEN}`,
-      ]
-      
-      let connected = false
-      let lastError: any = null
-      
-      for (let i = 0; i < endpoints.length && !connected; i++) {
-        const browserlessEndpoint = endpoints[i]
-        console.log(`[v0]    Trying endpoint ${i + 1}/${endpoints.length}: ${browserlessEndpoint.replace(BROWSERLESS_TOKEN!, 'TOKEN')}`)
-        
-        try {
-          // Set timeout untuk koneksi Browserless (15 detik per attempt)
-          console.log('[v0]    Attempting connection (timeout: 15s)...')
-          
-          // Create timeout promise
-          const timeoutPromise = new Promise<never>((_, reject) => {
-            setTimeout(() => {
-              reject(new Error('Browserless connection timeout after 15 seconds'))
-            }, 15000)
-          })
-          
-          // Create connection promise
-          const connectPromise = chromium.connect(browserlessEndpoint)
-          
-          // Race between connection and timeout
-          browser = await Promise.race([
-            connectPromise,
-            timeoutPromise
-          ]) as any
-          
-          console.log('[v0] ✅ Connected to Browserless.io successfully')
-          connected = true
-        } catch (browserlessError: any) {
-          lastError = browserlessError
-          console.error(`[v0]    ❌ Endpoint ${i + 1} failed: ${browserlessError.message}`)
-          if (i < endpoints.length - 1) {
-            console.log(`[v0]    Trying next endpoint...`)
+    console.log(`[v0] 🔧 HTTP proxy: ${USE_SCRAPERAPI ? 'ScraperAPI' : 'Direct'}`)
+
+    // Launch browser dengan konfigurasi untuk Railway (optimized untuk limited resources)
+    browser = await chromium.launch({
+      headless: true,
+      slowMo: 100, // Kurangi dari 500 ke 100 untuk lebih cepat (masih smooth)
+      proxy: USE_SCRAPERAPI
+        ? {
+            server: 'http://proxy-server.scraperapi.com:8001',
+            username: 'scraperapi',
+            password: SCRAPERAPI_KEY!,
           }
-        }
-      }
-      
-      if (!connected) {
-        // Semua endpoint gagal, fallback ke local browser
-        console.error(`[v0] ❌ All Browserless endpoints failed`)
-        if (lastError) {
-          console.error(`[v0]    Last error: ${lastError.message}`)
-        }
-        console.log('[v0] ⚠️  Falling back to local browser...')
-        
-        // Fallback ke local browser jika Browserless gagal
-        browser = await chromium.launch({
-          headless: true,
-          slowMo: 100,
-          args: [
-            '--no-sandbox',
-            '--disable-setuid-sandbox',
-            '--disable-dev-shm-usage',
-            '--disable-gpu',
-            '--disable-software-rasterizer',
-            '--disable-extensions',
-            '--disable-background-networking',
-            '--disable-background-timer-throttling',
-            '--disable-renderer-backgrounding',
-            '--disable-backgrounding-occluded-windows',
-            '--disable-ipc-flooding-protection',
-            '--memory-pressure-off',
-            '--max_old_space_size=512',
-          ],
-        })
-        console.log('[v0] ✅ Local browser launched (fallback)')
-      }
-    } else {
-      console.log('[v0] 🖥️  Launching local browser...')
-      // Launch browser dengan konfigurasi untuk Railway (optimized untuk limited resources)
-      browser = await chromium.launch({
-        headless: true,
-        slowMo: 100, // Kurangi dari 500 ke 100 untuk lebih cepat (masih smooth)
-        args: [
-          '--no-sandbox',
-          '--disable-setuid-sandbox',
-          '--disable-dev-shm-usage', // Penting untuk Railway agar tidak kehabisan memory
-          '--disable-gpu',
-          '--disable-software-rasterizer',
-          '--disable-extensions',
-          '--disable-background-networking',
-          '--disable-background-timer-throttling',
-          '--disable-renderer-backgrounding',
-          '--disable-backgrounding-occluded-windows',
-          '--disable-ipc-flooding-protection',
-          '--memory-pressure-off', // Penting untuk Railway free tier
-          '--max_old_space_size=512', // Limit memory usage untuk Railway
-          // Jangan pakai --single-process di Railway (bisa lebih lambat)
-        ],
-      })
-      console.log('[v0] ✅ Local browser launched')
-    }
+        : undefined,
+      args: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage', // Penting untuk Railway agar tidak kehabisan memory
+        '--disable-gpu',
+        '--disable-software-rasterizer',
+        '--disable-extensions',
+        '--disable-background-networking',
+        '--disable-background-timer-throttling',
+        '--disable-renderer-backgrounding',
+        '--disable-backgrounding-occluded-windows',
+        '--disable-ipc-flooding-protection',
+        '--memory-pressure-off', // Penting untuk Railway free tier
+        '--max_old_space_size=512', // Limit memory usage untuk Railway
+        // Jangan pakai --single-process di Railway (bisa lebih lambat)
+      ],
+    })
+    console.log('[v0] ✅ Browser launched')
 
     const context = await browser.newContext({
       // Set user agent untuk bypass Cloudflare (mimic real browser)
@@ -1205,9 +1128,9 @@ async function performScraping(
   } finally {
     if (browser) {
       try {
-        // Close browser (works for both Browserless and local)
+        // Close browser
         await browser.close()
-        console.log(`[v0] 🔒 Browser ditutup${USE_BROWSERLESS ? ' (Browserless)' : ' (Local)'}`)
+        console.log('[v0] 🔒 Browser ditutup')
       } catch (closeError: any) {
         console.error(`[v0] ⚠️  Error closing browser: ${closeError.message}`)
       }
