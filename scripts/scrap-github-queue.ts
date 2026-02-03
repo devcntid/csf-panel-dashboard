@@ -321,48 +321,71 @@ async function performScraping(
     })
     const page = await context.newPage()
 
-    // Block resources untuk faster loading (tapi jangan block JavaScript karena Cloudflare perlu JS)
-    await page.route('**/*.{png,jpg,jpeg,gif,svg,woff,woff2,ttf}', (route: any) =>
-      route.abort()
-    )
-
+    // JANGAN block resources - Cloudflare perlu semua resources untuk challenge verification
+    // Blocking resources bisa membuat Cloudflare mendeteksi bot dan tidak melepaskan challenge
+    
     // Set timeout
-    page.setDefaultTimeout(60000) // Increase timeout untuk Cloudflare challenge
-    page.setDefaultNavigationTimeout(60000)
+    page.setDefaultTimeout(120000) // Increase timeout untuk Cloudflare challenge (2 menit)
+    page.setDefaultNavigationTimeout(120000)
 
-    // 1. Navigate ke login page
+    // Monitor console errors untuk debugging
+    page.on('console', (msg: any) => {
+      const type = msg.type()
+      if (type === 'error') {
+        console.log(`[v0] ⚠️  Console error: ${msg.text()}`)
+      }
+    })
+
+    // 1. Navigate ke login page dengan waitUntil: 'load' untuk memastikan semua resources loaded
     console.log(`[v0] 🌐 Navigating to eClinic: ${URL_CLINIC}`)
     try {
-      await page.goto(URL_CLINIC, { waitUntil: 'domcontentloaded', timeout: 60000 })
+      // Gunakan 'load' instead of 'domcontentloaded' untuk memastikan semua resources (termasuk Cloudflare JS) loaded
+      await page.goto(URL_CLINIC, { waitUntil: 'load', timeout: 120000 })
       console.log('[v0] ✅ Page navigation completed')
+      
+      // Wait untuk JavaScript execution (Cloudflare challenge butuh JS)
+      await page.waitForTimeout(2000)
+      console.log('[v0] ✅ Waiting for JavaScript execution...')
     } catch (error: any) {
       console.error(`[v0] ❌ Failed to load page: ${error.message}`)
-      throw new Error(`Failed to load login page: ${error.message}`)
+      throw new Error(`Failed to load page: ${error.message}`)
     }
 
     // Wait for Cloudflare challenge to complete
     console.log('[v0] ⏳ Waiting for Cloudflare challenge to complete...')
     let attempts = 0
-    const maxAttempts = 90 // Max 90 detik (90 x 1 detik) - Cloudflare bisa butuh waktu lebih lama
+    const maxAttempts = 120 // Max 120 detik (2 menit) - Cloudflare bisa butuh waktu lebih lama di Railway
     
     while (attempts < maxAttempts) {
       const pageTitle = await page.title()
+      const currentURL = page.url()
       
       // Log setiap 5 detik atau 5 attempt pertama
       if (attempts % 5 === 0 || attempts < 5) {
-        console.log(`[v0]    Attempt ${attempts + 1}/${maxAttempts}: Page title = "${pageTitle}"`)
+        console.log(`[v0]    Attempt ${attempts + 1}/${maxAttempts}: Page title = "${pageTitle}", URL = "${currentURL}"`)
       }
       
       // Check jika ada form login (indikasi challenge selesai) - prioritas utama
       try {
-        const loginForm = await page.locator('input[placeholder="Pilih Klinik"], input[placeholder="ID Pengguna"]').first()
-        const isVisible = await loginForm.isVisible({ timeout: 1000 }).catch(() => false)
-        if (isVisible) {
-          console.log(`[v0] ✅ Login form detected, Cloudflare challenge completed`)
+        // Check multiple selectors untuk login form
+        const clinicInput = page.locator('input[placeholder="Pilih Klinik"]')
+        const usernameInput = page.locator('input[placeholder="ID Pengguna"]')
+        
+        const clinicVisible = await clinicInput.isVisible({ timeout: 2000 }).catch(() => false)
+        const usernameVisible = await usernameInput.isVisible({ timeout: 2000 }).catch(() => false)
+        
+        if (clinicVisible || usernameVisible) {
+          console.log(`[v0] ✅ Login form detected (clinic: ${clinicVisible}, username: ${usernameVisible}), Cloudflare challenge completed`)
           break
         }
       } catch (checkError) {
         // Form belum muncul, continue waiting
+      }
+      
+      // Check jika URL berubah (indikasi redirect setelah challenge)
+      if (currentURL !== URL_CLINIC && !currentURL.includes('/login')) {
+        console.log(`[v0] ✅ URL changed to "${currentURL}", Cloudflare challenge likely completed`)
+        break
       }
       
       // Check jika Cloudflare challenge sudah selesai berdasarkan page title
@@ -381,7 +404,9 @@ async function performScraping(
         break
       }
       
-      await page.waitForTimeout(1000) // Wait 1 second
+      // Human-like random delay (1-2 seconds)
+      const delay = 1000 + Math.random() * 1000
+      await page.waitForTimeout(delay)
       attempts++
     }
     
@@ -392,8 +417,15 @@ async function performScraping(
       console.error(`[v0]    Final page title: "${finalTitle}"`)
       console.error(`[v0]    Final URL: ${finalURL}`)
       
-      // Take screenshot untuk debugging
+      // Check page content untuk debugging
       try {
+        const pageContent = await page.content()
+        const hasCloudflareScript = pageContent.includes('cf-browser-verification') || 
+                                   pageContent.includes('challenge-platform') ||
+                                   pageContent.includes('cf-challenge')
+        console.log(`[v0]    Has Cloudflare script: ${hasCloudflareScript}`)
+        
+        // Take screenshot untuk debugging
         await page.screenshot({ path: `/tmp/cloudflare-timeout-${clinic_id}-${Date.now()}.png`, fullPage: true })
         console.log('[v0] 📸 Screenshot saved for debugging')
       } catch (screenshotError) {
@@ -404,14 +436,23 @@ async function performScraping(
     }
     
     // Additional wait setelah challenge complete untuk memastikan page fully ready
-    console.log('[v0] ⏳ Waiting additional 3 seconds for page to stabilize...')
-    await page.waitForTimeout(3000)
+    console.log('[v0] ⏳ Waiting additional 5 seconds for page to stabilize...')
+    await page.waitForTimeout(5000)
 
-    // Wait for page to be fully ready
-    await page.waitForLoadState('networkidle', { timeout: 30000 }).catch(() => {
-      console.log('[v0] ⚠️  Network idle timeout, continuing anyway...')
-    })
-    console.log('[v0] ✅ Page fully loaded')
+    // Wait for page to be fully ready (networkidle atau load)
+    try {
+      await page.waitForLoadState('networkidle', { timeout: 30000 })
+      console.log('[v0] ✅ Page network idle')
+    } catch (idleError) {
+      console.log('[v0] ⚠️  Network idle timeout, trying load state...')
+      try {
+        await page.waitForLoadState('load', { timeout: 10000 })
+        console.log('[v0] ✅ Page loaded')
+      } catch (loadError) {
+        console.log('[v0] ⚠️  Load state timeout, continuing anyway...')
+      }
+    }
+    console.log('[v0] ✅ Page fully ready')
 
     // 2. Pilih Klinik
     console.log(`[v0] 📝 Memilih klinik: ${NAMA_KLINIK}...`)
