@@ -78,6 +78,7 @@ DATABASE_URL=<neon_postgres_connection_string>
 POSTGRES_URL=<sama dengan DATABASE_URL>
 NEXT_PUBLIC_DATABASE_URL=<sama dengan DATABASE_URL>
 IDLE_TIMEOUT=300000
+BROWSERLESS_TOKEN=<browserless_api_key>  # Optional: untuk bypass Cloudflare
 ```
 
 ### Database Setup
@@ -171,9 +172,11 @@ Ini akan menghapus:
 - Pastikan PORT environment variable tidak conflict
 
 ### Cloudflare Challenge Timeout
+- **Playwright Extra Stealth**: Menggunakan `playwright-extra` dengan `playwright-extra-plugin-stealth` untuk menyembunyikan browser automation fingerprint
 - Script sudah handle "Tunggu sebentar..." (Bahasa Indonesia)
-- Timeout ditingkatkan menjadi 90 detik
-- Browser context dikonfigurasi dengan realistic headers
+- Timeout ditingkatkan menjadi 120 detik
+- Browser context dikonfigurasi tanpa custom headers (menggunakan default Playwright)
+- Jika masih timeout, pertimbangkan menggunakan proxy service (lihat `docs/CLOUDFLARE_BYPASS_OPTIONS.md`)
 
 ### Queue Items Tidak Terproses
 - Cek Railway logs untuk error

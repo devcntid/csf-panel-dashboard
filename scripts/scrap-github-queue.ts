@@ -1,8 +1,19 @@
-import { chromium } from 'playwright'
+import playwright from 'playwright-extra'
+// @ts-ignore - playwright-extra-plugin-stealth mungkin tidak punya type definitions
+import StealthPlugin from 'playwright-extra-plugin-stealth'
 import { sql } from '@/lib/db'
+
+// Gunakan Stealth Plugin untuk bypass Cloudflare detection
+// Stealth plugin akan menyembunyikan navigator.webdriver dan parameter automation lainnya
+playwright.use(StealthPlugin())
+
+// Get chromium from playwright-extra (dengan stealth plugin)
+const { chromium } = playwright
 
 const GITHUB_RUN_ID = process.env.GITHUB_RUN_ID || process.env.RAILWAY_RUN_ID || 'manual'
 const PROCESS_LIMIT = parseInt(process.env.PROCESS_LIMIT || '5')
+const BROWSERLESS_TOKEN = process.env.BROWSERLESS_TOKEN
+const USE_BROWSERLESS = !!BROWSERLESS_TOKEN
 
 interface QueueItem {
   id: number
@@ -277,27 +288,37 @@ async function performScraping(
 
   let browser: any = null
   try {
-    // Launch browser dengan konfigurasi untuk Railway (optimized untuk limited resources)
-    browser = await chromium.launch({
-      headless: true,
-      slowMo: 100, // Kurangi dari 500 ke 100 untuk lebih cepat (masih smooth)
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage', // Penting untuk Railway agar tidak kehabisan memory
-        '--disable-gpu',
-        '--disable-software-rasterizer',
-        '--disable-extensions',
-        '--disable-background-networking',
-        '--disable-background-timer-throttling',
-        '--disable-renderer-backgrounding',
-        '--disable-backgrounding-occluded-windows',
-        '--disable-ipc-flooding-protection',
-        '--memory-pressure-off', // Penting untuk Railway free tier
-        '--max_old_space_size=512', // Limit memory usage untuk Railway
-        // Jangan pakai --single-process di Railway (bisa lebih lambat)
-      ],
-    })
+    // Gunakan Browserless.io jika token tersedia, fallback ke local browser
+    if (USE_BROWSERLESS) {
+      console.log('[v0] 🌐 Connecting to Browserless.io...')
+      const browserlessEndpoint = `wss://chrome.browserless.io?token=${BROWSERLESS_TOKEN}`
+      browser = await chromium.connect(browserlessEndpoint)
+      console.log('[v0] ✅ Connected to Browserless.io')
+    } else {
+      console.log('[v0] 🖥️  Launching local browser...')
+      // Launch browser dengan konfigurasi untuk Railway (optimized untuk limited resources)
+      browser = await chromium.launch({
+        headless: true,
+        slowMo: 100, // Kurangi dari 500 ke 100 untuk lebih cepat (masih smooth)
+        args: [
+          '--no-sandbox',
+          '--disable-setuid-sandbox',
+          '--disable-dev-shm-usage', // Penting untuk Railway agar tidak kehabisan memory
+          '--disable-gpu',
+          '--disable-software-rasterizer',
+          '--disable-extensions',
+          '--disable-background-networking',
+          '--disable-background-timer-throttling',
+          '--disable-renderer-backgrounding',
+          '--disable-backgrounding-occluded-windows',
+          '--disable-ipc-flooding-protection',
+          '--memory-pressure-off', // Penting untuk Railway free tier
+          '--max_old_space_size=512', // Limit memory usage untuk Railway
+          // Jangan pakai --single-process di Railway (bisa lebih lambat)
+        ],
+      })
+      console.log('[v0] ✅ Local browser launched')
+    }
 
     const context = await browser.newContext({
       // Set user agent untuk bypass Cloudflare (mimic real browser)
@@ -326,39 +347,8 @@ async function performScraping(
       }
     })
 
-    // Inject script untuk bypass Cloudflare detection
-    await context.addInitScript(() => {
-      // Override navigator.webdriver untuk hide automation
-      Object.defineProperty(navigator, 'webdriver', {
-        get: () => false,
-      })
-      
-      // Override plugins untuk mimic real browser
-      Object.defineProperty(navigator, 'plugins', {
-        get: () => [1, 2, 3, 4, 5],
-      })
-      
-      // Override languages
-      Object.defineProperty(navigator, 'languages', {
-        get: () => ['id-ID', 'id', 'en-US', 'en'],
-      })
-      
-      // Override chrome object
-      ;(window as any).chrome = {
-        runtime: {},
-      }
-      
-      // Override permissions query
-      const originalQuery = (window.navigator as any).permissions?.query
-      if (originalQuery) {
-        ;(window.navigator as any).permissions.query = (parameters: any) => {
-          if (parameters.name === 'notifications') {
-            return Promise.resolve({ state: Notification.permission } as PermissionStatus)
-          }
-          return originalQuery.call(navigator.permissions, parameters)
-        }
-      }
-    })
+    // playwright-extra-plugin-stealth sudah menangani semua anti-detection secara otomatis
+    // Tidak perlu manual addInitScript lagi
 
     // 1. Navigate ke login page dengan waitUntil: 'networkidle' untuk memastikan semua resources loaded
     console.log(`[v0] 🌐 Navigating to eClinic: ${URL_CLINIC}`)
@@ -1077,8 +1067,9 @@ async function performScraping(
   } finally {
     if (browser) {
       try {
+        // Close browser (works for both Browserless and local)
         await browser.close()
-        console.log('[v0] 🔒 Browser ditutup')
+        console.log(`[v0] 🔒 Browser ditutup${USE_BROWSERLESS ? ' (Browserless)' : ' (Local)'}`)
       } catch (closeError: any) {
         console.error(`[v0] ⚠️  Error closing browser: ${closeError.message}`)
       }
