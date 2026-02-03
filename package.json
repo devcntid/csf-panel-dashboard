@@ -115,8 +115,6 @@
     "pg": "latest",
     "pg-native": "latest",
     "playwright": "^1.49.1",
-    "playwright-extra": "^4.3.6",
-    "playwright-extra-plugin-stealth": "^2.11.2",
     "postgres": "latest",
     "prisma": "latest",
     "react": "19.2.0",

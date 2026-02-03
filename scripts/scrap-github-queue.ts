@@ -1,14 +1,8 @@
-import playwright from 'playwright-extra'
-// @ts-ignore - playwright-extra-plugin-stealth mungkin tidak punya type definitions
-import StealthPlugin from 'playwright-extra-plugin-stealth'
+import { chromium } from 'playwright'
 import { sql } from '@/lib/db'
 
-// Gunakan Stealth Plugin untuk bypass Cloudflare detection
-// Stealth plugin akan menyembunyikan navigator.webdriver dan parameter automation lainnya
-playwright.use(StealthPlugin())
-
-// Get chromium from playwright-extra (dengan stealth plugin)
-const { chromium } = playwright
+// Menggunakan Browserless.io untuk bypass Cloudflare (jika BROWSERLESS_TOKEN tersedia)
+// Browserless sudah handle Cloudflare bypass dengan environment yang lebih natural
 
 const GITHUB_RUN_ID = process.env.GITHUB_RUN_ID || process.env.RAILWAY_RUN_ID || 'manual'
 const PROCESS_LIMIT = parseInt(process.env.PROCESS_LIMIT || '5')
