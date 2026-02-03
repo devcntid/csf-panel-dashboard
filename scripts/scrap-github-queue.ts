@@ -305,17 +305,9 @@ async function performScraping(
       viewport: { width: 1920, height: 1080 },
       locale: 'id-ID',
       timezoneId: 'Asia/Jakarta',
-      // Minimal headers - jangan kirim header yang tidak perlu karena bisa trigger CORS error
-      // Cache-Control header menyebabkan CORS error dengan Cloudflare Turnstile
-      extraHTTPHeaders: {
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
-        'Accept-Language': 'id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7',
-        'Accept-Encoding': 'gzip, deflate, br',
-        'Connection': 'keep-alive',
-        'Upgrade-Insecure-Requests': '1',
-        // Jangan kirim Sec-Fetch-* headers - bisa membuat Cloudflare mendeteksi bot
-        // Jangan kirim Cache-Control - menyebabkan CORS error dengan Turnstile
-      },
+      // JANGAN set extraHTTPHeaders - biarkan Playwright menggunakan header default browser
+      // Semua header custom (Cache-Control, Upgrade-Insecure-Requests, dll) menyebabkan CORS error dengan Cloudflare Turnstile
+      // Playwright secara default sudah mengirim header yang benar untuk browser Chrome
     })
     const page = await context.newPage()
 
