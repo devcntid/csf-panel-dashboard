@@ -305,18 +305,16 @@ async function performScraping(
       viewport: { width: 1920, height: 1080 },
       locale: 'id-ID',
       timezoneId: 'Asia/Jakarta',
-      // Extra headers untuk bypass Cloudflare
+      // Minimal headers - jangan kirim header yang tidak perlu karena bisa trigger CORS error
+      // Cache-Control header menyebabkan CORS error dengan Cloudflare Turnstile
       extraHTTPHeaders: {
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
         'Accept-Language': 'id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7',
         'Accept-Encoding': 'gzip, deflate, br',
         'Connection': 'keep-alive',
         'Upgrade-Insecure-Requests': '1',
-        'Sec-Fetch-Dest': 'document',
-        'Sec-Fetch-Mode': 'navigate',
-        'Sec-Fetch-Site': 'none',
-        'Sec-Fetch-User': '?1',
-        'Cache-Control': 'max-age=0',
+        // Jangan kirim Sec-Fetch-* headers - bisa membuat Cloudflare mendeteksi bot
+        // Jangan kirim Cache-Control - menyebabkan CORS error dengan Turnstile
       },
     })
     const page = await context.newPage()
@@ -336,16 +334,58 @@ async function performScraping(
       }
     })
 
-    // 1. Navigate ke login page dengan waitUntil: 'load' untuk memastikan semua resources loaded
+    // Inject script untuk bypass Cloudflare detection
+    await context.addInitScript(() => {
+      // Override navigator.webdriver untuk hide automation
+      Object.defineProperty(navigator, 'webdriver', {
+        get: () => false,
+      })
+      
+      // Override plugins untuk mimic real browser
+      Object.defineProperty(navigator, 'plugins', {
+        get: () => [1, 2, 3, 4, 5],
+      })
+      
+      // Override languages
+      Object.defineProperty(navigator, 'languages', {
+        get: () => ['id-ID', 'id', 'en-US', 'en'],
+      })
+      
+      // Override chrome object
+      ;(window as any).chrome = {
+        runtime: {},
+      }
+      
+      // Override permissions query
+      const originalQuery = (window.navigator as any).permissions?.query
+      if (originalQuery) {
+        ;(window.navigator as any).permissions.query = (parameters: any) => {
+          if (parameters.name === 'notifications') {
+            return Promise.resolve({ state: Notification.permission } as PermissionStatus)
+          }
+          return originalQuery.call(navigator.permissions, parameters)
+        }
+      }
+    })
+
+    // 1. Navigate ke login page dengan waitUntil: 'networkidle' untuk memastikan semua resources loaded
     console.log(`[v0] 🌐 Navigating to eClinic: ${URL_CLINIC}`)
     try {
-      // Gunakan 'load' instead of 'domcontentloaded' untuk memastikan semua resources (termasuk Cloudflare JS) loaded
-      await page.goto(URL_CLINIC, { waitUntil: 'load', timeout: 120000 })
+      // Gunakan 'networkidle' untuk memastikan semua network requests selesai (termasuk Cloudflare Turnstile)
+      await page.goto(URL_CLINIC, { waitUntil: 'networkidle', timeout: 120000 })
       console.log('[v0] ✅ Page navigation completed')
       
       // Wait untuk JavaScript execution (Cloudflare challenge butuh JS)
-      await page.waitForTimeout(2000)
+      await page.waitForTimeout(3000)
       console.log('[v0] ✅ Waiting for JavaScript execution...')
+      
+      // Wait untuk Turnstile widget jika ada
+      try {
+        await page.waitForSelector('iframe[src*="challenges.cloudflare.com"]', { timeout: 5000 }).catch(() => {})
+        console.log('[v0] ✅ Turnstile widget detected')
+      } catch (e) {
+        // Turnstile mungkin tidak muncul atau sudah selesai
+      }
     } catch (error: any) {
       console.error(`[v0] ❌ Failed to load page: ${error.message}`)
       throw new Error(`Failed to load page: ${error.message}`)
