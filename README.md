@@ -78,7 +78,6 @@ DATABASE_URL=<neon_postgres_connection_string>
 POSTGRES_URL=<sama dengan DATABASE_URL>
 NEXT_PUBLIC_DATABASE_URL=<sama dengan DATABASE_URL>
 IDLE_TIMEOUT=300000
-SCRAPERAPI_KEY=<scraperapi_api_key>      # Optional: untuk bypass Cloudflare via ScraperAPI proxy
 ```
 
 ### Database Setup
@@ -130,6 +129,32 @@ pnpm scrap:queue:cleanup   # Cleanup old completed items
 pnpm migrate                # Run database migrations
 pnpm scrap:queue:table     # Create scrap_queue table
 ```
+
+## 💻 Local Worker (Mac)
+
+Untuk menjalankan scraping di Mac (disarankan untuk menghindari blokir Cloudflare):
+
+```bash
+cd /Users/muhammadirvan/Documents/projects/csf-panel-dashboard
+
+# 1. Install dependencies (sekali saja)
+pnpm install
+pnpm playwright:install
+
+# 2. Enqueue jobs untuk hari ini (boleh dipanggil dari UI juga)
+pnpm scrap:enqueue-today
+
+# 3. Process queue (Playwright jalan di Mac kamu)
+pnpm scrap:github:queue
+```
+
+Contoh crontab (Mac, setiap 30 menit, 08:00–21:00 WIB, Senin–Sabtu):
+
+```cron
+*/30 8-21 * * 1-6 cd /Users/muhammadirvan/Documents/projects/csf-panel-dashboard && /opt/homebrew/bin/pnpm scrap:github:queue >> /Users/muhammadirvan/csf-scrap.log 2>&1
+```
+
+Sesuaikan path `pnpm` dengan hasil `which pnpm`.
 
 ## 📊 Queue System
 

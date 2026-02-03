@@ -3,8 +3,6 @@ import { sql } from '@/lib/db'
 
 const GITHUB_RUN_ID = process.env.GITHUB_RUN_ID || process.env.RAILWAY_RUN_ID || 'manual'
 const PROCESS_LIMIT = parseInt(process.env.PROCESS_LIMIT || '5')
-const SCRAPERAPI_KEY = process.env.SCRAPERAPI_KEY
-const USE_SCRAPERAPI = !!SCRAPERAPI_KEY
 
 interface QueueItem {
   id: number
@@ -279,19 +277,10 @@ async function performScraping(
 
   let browser: any = null
   try {
-    console.log(`[v0] 🔧 HTTP proxy: ${USE_SCRAPERAPI ? 'ScraperAPI' : 'Direct'}`)
-
-    // Launch browser dengan konfigurasi untuk Railway (optimized untuk limited resources)
+    // Launch browser dengan konfigurasi untuk environment lokal / worker tanpa proxy
     browser = await chromium.launch({
       headless: true,
       slowMo: 100, // Kurangi dari 500 ke 100 untuk lebih cepat (masih smooth)
-      proxy: USE_SCRAPERAPI
-        ? {
-            server: 'http://proxy-server.scraperapi.com:8001',
-            username: 'scraperapi',
-            password: SCRAPERAPI_KEY!,
-          }
-        : undefined,
       args: [
         '--no-sandbox',
         '--disable-setuid-sandbox',
@@ -317,10 +306,8 @@ async function performScraping(
       viewport: { width: 1920, height: 1080 },
       locale: 'id-ID',
       timezoneId: 'Asia/Jakarta',
-      // ScraperAPI bertindak sebagai proxy dan melakukan TLS termination sendiri,
-      // sehingga certificate chain bisa berbeda dari yang diharapkan browser normal.
-      // ignoreHTTPSErrors=true diperlukan agar Playwright tidak memblokir dengan
-      // net::ERR_CERT_AUTHORITY_INVALID ketika lewat proxy.
+      // Biarkan Playwright mengabaikan error sertifikat kecil (aman untuk lingkungan controlled)
+      // dan menghindari error net::ERR_CERT_AUTHORITY_INVALID di beberapa environment.
       ignoreHTTPSErrors: true,
       // JANGAN set extraHTTPHeaders - biarkan Playwright menggunakan header default browser
       // Semua header custom (Cache-Control, Upgrade-Insecure-Requests, dll) menyebabkan CORS error dengan Cloudflare Turnstile
