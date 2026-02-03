@@ -23,10 +23,13 @@ COPY package.json pnpm-lock.yaml ./
 # Install dependencies
 RUN pnpm install --frozen-lockfile
 
+# Install Playwright and Chromium
+RUN pnpm playwright install --with-deps chromium
+
 # Copy application code
 COPY . .
 
-# Expose port (Railway akan set PORT via env var)
+# Expose port (Railway akan set PORT via env var, tapi kita expose 3001 sebagai default)
 EXPOSE 3001
 
 # Start server
