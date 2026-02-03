@@ -91,6 +91,12 @@ RAILWAY_RUN_ID=${{RAILWAY_RUN_ID}}
 
 Railway tidak punya built-in cron, jadi kita pakai **Railway Cron** atau **external cron service**.
 
+**⚠️ Penting untuk Railway Free Tier:**
+- Railway Free hanya 500 hours/month
+- Service akan consume hours selama running
+- Gunakan optimasi auto-sleep (lihat `docs/RAILWAY_FREE_OPTIMIZATION.md`)
+- Setup external cron untuk wake service sebelum scraping
+
 #### Opsi A: Railway Cron (Recommended)
 
 1. Di Railway Dashboard → Project → **"New"** → **"Cron Job"**
@@ -112,17 +118,31 @@ Jika Railway Cron tidak tersedia, bisa pakai:
 - **EasyCron** (free tier)
 - **GitHub Actions** (hanya untuk trigger, bukan untuk run Playwright)
 
-Setup di cron-job.org:
+**Setup di cron-job.org (2 cron jobs diperlukan untuk optimasi Free tier):**
+
+**Cron Job 1: Wake Service (5 menit sebelum scraping)**
 1. Daftar di https://cron-job.org
 2. Create new cron job
+3. **Name**: `Wake Railway Service`
+4. **URL**: `https://<your-railway-service-url>/wake`
+5. **Method**: GET
+6. **Schedule**: `55 7-20 * * 1-6` (07:55–20:55 WIB, Senin–Sabtu)
+   - Atau via UI: setiap 30 menit, mulai 5 menit sebelum scraping
+
+**Cron Job 2: Trigger Scraping**
+1. Create new cron job
+2. **Name**: `Trigger Scrap Queue`
 3. **URL**: `https://<your-railway-service-url>/trigger`
 4. **Method**: POST
 5. **Body** (JSON):
    ```json
    {"isCron":true}
    ```
-6. **Schedule**: `*/30 1-14 * * 1-6` (atau set via UI)
-7. **Headers**: `Content-Type: application/json`
+6. **Headers**: `Content-Type: application/json`
+7. **Schedule**: `*/30 1-14 * * 1-6` (setiap 30 menit, 01:00–14:00 UTC, Senin–Sabtu)
+   - Atau via UI: setiap 30 menit, 08:00–21:00 WIB, Senin–Sabtu
+
+**Catatan:** Wake service 5 menit sebelum scraping untuk memastikan service ready saat scraping dimulai.
 
 ### 4. Dapatkan Service URL
 
