@@ -14,6 +14,7 @@
     "scrap:github:queue": "tsx scripts/scrap-github-queue.ts",
     "scrap:enqueue-today": "tsx scripts/enqueue-today-scrap-queue.ts",
     "scrap:queue:table": "tsx scripts/create-scrap-queue-table.ts",
+    "scrap:queue:cleanup": "tsx scripts/cleanup-scrap-queue.ts",
     "seed": "tsx scripts/seed.ts",
     "start": "next start",
     "railway:worker": "node server.js",

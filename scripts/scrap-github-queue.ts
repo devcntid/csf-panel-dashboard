@@ -353,27 +353,32 @@ async function performScraping(
         console.log(`[v0]    Attempt ${attempts + 1}/${maxAttempts}: Page title = "${pageTitle}"`)
       }
       
-      // Check jika Cloudflare challenge sudah selesai
-      // Cloudflare biasanya show "Just a moment..." saat challenge
-      if (pageTitle && 
-          pageTitle !== 'Just a moment...' && 
-          pageTitle !== '' && 
-          !pageTitle.toLowerCase().includes('just a moment') &&
-          !pageTitle.toLowerCase().includes('checking your browser')) {
-        console.log(`[v0] ✅ Cloudflare challenge completed. Page title: "${pageTitle}"`)
-        break
-      }
-      
-      // Check jika ada form login (indikasi challenge selesai)
+      // Check jika ada form login (indikasi challenge selesai) - prioritas utama
       try {
         const loginForm = await page.locator('input[placeholder="Pilih Klinik"], input[placeholder="ID Pengguna"]').first()
         const isVisible = await loginForm.isVisible({ timeout: 1000 }).catch(() => false)
         if (isVisible) {
-          console.log(`[v0] ✅ Login form detected, Cloudflare challenge likely completed`)
+          console.log(`[v0] ✅ Login form detected, Cloudflare challenge completed`)
           break
         }
       } catch (checkError) {
         // Form belum muncul, continue waiting
+      }
+      
+      // Check jika Cloudflare challenge sudah selesai berdasarkan page title
+      // Cloudflare show "Just a moment..." (EN) atau "Tunggu sebentar..." (ID) saat challenge
+      const titleLower = pageTitle?.toLowerCase() || ''
+      const isCloudflareChallenge = 
+        titleLower.includes('just a moment') ||
+        titleLower.includes('tunggu sebentar') ||
+        titleLower.includes('checking your browser') ||
+        titleLower.includes('mengecek browser') ||
+        pageTitle === 'Just a moment...' ||
+        pageTitle === 'Tunggu sebentar...'
+      
+      if (pageTitle && !isCloudflareChallenge && pageTitle !== '') {
+        console.log(`[v0] ✅ Cloudflare challenge completed. Page title: "${pageTitle}"`)
+        break
       }
       
       await page.waitForTimeout(1000) // Wait 1 second
@@ -446,11 +451,16 @@ async function performScraping(
       await clinicInput.click({ timeout: 10000 })
       console.log('[v0] ✅ Clinic input clicked')
       
-      await clinicInput.fill(NAMA_KLINIK, { timeout: 10000 })
-      console.log(`[v0] ✅ Clinic name filled: ${NAMA_KLINIK}`)
+      // Clear any existing text first
+      await clinicInput.clear({ timeout: 5000 }).catch(() => {})
       
-      // Wait for dropdown option to appear
-      await page.waitForTimeout(1500)
+      // Type instead of fill - autocomplete hanya muncul jika diketik, bukan di-paste
+      console.log(`[v0] ⌨️  Typing clinic name: ${NAMA_KLINIK}...`)
+      await clinicInput.type(NAMA_KLINIK, { delay: 100 }) // Delay 100ms per karakter untuk simulasi typing manusia
+      console.log(`[v0] ✅ Clinic name typed: ${NAMA_KLINIK}`)
+      
+      // Wait for dropdown option to appear (autocomplete)
+      await page.waitForTimeout(2000)
       
       // Try to click the clinic option
       try {
