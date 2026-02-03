@@ -6,9 +6,15 @@ const http = require('http')
 const { spawn } = require('child_process')
 const path = require('path')
 
-// Railway akan set PORT via environment variable
-// Default ke 3001 jika tidak di-set (untuk local development)
+// Railway akan auto-assign PORT via environment variable
+// JANGAN set PORT manual di Railway env vars, biarkan Railway auto-assign
+// Default ke 3001 hanya untuk local development
 const PORT = process.env.PORT || 3001
+
+// Log PORT untuk debugging
+console.log('[Railway Worker] Starting server...')
+console.log('[Railway Worker] PORT from env:', process.env.PORT)
+console.log('[Railway Worker] Using PORT:', PORT)
 
 // Validate PORT
 if (!PORT || isNaN(parseInt(PORT))) {
