@@ -34,6 +34,7 @@ async function enqueueTodayScrapQueue() {
 
     // Insert satu item queue per klinik aktif untuk hari ini,
     // hindari duplikasi jika sudah ada pending/processing untuk tanggal yang sama.
+    // Completed items boleh di-re-enqueue untuk re-scrape setiap 30 menit.
     await sql`
       INSERT INTO scrap_queue (clinic_id, tgl_awal, tgl_akhir, status, requested_by)
       SELECT

@@ -303,20 +303,113 @@ async function performScraping(
     page.setDefaultNavigationTimeout(30000)
 
     // 1. Navigate ke login page
-    console.log('[v0] Navigating to eClinic...')
-    await page.goto(URL_CLINIC)
+    console.log(`[v0] 🌐 Navigating to eClinic: ${URL_CLINIC}`)
+    try {
+      await page.goto(URL_CLINIC, { waitUntil: 'networkidle', timeout: 30000 })
+      console.log('[v0] ✅ Page loaded successfully')
+    } catch (error: any) {
+      console.error(`[v0] ❌ Failed to load page: ${error.message}`)
+      throw new Error(`Failed to load login page: ${error.message}`)
+    }
+
+    // Wait for page to be ready
+    await page.waitForLoadState('domcontentloaded')
+    console.log('[v0] ✅ DOM content loaded')
 
     // 2. Pilih Klinik
-    console.log('[v0] 📝 Memilih klinik...')
-    await page.getByPlaceholder('Pilih Klinik').click()
-    await page.getByPlaceholder('Pilih Klinik').fill(NAMA_KLINIK)
-    await page.getByText(NAMA_KLINIK).click()
+    console.log(`[v0] 📝 Memilih klinik: ${NAMA_KLINIK}...`)
+    try {
+      // Wait for page to be fully interactive
+      await page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => {
+        console.log('[v0] ⚠️  Network idle timeout, continuing anyway...')
+      })
+      
+      // Wait for the clinic selector to be visible (try multiple selectors)
+      console.log('[v0] ⏳ Waiting for clinic selector...')
+      let clinicInput
+      
+      try {
+        // Try placeholder selector first
+        await page.waitForSelector('input[placeholder="Pilih Klinik"]', { 
+          state: 'visible', 
+          timeout: 15000 
+        })
+        clinicInput = page.getByPlaceholder('Pilih Klinik')
+        console.log('[v0] ✅ Clinic selector found (by placeholder)')
+      } catch (placeholderError) {
+        // Fallback: try by role or other selectors
+        console.log('[v0] ⚠️  Placeholder selector not found, trying alternative selectors...')
+        try {
+          clinicInput = page.locator('input[type="text"]').first()
+          await clinicInput.waitFor({ state: 'visible', timeout: 10000 })
+          console.log('[v0] ✅ Clinic selector found (by input type)')
+        } catch (altError) {
+          // Last resort: get page content for debugging
+          const pageContent = await page.content()
+          console.error(`[v0] ❌ Could not find clinic selector. Page title: ${await page.title()}`)
+          throw new Error(`Clinic selector not found. Tried placeholder and input[type="text"]`)
+        }
+      }
+
+      await clinicInput.click({ timeout: 10000 })
+      console.log('[v0] ✅ Clinic input clicked')
+      
+      await clinicInput.fill(NAMA_KLINIK, { timeout: 10000 })
+      console.log(`[v0] ✅ Clinic name filled: ${NAMA_KLINIK}`)
+      
+      // Wait for dropdown option to appear
+      await page.waitForTimeout(1500)
+      
+      // Try to click the clinic option
+      try {
+        await page.getByText(NAMA_KLINIK, { exact: false }).click({ timeout: 10000 })
+        console.log(`[v0] ✅ Clinic selected: ${NAMA_KLINIK}`)
+      } catch (clickError: any) {
+        // Fallback: try pressing Enter
+        console.log(`[v0] ⚠️  Could not click clinic option, trying Enter key...`)
+        await clinicInput.press('Enter')
+        await page.waitForTimeout(1000)
+        console.log(`[v0] ✅ Clinic selected via Enter key: ${NAMA_KLINIK}`)
+      }
+    } catch (error: any) {
+      console.error(`[v0] ❌ Error selecting clinic "${NAMA_KLINIK}": ${error.message}`)
+      console.error(`[v0]    Error type: ${error.name || 'Unknown'}`)
+      
+      // Take screenshot for debugging
+      try {
+        const screenshotPath = `/tmp/clinic-select-error-${clinic_id}-${Date.now()}.png`
+        await page.screenshot({ path: screenshotPath, fullPage: true })
+        console.log(`[v0] 📸 Screenshot saved: ${screenshotPath}`)
+        
+        // Also log page URL and title
+        console.log(`[v0] 📄 Current URL: ${page.url()}`)
+        console.log(`[v0] 📄 Page title: ${await page.title()}`)
+      } catch (screenshotError: any) {
+        console.error(`[v0] ⚠️  Failed to take screenshot: ${screenshotError.message}`)
+      }
+      
+      throw new Error(`Failed to select clinic "${NAMA_KLINIK}": ${error.message}`)
+    }
 
     // 3. Login
-    console.log('[v0] 🔐 Melakukan login...')
-    await page.getByPlaceholder('ID Pengguna').fill(USERNAME)
-    await page.getByPlaceholder('Kata Sandi').fill(PASSWORD)
-    await page.getByRole('button', { name: 'Login' }).click()
+    console.log(`[v0] 🔐 Melakukan login untuk user: ${USERNAME}...`)
+    try {
+      await page.waitForSelector('input[placeholder="ID Pengguna"]', { 
+        state: 'visible', 
+        timeout: 10000 
+      })
+      await page.getByPlaceholder('ID Pengguna').fill(USERNAME, { timeout: 10000 })
+      console.log('[v0] ✅ Username filled')
+      
+      await page.getByPlaceholder('Kata Sandi').fill(PASSWORD, { timeout: 10000 })
+      console.log('[v0] ✅ Password filled')
+      
+      await page.getByRole('button', { name: 'Login' }).click({ timeout: 10000 })
+      console.log('[v0] ✅ Login button clicked')
+    } catch (error: any) {
+      console.error(`[v0] ❌ Error during login: ${error.message}`)
+      throw new Error(`Failed to login: ${error.message}`)
+    }
 
     await page.waitForURL('**/dashboard**', { timeout: 15000 }).catch(() => {
       console.log('[v0] ⚠️  Mungkin sudah di dashboard atau perlu menunggu lebih lama')
@@ -763,17 +856,27 @@ async function performScraping(
     await updateQueueStatus(queueId, 'completed')
     console.log(`[v0] ✅ Queue item #${queueId} completed`)
   } catch (error: any) {
-    console.error(`[v0] ❌ Error saat scraping:`, error)
+    const errorMessage = error.message || 'Unknown error'
+    const errorName = error.name || 'Error'
     
-    // Log error ke system_logs dengan detail lengkap (jika clinic_id sudah terdefinisi)
+    console.error(`[v0] ❌ Error saat scraping untuk queue item #${queueId}:`)
+    console.error(`[v0]    Error type: ${errorName}`)
+    console.error(`[v0]    Error message: ${errorMessage}`)
+    if (error.stack) {
+      console.error(`[v0]    Stack trace: ${error.stack.split('\n').slice(0, 5).join('\n')}`)
+    }
+    
+    // Log error ke system_logs dengan detail lengkap
     try {
       const errorPayload = {
+        queue_id: queueId,
         tgl_awal: tglAwal || 'unknown',
         tgl_akhir: tglAkhir || 'unknown',
         clinic_id: clinic_id || null,
         clinic_name: clinic?.name || 'Unknown',
-        error: error.message || 'Unknown error',
-        stack: error.stack,
+        error_name: errorName,
+        error_message: errorMessage,
+        error_stack: error.stack ? error.stack.split('\n').slice(0, 10).join('\n') : null,
         timestamp: new Date().toISOString(),
       }
 
@@ -784,66 +887,127 @@ async function performScraping(
             ${clinic_id},
             'scraping',
             'error',
-            ${error.message || 'Unknown error'},
+            ${`Scraping failed: ${errorName} - ${errorMessage}`},
             ${JSON.stringify(errorPayload)}
           )
         `
+        console.log(`[v0] ✅ Error logged to system_logs for clinic_id: ${clinic_id}`)
       }
-    } catch (logError) {
-      console.error('[v0] ❌ Error logging to system_logs:', logError)
+    } catch (logError: any) {
+      console.error(`[v0] ❌ Error logging to system_logs: ${logError.message}`)
     }
 
-    await updateQueueStatus(queueId, 'failed', error.message)
+    await updateQueueStatus(queueId, 'failed', errorMessage)
+    throw error // Re-throw untuk di-handle di processQueue
   } finally {
     if (browser) {
-      await browser.close()
-      console.log('[v0] 🔒 Browser ditutup')
+      try {
+        await browser.close()
+        console.log('[v0] 🔒 Browser ditutup')
+      } catch (closeError: any) {
+        console.error(`[v0] ⚠️  Error closing browser: ${closeError.message}`)
+      }
     }
   }
 }
 
 async function processQueue() {
+  console.log(`[v0] ========================================`)
   console.log(`[v0] Starting queue processor (limit: ${PROCESS_LIMIT})`)
+  console.log(`[v0] ========================================`)
 
   let processed = 0
+  let successCount = 0
+  let failedCount = 0
 
   while (processed < PROCESS_LIMIT) {
+    const startTime = Date.now()
+    let queueItem: QueueItem | null = null
+    
     try {
-      const queueItem = await getQueueItem()
+      queueItem = await getQueueItem()
 
       if (!queueItem) {
-        console.log('[v0] No pending queue items')
+        console.log(`[v0] ℹ️  No pending queue items. Processed: ${processed}/${PROCESS_LIMIT}`)
         break
       }
 
+      console.log(`[v0] ────────────────────────────────────────`)
       console.log(`[v0] Processing queue item #${queueItem.id}`)
+      console.log(`[v0] Clinic ID: ${queueItem.clinic_id}`)
+      console.log(`[v0] Period: ${queueItem.tgl_awal} to ${queueItem.tgl_akhir}`)
+      console.log(`[v0] ────────────────────────────────────────`)
 
       await updateQueueStatus(queueItem.id, 'processing')
 
       const clinic = await getClinicCredentials(queueItem.clinic_id)
       if (!clinic) {
+        const errorMsg = 'Clinic not found or credentials missing'
+        console.error(`[v0] ❌ ${errorMsg}`)
         await updateQueueStatus(
           queueItem.id,
           'failed',
-          'Clinic not found or credentials missing'
+          errorMsg
         )
+        failedCount++
         processed++
         continue
       }
 
-      await performScraping(queueItem.id, clinic, queueItem.tgl_awal, queueItem.tgl_akhir)
+      console.log(`[v0] ✅ Clinic found: ${clinic.name} (ID: ${clinic.id})`)
+      
+      try {
+        await performScraping(queueItem.id, clinic, queueItem.tgl_awal, queueItem.tgl_akhir)
+        const duration = Math.round((Date.now() - startTime) / 1000)
+        console.log(`[v0] ✅ Queue item #${queueItem.id} completed successfully (${duration}s)`)
+        successCount++
+      } catch (scrapingError: any) {
+        const errorMsg = scrapingError.message || 'Unknown scraping error'
+        const duration = Math.round((Date.now() - startTime) / 1000)
+        console.error(`[v0] ❌ Scraping failed for queue item #${queueItem.id} (${duration}s)`)
+        console.error(`[v0]    Error: ${errorMsg}`)
+        // Error sudah di-handle di performScraping (update status, log ke system_logs)
+        failedCount++
+      }
 
       processed++
 
       // Small delay between requests to avoid rate limiting
-      await new Promise((resolve) => setTimeout(resolve, 2000))
+      if (processed < PROCESS_LIMIT) {
+        console.log(`[v0] ⏳ Waiting 2 seconds before next item...`)
+        await new Promise((resolve) => setTimeout(resolve, 2000))
+      }
     } catch (error: any) {
-      console.error(`[v0] Unexpected error in queue processor: ${error.message}`)
-      break
+      console.error(`[v0] ❌ Unexpected error in queue processor:`)
+      console.error(`[v0]    Error: ${error.message}`)
+      if (error.stack) {
+        console.error(`[v0]    Stack: ${error.stack.split('\n').slice(0, 3).join('\n')}`)
+      }
+      
+      if (queueItem) {
+        await updateQueueStatus(
+          queueItem.id,
+          'failed',
+          `Unexpected error: ${error.message}`
+        )
+        failedCount++
+      }
+      
+      // Continue to next item instead of breaking
+      processed++
+      if (processed < PROCESS_LIMIT) {
+        console.log(`[v0] ⏳ Waiting 2 seconds before retry...`)
+        await new Promise((resolve) => setTimeout(resolve, 2000))
+      }
     }
   }
 
-  console.log(`[v0] Queue processor finished. Processed ${processed} items.`)
+  console.log(`[v0] ========================================`)
+  console.log(`[v0] Queue processor finished`)
+  console.log(`[v0] Total processed: ${processed}/${PROCESS_LIMIT}`)
+  console.log(`[v0] ✅ Success: ${successCount}`)
+  console.log(`[v0] ❌ Failed: ${failedCount}`)
+  console.log(`[v0] ========================================`)
 }
 
 // Run the queue processor
