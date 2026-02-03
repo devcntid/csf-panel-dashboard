@@ -78,29 +78,29 @@ RAILWAY_SERVICE_URL=https://scrap-queue-worker-production.up.railway.app
 - Hanya base URL saja
 - Pastikan sudah di-set untuk **Production**, **Preview**, dan **Development**
 
-### B. Vercel Cron Jobs
+### B. Vercel Cron Jobs (Hanya untuk Daily/Monthly)
 
-Vercel Cron sudah dikonfigurasi di `vercel.json`:
+Vercel Hobby hanya support **1 cron job per hari**, jadi kita pakai Vercel Cron hanya untuk:
+- **Create Partition** (bulanan) - `/api/cron/create-partition`
+- **Refresh Materialized View** (harian) - `/api/cron/refresh-materialized-view`
 
-1. **Wake Railway** (5 menit sebelum scraping)
-   - Path: `/api/cron/wake-railway`
-   - Schedule: `55 7-20 * * 1-6` (07:55-20:55 WIB, Senin-Sabtu, setiap 30 menit)
+**Untuk scraping setiap 30 menit, kita pakai cron-job.org (free, unlimited).**
 
-2. **Trigger Scrap Queue** (scraping setiap 30 menit)
-   - Path: `/api/cron/trigger-scrap-queue`
-   - Schedule: `*/30 1-14 * * 1-6` (setiap 30 menit, 01:00-14:00 UTC = 08:00-21:00 WIB, Senin-Sabtu)
+Lihat: `docs/CRON_JOB_ORG_SETUP.md` untuk setup lengkap.
 
-3. **Create Partition** (bulanan)
-   - Path: `/api/cron/create-partition`
-   - Schedule: `0 0 25 * *` (tanggal 25 setiap bulan)
+### C. Setup Cron-Job.org (Free, Unlimited)
 
-4. **Refresh Materialized View** (harian)
-   - Path: `/api/cron/refresh-materialized-view`
-   - Schedule: `0 2 * * *` (jam 2 pagi setiap hari)
+Karena Vercel Hobby hanya support 1 cron per hari, kita pakai **cron-job.org** untuk wake dan trigger Railway setiap 30 menit.
 
-**Vercel Cron akan otomatis aktif setelah deploy!**
+**Panduan lengkap:** Lihat `docs/CRON_JOB_ORG_SETUP.md`
 
-### C. Redeploy Vercel
+**Quick setup:**
+1. Daftar di https://cron-job.org (free)
+2. Buat 2 cron jobs:
+   - **Wake Railway**: GET `https://<railway-url>/wake` (setiap 30 menit, 07:55-20:55 WIB)
+   - **Trigger Scrap**: POST `https://<railway-url>/trigger` dengan body `{"isCron":true}` (setiap 30 menit, 08:00-21:00 WIB)
+
+### D. Redeploy Vercel
 
 Setelah menambah environment variable `RAILWAY_SERVICE_URL`:
 
@@ -132,7 +132,8 @@ Setelah menambah environment variable `RAILWAY_SERVICE_URL`:
 - [ ] Format URL benar: `https://...` (tanpa `/trigger`)
 - [ ] Environment: Production, Preview, Development (semua)
 - [ ] Vercel sudah di-redeploy setelah set env var
-- [ ] Vercel Cron jobs aktif (cek di Vercel Dashboard → Settings → Cron Jobs)
+- [ ] Vercel Cron jobs aktif (hanya untuk daily/monthly - cek di Vercel Dashboard → Settings → Cron Jobs)
+- [ ] Cron-job.org setup selesai (2 cron jobs: wake + trigger)
 
 ### Testing
 
