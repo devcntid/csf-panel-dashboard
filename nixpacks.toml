@@ -2,10 +2,11 @@
 # Install Python dan build tools untuk compile native dependencies
 
 [phases.setup]
-nixPkgs = ["python3", "gcc", "gnumake"]
+nixPkgs = ["python3", "gcc", "gnumake", "nodejs-18_x", "npm"]
 
 [phases.install]
 cmds = [
+  "npm install -g pnpm@latest",
   "pnpm install --frozen-lockfile"
 ]
 
