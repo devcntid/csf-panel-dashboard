@@ -12,27 +12,29 @@ Error ini terjadi karena beberapa native dependencies (`better-sqlite3`, `libpq`
 
 ## Solution
 
-Kita sudah menambahkan file `nixpacks.toml` yang menginstruksikan Railway untuk install Python dan build tools sebelum install dependencies.
+Kita menggunakan **Dockerfile** sebagai gantinya karena lebih reliable dan mudah di-debug dibanding Nixpacks.
 
 ### File yang Ditambahkan/Dimodifikasi
 
-1. **`nixpacks.toml`** (NEW)
-   - Konfigurasi untuk install Python 3, gcc, gnumake, dan Node.js 18
-   - Install pnpm secara global via npm
+1. **`Dockerfile`** (NEW)
+   - Base image: `node:18-alpine` (ringan dan cepat)
+   - Install Python 3, gcc, g++, make, libc-dev untuk compile native dependencies
+   - Install pnpm globally
    - Install dependencies dengan `pnpm install --frozen-lockfile`
-   - **Penting**: 
-     - Di Nix, package name untuk `make` adalah `gnumake`
-     - Node.js harus di-install eksplisit: `nodejs-18_x`
-     - pnpm harus di-install via npm sebelum digunakan
+   - Start server dengan `node server.js`
 
 2. **`railway.json`** (UPDATED)
-   - Disederhanakan, karena build command sekarang di-handle oleh `nixpacks.toml`
+   - Builder diubah dari `NIXPACKS` ke `DOCKERFILE`
+   - Dockerfile path: `Dockerfile`
+
+3. **`nixpacks.toml`** (DELETED)
+   - Dihapus karena menggunakan Dockerfile sebagai gantinya
 
 ## Verifikasi
 
 Setelah commit dan push, Railway akan:
-1. Detect `nixpacks.toml`
-2. Install Python 3 dan build tools
+1. Detect `Dockerfile`
+2. Build Docker image dengan Python 3 dan build tools
 3. Install Node.js dependencies (termasuk native modules yang perlu compile)
 4. Deploy service
 
@@ -40,28 +42,32 @@ Setelah commit dan push, Railway akan:
 
 1. Commit perubahan:
    ```bash
-   git add nixpacks.toml railway.json
-   git commit -m "fix: add Python and build tools for Railway native dependencies"
+   git add Dockerfile railway.json
+   git rm nixpacks.toml
+   git commit -m "fix: use Dockerfile instead of Nixpacks for Railway build"
    git push
    ```
 
 2. Cek Railway Dashboard → Service → Deployments
-3. Pastikan build sukses (tidak ada error Python)
+3. Pastikan build sukses (tidak ada error Python atau npm)
 
-## Alternative Solution (Jika Masih Error)
+## Keuntungan Dockerfile vs Nixpacks
 
-Jika masih error, bisa set environment variable di Railway:
+✅ **Dockerfile:**
+- Lebih mudah di-debug
+- Format standar dan familiar
+- Full control atas build process
+- Tidak ada masalah dengan package names
+- Lebih cepat build (Alpine Linux ringan)
 
-1. Railway Dashboard → Service → Variables
-2. Tambahkan:
-   ```
-   NIXPACKS_PYTHON_VERSION=3.11
-   ```
-
-Atau gunakan Dockerfile custom (lebih kompleks tapi lebih kontrol).
+❌ **Nixpacks:**
+- Format kurang familiar
+- Package names harus exact match dengan Nix
+- Lebih sulit di-debug jika error
+- Terkadang auto-detect tidak bekerja dengan baik
 
 ## Related Files
 
-- `nixpacks.toml` - Nixpacks configuration
+- `Dockerfile` - Docker build configuration
 - `railway.json` - Railway service configuration
 - `server.js` - Worker server entry point
