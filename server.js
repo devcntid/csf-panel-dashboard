@@ -6,7 +6,15 @@ const http = require('http')
 const { spawn } = require('child_process')
 const path = require('path')
 
+// Railway akan set PORT via environment variable
+// Default ke 3001 jika tidak di-set (untuk local development)
 const PORT = process.env.PORT || 3001
+
+// Validate PORT
+if (!PORT || isNaN(parseInt(PORT))) {
+  console.error('[Railway Worker] ERROR: PORT environment variable tidak valid:', PORT)
+  process.exit(1)
+}
 const PROCESS_LIMIT = process.env.PROCESS_LIMIT || '6'
 
 // Flag untuk prevent concurrent execution
@@ -104,6 +112,10 @@ const server = http.createServer(async (req, res) => {
   // Update last request time (untuk idle check)
   lastRequestTime = Date.now()
 
+  // Parse URL (handle query string)
+  const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`)
+  const pathname = url.pathname
+
   // CORS headers
   res.setHeader('Access-Control-Allow-Origin', '*')
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
@@ -116,7 +128,7 @@ const server = http.createServer(async (req, res) => {
   }
 
   // Health check endpoint (juga untuk wake service)
-  if (req.method === 'GET' && req.url === '/health') {
+  if (req.method === 'GET' && pathname === '/health') {
     const idleTime = Date.now() - lastRequestTime
     res.writeHead(200, { 'Content-Type': 'application/json' })
     res.end(
@@ -131,7 +143,7 @@ const server = http.createServer(async (req, res) => {
   }
 
   // Wake endpoint (untuk external cron wake service sebelum scraping)
-  if (req.method === 'GET' && req.url === '/wake') {
+  if (req.method === 'GET' && pathname === '/wake') {
     lastRequestTime = Date.now()
     console.log('[Railway Worker] Service woken up via /wake endpoint')
     res.writeHead(200, { 'Content-Type': 'application/json' })
@@ -146,7 +158,7 @@ const server = http.createServer(async (req, res) => {
   }
 
   // Trigger endpoint
-  if (req.method === 'POST' && req.url === '/trigger') {
+  if (req.method === 'POST' && pathname === '/trigger') {
     try {
       // Parse body untuk cek apakah ini cron atau manual
       let body = ''
@@ -191,14 +203,24 @@ const server = http.createServer(async (req, res) => {
   res.end(JSON.stringify({ error: 'Not found' }))
 })
 
-server.listen(PORT, () => {
+server.listen(PORT, '0.0.0.0', () => {
   console.log(`[Railway Worker] Server running on port ${PORT}`)
+  console.log(`[Railway Worker] Listening on 0.0.0.0:${PORT}`)
   console.log(`[Railway Worker] Health check: http://localhost:${PORT}/health`)
   console.log(`[Railway Worker] Trigger endpoint: POST http://localhost:${PORT}/trigger`)
   console.log(`[Railway Worker] Auto-sleep enabled (idle timeout: ${IDLE_TIMEOUT / 1000}s)`)
   
   // Start idle check
   startIdleCheck()
+})
+
+// Error handling untuk server
+server.on('error', (error) => {
+  console.error('[Railway Worker] Server error:', error)
+  if (error.code === 'EADDRINUSE') {
+    console.error(`[Railway Worker] Port ${PORT} sudah digunakan. Cek apakah ada process lain yang menggunakan port ini.`)
+  }
+  process.exit(1)
 })
 
 // Graceful shutdown

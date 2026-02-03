@@ -37,18 +37,21 @@ Karena Vercel Hobby hanya support 1 cron job per hari, kita menggunakan **cron-j
 
    **Basic Settings:**
    - **Title**: `Wake Railway Service`
-   - **Address (URL)**: `https://<railway-service-url>/wake`
-     - Ganti `<railway-service-url>` dengan URL dari Railway (contoh: `https://scrap-queue-worker-production.up.railway.app`)
+   - **Address (URL)**: `https://csf-panel-dashboard-production.up.railway.app/wake`
    - **Request method**: `GET`
    - **Request headers**: (kosongkan)
 
    **Schedule:**
-   - **Execution schedule**: Pilih **"Every X minutes"**
-   - **Every**: `30` minutes
-   - **Starting at**: `07:55` (WIB)
-   - **Ending at**: `20:55` (WIB)
-   - **Days**: Pilih **Monday, Tuesday, Wednesday, Thursday, Friday, Saturday**
-     - Uncheck Sunday
+   - **Execution schedule**: Pilih **"Custom"** (untuk lebih presisi)
+   - **Crontab expression**: `55,25 0-13 * * 1-6`
+     - Penjelasan: Setiap 30 menit (di menit 55 dan 25), jam 0-13 UTC (07:00-20:00 WIB), Senin-Sabtu
+   - **Atau** pakai **"Every X minutes"**:
+     - **Every**: `30` minutes
+     - **Starting at**: `07:55` (WIB)
+     - **Ending at**: `20:55` (WIB)
+     - **Days**: Pilih **Monday, Tuesday, Wednesday, Thursday, Friday, Saturday**
+       - Uncheck Sunday
+   - **Timezone**: Pastikan set ke **Asia/Jakarta** (WIB)
 
    **Advanced (Optional):**
    - **Timeout**: `10` seconds
@@ -68,8 +71,7 @@ Karena Vercel Hobby hanya support 1 cron job per hari, kita menggunakan **cron-j
 
    **Basic Settings:**
    - **Title**: `Trigger Scrap Queue`
-   - **Address (URL)**: `https://<railway-service-url>/trigger`
-     - Ganti `<railway-service-url>` dengan URL yang sama
+   - **Address (URL)**: `https://csf-panel-dashboard-production.up.railway.app/trigger`
    - **Request method**: `POST`
    - **Request headers**: 
      ```
@@ -81,12 +83,16 @@ Karena Vercel Hobby hanya support 1 cron job per hari, kita menggunakan **cron-j
      ```
 
    **Schedule:**
-   - **Execution schedule**: Pilih **"Every X minutes"**
-   - **Every**: `30` minutes
-   - **Starting at**: `08:00` (WIB)
-   - **Ending at**: `21:00` (WIB)
-   - **Days**: Pilih **Monday, Tuesday, Wednesday, Thursday, Friday, Saturday**
-     - Uncheck Sunday
+   - **Execution schedule**: Pilih **"Custom"** (untuk lebih presisi)
+   - **Crontab expression**: `*/30 1-14 * * 1-6`
+     - Penjelasan: Setiap 30 menit, jam 1-14 UTC (08:00-21:00 WIB), Senin-Sabtu
+   - **Atau** pakai **"Every X minutes"**:
+     - **Every**: `30` minutes
+     - **Starting at**: `08:00` (WIB)
+     - **Ending at**: `21:00` (WIB)
+     - **Days**: Pilih **Monday, Tuesday, Wednesday, Thursday, Friday, Saturday**
+       - Uncheck Sunday
+   - **Timezone**: Pastikan set ke **Asia/Jakarta** (WIB)
 
    **Advanced (Optional):**
    - **Timeout**: `10` seconds
@@ -104,7 +110,7 @@ Karena Vercel Hobby hanya support 1 cron job per hari, kita menggunakan **cron-j
 ### 1. Test Wake Endpoint
 
 ```bash
-curl https://<railway-service-url>/wake
+curl https://csf-panel-dashboard-production.up.railway.app/wake
 ```
 
 **Expected response:**
@@ -119,7 +125,7 @@ curl https://<railway-service-url>/wake
 ### 2. Test Trigger Endpoint
 
 ```bash
-curl -X POST https://<railway-service-url>/trigger \
+curl -X POST https://csf-panel-dashboard-production.up.railway.app/trigger \
   -H "Content-Type: application/json" \
   -d '{"isCron":true}'
 ```
@@ -149,14 +155,14 @@ curl -X POST https://<railway-service-url>/trigger \
 - **Frequency**: Setiap 30 menit
 - **Days**: Senin-Sabtu
 - **Method**: GET
-- **URL**: `https://<railway-url>/wake`
+- **URL**: `https://csf-panel-dashboard-production.up.railway.app/wake`
 
 ### Trigger Scraping
 - **Time**: 08:00, 08:30, 09:00, 09:30, ..., 21:00 WIB
 - **Frequency**: Setiap 30 menit
 - **Days**: Senin-Sabtu
 - **Method**: POST
-- **URL**: `https://<railway-url>/trigger`
+- **URL**: `https://csf-panel-dashboard-production.up.railway.app/trigger`
 - **Body**: `{"isCron":true}`
 
 **Timeline:**
@@ -280,3 +286,4 @@ Jika cron-job.org tidak cocok, bisa pakai **GitHub Actions** (free untuk public 
 - **Setup Recap**: `docs/SETUP_RECAP.md`
 - **Railway Setup**: `docs/RAILWAY_SETUP.md`
 - **Railway Free Optimization**: `docs/RAILWAY_FREE_OPTIMIZATION.md`
+- **Crontab Reference**: `docs/CRON_JOB_ORG_CRONTAB.md` (untuk format crontab yang benar)
