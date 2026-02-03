@@ -4,7 +4,8 @@ import { NextRequest, NextResponse } from 'next/server'
  * Vercel Cron: Trigger Scrap Queue Worker
  * 
  * Cron ini akan trigger Railway service untuk menjalankan scrap queue worker
- * Schedule: */30 1-14 * * 1-6 (setiap 30 menit, 01:00-14:00 UTC = 08:00-21:00 WIB, Senin-Sabtu)
+ * Schedule: setiap 30 menit, 01:00-14:00 UTC (08:00-21:00 WIB), Senin-Sabtu
+ * Crontab: 0,30 1-14 * * 1-6
  * 
  * Vercel Cron akan memanggil endpoint ini secara otomatis
  */
