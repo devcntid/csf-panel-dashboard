@@ -12,6 +12,33 @@ const PROCESS_LIMIT = process.env.PROCESS_LIMIT || '6'
 // Flag untuk prevent concurrent execution
 let isProcessing = false
 
+// Optimasi untuk Railway Free: Auto-sleep setelah idle
+const IDLE_TIMEOUT = parseInt(process.env.IDLE_TIMEOUT || '300000') // 5 menit default (300000 ms)
+let lastRequestTime = Date.now()
+let idleCheckInterval = null
+
+// Function untuk check idle dan prepare sleep
+function checkIdleAndSleep() {
+  const now = Date.now()
+  const idleTime = now - lastRequestTime
+
+  if (idleTime > IDLE_TIMEOUT && !isProcessing) {
+    console.log(`[Railway Worker] Idle for ${Math.round(idleTime / 1000)}s, service will sleep soon`)
+    console.log('[Railway Worker] Service akan auto-sleep. Wake via HTTP request ke /health atau /trigger')
+    // Railway akan auto-sleep service yang idle
+    // Service akan wake otomatis saat ada HTTP request
+  }
+}
+
+// Start idle check (setiap 1 menit)
+function startIdleCheck() {
+  if (idleCheckInterval) {
+    clearInterval(idleCheckInterval)
+  }
+  idleCheckInterval = setInterval(checkIdleAndSleep, 60000) // Check setiap 1 menit
+  console.log(`[Railway Worker] Idle check started (timeout: ${IDLE_TIMEOUT / 1000}s)`)
+}
+
 async function runScrapQueue(isCron = false) {
   if (isProcessing) {
     console.log('[Railway Worker] Job sedang berjalan, skip request ini')
@@ -74,6 +101,9 @@ async function runScrapQueue(isCron = false) {
 }
 
 const server = http.createServer(async (req, res) => {
+  // Update last request time (untuk idle check)
+  lastRequestTime = Date.now()
+
   // CORS headers
   res.setHeader('Access-Control-Allow-Origin', '*')
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
@@ -85,10 +115,33 @@ const server = http.createServer(async (req, res) => {
     return
   }
 
-  // Health check endpoint
+  // Health check endpoint (juga untuk wake service)
   if (req.method === 'GET' && req.url === '/health') {
+    const idleTime = Date.now() - lastRequestTime
     res.writeHead(200, { 'Content-Type': 'application/json' })
-    res.end(JSON.stringify({ status: 'ok', processing: isProcessing }))
+    res.end(
+      JSON.stringify({
+        status: 'ok',
+        processing: isProcessing,
+        idleTime: Math.round(idleTime / 1000),
+        idleTimeout: IDLE_TIMEOUT / 1000,
+      })
+    )
+    return
+  }
+
+  // Wake endpoint (untuk external cron wake service sebelum scraping)
+  if (req.method === 'GET' && req.url === '/wake') {
+    lastRequestTime = Date.now()
+    console.log('[Railway Worker] Service woken up via /wake endpoint')
+    res.writeHead(200, { 'Content-Type': 'application/json' })
+    res.end(
+      JSON.stringify({
+        success: true,
+        message: 'Service woken up',
+        timestamp: new Date().toISOString(),
+      })
+    )
     return
   }
 
@@ -142,13 +195,27 @@ server.listen(PORT, () => {
   console.log(`[Railway Worker] Server running on port ${PORT}`)
   console.log(`[Railway Worker] Health check: http://localhost:${PORT}/health`)
   console.log(`[Railway Worker] Trigger endpoint: POST http://localhost:${PORT}/trigger`)
+  console.log(`[Railway Worker] Auto-sleep enabled (idle timeout: ${IDLE_TIMEOUT / 1000}s)`)
+  
+  // Start idle check
+  startIdleCheck()
 })
 
 // Graceful shutdown
 process.on('SIGTERM', () => {
   console.log('[Railway Worker] SIGTERM received, shutting down...')
+  if (idleCheckInterval) {
+    clearInterval(idleCheckInterval)
+  }
   server.close(() => {
     console.log('[Railway Worker] Server closed')
     process.exit(0)
   })
+})
+
+// Cleanup on exit
+process.on('exit', () => {
+  if (idleCheckInterval) {
+    clearInterval(idleCheckInterval)
+  }
 })
