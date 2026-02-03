@@ -547,10 +547,80 @@ async function performScraping(
     // 2. Pilih Klinik
     console.log(`[v0] 📝 Memilih klinik: ${NAMA_KLINIK}...`)
     try {
+      // Check page title lagi - mungkin ada Cloudflare challenge kedua
+      const currentTitle = await page.title()
+      console.log(`[v0]    Current page title before clinic selection: "${currentTitle}"`)
+      
+      // Jika page title kembali ke "Tunggu sebentar...", wait lagi untuk challenge kedua
+      const titleLower = currentTitle?.toLowerCase() || ''
+      const isCloudflareChallengeAgain = 
+        titleLower.includes('just a moment') ||
+        titleLower.includes('tunggu sebentar') ||
+        titleLower.includes('checking your browser') ||
+        titleLower.includes('mengecek browser') ||
+        currentTitle === 'Just a moment...' ||
+        currentTitle === 'Tunggu sebentar...'
+      
+      if (isCloudflareChallengeAgain) {
+        console.log('[v0] ⚠️  Cloudflare challenge detected again, waiting for second challenge to complete...')
+        let secondAttempts = 0
+        const maxSecondAttempts = 60 // Max 60 detik untuk challenge kedua
+        
+        while (secondAttempts < maxSecondAttempts) {
+          const secondTitle = await page.title()
+          
+          if (secondAttempts % 5 === 0 || secondAttempts < 5) {
+            console.log(`[v0]    Second challenge attempt ${secondAttempts + 1}/${maxSecondAttempts}: Page title = "${secondTitle}"`)
+          }
+          
+          // Check jika form login muncul
+          try {
+            const clinicInput = page.locator('input[placeholder="Pilih Klinik"]')
+            const isVisible = await clinicInput.isVisible({ timeout: 2000 }).catch(() => false)
+            if (isVisible) {
+              console.log('[v0] ✅ Second Cloudflare challenge completed, login form visible')
+              break
+            }
+          } catch (checkError) {
+            // Form belum muncul
+          }
+          
+          // Check jika challenge selesai
+          const secondTitleLower = secondTitle?.toLowerCase() || ''
+          const isStillChallenge = 
+            secondTitleLower.includes('just a moment') ||
+            secondTitleLower.includes('tunggu sebentar') ||
+            secondTitleLower.includes('checking your browser') ||
+            secondTitleLower.includes('mengecek browser') ||
+            secondTitle === 'Just a moment...' ||
+            secondTitle === 'Tunggu sebentar...'
+          
+          if (!isStillChallenge && secondTitle !== '') {
+            console.log(`[v0] ✅ Second Cloudflare challenge completed. Page title: "${secondTitle}"`)
+            break
+          }
+          
+          await page.waitForTimeout(1000)
+          secondAttempts++
+        }
+        
+        if (secondAttempts >= maxSecondAttempts) {
+          console.error(`[v0] ❌ Second Cloudflare challenge timeout after ${maxSecondAttempts} seconds`)
+        } else {
+          // Wait additional time setelah challenge kedua selesai
+          await page.waitForTimeout(3000)
+          console.log('[v0] ✅ Waiting additional 3 seconds after second challenge...')
+        }
+      }
+      
       // Wait for page to be fully interactive
       await page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => {
         console.log('[v0] ⚠️  Network idle timeout, continuing anyway...')
       })
+      
+      // Final check page title sebelum select clinic
+      const finalTitle = await page.title()
+      console.log(`[v0]    Final page title before clinic selection: "${finalTitle}"`)
       
       // Wait for the clinic selector to be visible (try multiple selectors)
       console.log('[v0] ⏳ Waiting for clinic selector...')
