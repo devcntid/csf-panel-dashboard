@@ -317,6 +317,11 @@ async function performScraping(
       viewport: { width: 1920, height: 1080 },
       locale: 'id-ID',
       timezoneId: 'Asia/Jakarta',
+      // ScraperAPI bertindak sebagai proxy dan melakukan TLS termination sendiri,
+      // sehingga certificate chain bisa berbeda dari yang diharapkan browser normal.
+      // ignoreHTTPSErrors=true diperlukan agar Playwright tidak memblokir dengan
+      // net::ERR_CERT_AUTHORITY_INVALID ketika lewat proxy.
+      ignoreHTTPSErrors: true,
       // JANGAN set extraHTTPHeaders - biarkan Playwright menggunakan header default browser
       // Semua header custom (Cache-Control, Upgrade-Insecure-Requests, dll) menyebabkan CORS error dengan Cloudflare Turnstile
       // Playwright secara default sudah mengirim header yang benar untuk browser Chrome
