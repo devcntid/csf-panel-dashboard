@@ -55,10 +55,16 @@ function getSql() {
   return sqlInstance
 }
 
+// Export helper untuk mendapatkan client neon mentah
+// Client ini bisa dipakai dengan template literal (sql`...`) atau dengan (text, params[])
+export function getSqlClient() {
+  return getSql()
+}
+
 // Export sql - lazy load saat digunakan
-// Neon's sql adalah template tag function yang return Promise
+// Ini hanyalah pembungkus di atas getSqlClient supaya bisa langsung dipakai sebagai template tag
 export const sql = ((strings: TemplateStringsArray, ...values: any[]) => {
-  return getSql()(strings, ...values)
+  return getSqlClient()(strings, ...values)
 }) as any as ReturnType<typeof neon>
 
 // Helper untuk format currency
