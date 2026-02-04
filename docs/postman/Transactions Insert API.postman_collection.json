@@ -1,0 +1,229 @@
+{
+	"info": {
+		"_postman_id": "transactions-insert-api",
+		"name": "Transactions Insert API",
+		"description": "API untuk insert transaksi secara manual dengan logika yang sama persis seperti proses scrap",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "Insert Transaction",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"clinic_id\": 1,\n  \"transaction_data\": [\n    {\n      \"trx_date\": \"2026-01-28\",\n      \"trx_no\": \"TRX001\",\n      \"erm_no\": \"ERM001\",\n      \"patient_name\": \"John Doe\",\n      \"insurance_type\": \"BPJS\",\n      \"polyclinic\": \"Poli Umum\",\n      \"payment_method\": \"Tunai\",\n      \"voucher_code\": \"-\",\n      \"bill_regist\": 50000,\n      \"bill_action\": 100000,\n      \"bill_lab\": 75000,\n      \"bill_drug\": 50000,\n      \"bill_alkes\": 0,\n      \"bill_mcu\": 0,\n      \"bill_radio\": 0,\n      \"bill_total\": 275000,\n      \"covered_regist\": 0,\n      \"covered_action\": 50000,\n      \"covered_lab\": 0,\n      \"covered_drug\": 0,\n      \"covered_alkes\": 0,\n      \"covered_mcu\": 0,\n      \"covered_radio\": 0,\n      \"covered_total\": 50000,\n      \"paid_regist\": 50000,\n      \"paid_action\": 100000,\n      \"paid_lab\": 75000,\n      \"paid_drug\": 50000,\n      \"paid_alkes\": 0,\n      \"paid_mcu\": 0,\n      \"paid_radio\": 0,\n      \"paid_rounding\": 0,\n      \"paid_discount\": 0,\n      \"paid_tax\": 0,\n      \"paid_voucher_amt\": 0,\n      \"paid_total\": 275000,\n      \"receivable_regist\": 0,\n      \"receivable_action\": 0,\n      \"receivable_lab\": 0,\n      \"receivable_drug\": 0,\n      \"receivable_alkes\": 0,\n      \"receivable_mcu\": 0,\n      \"receivable_radio\": 0,\n      \"receivable_total\": 0\n    }\n  ]\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "{{base_url}}/api/transactions/insert",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"api",
+						"transactions",
+						"insert"
+					]
+				},
+				"description": "Endpoint untuk insert transaksi secara manual. Logika insert sama persis dengan proses scrap:\n- Insert/update patient dengan logika first_visit_at, last_visit_at, visit_count\n- Insert/update transaction dengan semua field\n- Insert ke transactions_to_zains untuk setiap kategori pembayaran yang memiliki nilai > 0\n- Sync patient ke Zains jika diperlukan"
+			},
+			"response": [
+				{
+					"name": "Success Response",
+					"originalRequest": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"clinic_id\": 1,\n  \"transaction_data\": [\n    {\n      \"trx_date\": \"2026-01-28\",\n      \"trx_no\": \"TRX001\",\n      \"erm_no\": \"ERM001\",\n      \"patient_name\": \"John Doe\",\n      \"insurance_type\": \"BPJS\",\n      \"polyclinic\": \"Poli Umum\",\n      \"payment_method\": \"Tunai\",\n      \"voucher_code\": \"-\",\n      \"bill_regist\": 50000,\n      \"bill_action\": 100000,\n      \"bill_lab\": 75000,\n      \"bill_drug\": 50000,\n      \"bill_alkes\": 0,\n      \"bill_mcu\": 0,\n      \"bill_radio\": 0,\n      \"bill_total\": 275000,\n      \"covered_regist\": 0,\n      \"covered_action\": 50000,\n      \"covered_lab\": 0,\n      \"covered_drug\": 0,\n      \"covered_alkes\": 0,\n      \"covered_mcu\": 0,\n      \"covered_radio\": 0,\n      \"covered_total\": 50000,\n      \"paid_regist\": 50000,\n      \"paid_action\": 100000,\n      \"paid_lab\": 75000,\n      \"paid_drug\": 50000,\n      \"paid_alkes\": 0,\n      \"paid_mcu\": 0,\n      \"paid_radio\": 0,\n      \"paid_rounding\": 0,\n      \"paid_discount\": 0,\n      \"paid_tax\": 0,\n      \"paid_voucher_amt\": 0,\n      \"paid_total\": 275000,\n      \"receivable_regist\": 0,\n      \"receivable_action\": 0,\n      \"receivable_lab\": 0,\n      \"receivable_drug\": 0,\n      \"receivable_alkes\": 0,\n      \"receivable_mcu\": 0,\n      \"receivable_radio\": 0,\n      \"receivable_total\": 0\n    }\n  ]\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/api/transactions/insert",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"transactions",
+								"insert"
+							]
+						}
+					},
+					"status": "OK",
+					"code": 200,
+					"_postman_previewlanguage": "json",
+					"header": [
+						{
+							"key": "Content-Type",
+							"value": "application/json"
+						}
+					],
+					"cookie": [],
+					"body": "{\n  \"success\": true,\n  \"message\": \"Insert transaksi berhasil\",\n  \"data\": {\n    \"total_processed\": 1,\n    \"inserted\": 1,\n    \"zains_inserted\": 4,\n    \"skipped\": 0\n  }\n}"
+				},
+				{
+					"name": "Error - Clinic Not Found",
+					"originalRequest": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"clinic_id\": 999,\n  \"transaction_data\": [\n    {\n      \"trx_date\": \"2026-01-28\",\n      \"trx_no\": \"TRX001\",\n      \"erm_no\": \"ERM001\",\n      \"patient_name\": \"John Doe\"\n    }\n  ]\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/api/transactions/insert",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"transactions",
+								"insert"
+							]
+						}
+					},
+					"status": "Not Found",
+					"code": 404,
+					"_postman_previewlanguage": "json",
+					"header": [
+						{
+							"key": "Content-Type",
+							"value": "application/json"
+						}
+					],
+					"cookie": [],
+					"body": "{\n  \"error\": \"Clinic tidak ditemukan atau tidak aktif\"\n}"
+				},
+				{
+					"name": "Error - Missing Required Fields",
+					"originalRequest": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"transaction_data\": []\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/api/transactions/insert",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"transactions",
+								"insert"
+							]
+						}
+					},
+					"status": "Bad Request",
+					"code": 400,
+					"_postman_previewlanguage": "json",
+					"header": [
+						{
+							"key": "Content-Type",
+							"value": "application/json"
+						}
+					],
+					"cookie": [],
+					"body": "{\n  \"error\": \"clinic_id harus diisi\"\n}"
+				},
+				{
+					"name": "Multiple Transactions",
+					"originalRequest": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"clinic_id\": 1,\n  \"transaction_data\": [\n    {\n      \"trx_date\": \"2026-01-28\",\n      \"trx_no\": \"TRX001\",\n      \"erm_no\": \"ERM001\",\n      \"patient_name\": \"John Doe\",\n      \"insurance_type\": \"BPJS\",\n      \"polyclinic\": \"Poli Umum\",\n      \"payment_method\": \"Tunai\",\n      \"voucher_code\": \"-\",\n      \"bill_regist\": 50000,\n      \"bill_action\": 100000,\n      \"bill_lab\": 75000,\n      \"bill_drug\": 50000,\n      \"bill_total\": 275000,\n      \"covered_regist\": 0,\n      \"covered_action\": 50000,\n      \"covered_total\": 50000,\n      \"paid_regist\": 50000,\n      \"paid_action\": 100000,\n      \"paid_lab\": 75000,\n      \"paid_drug\": 50000,\n      \"paid_total\": 275000,\n      \"receivable_regist\": 0,\n      \"receivable_action\": 0,\n      \"receivable_lab\": 0,\n      \"receivable_drug\": 0,\n      \"receivable_total\": 0\n    },\n    {\n      \"trx_date\": \"2026-01-28\",\n      \"trx_no\": \"TRX002\",\n      \"erm_no\": \"ERM002\",\n      \"patient_name\": \"Jane Smith\",\n      \"insurance_type\": \"Mandiri\",\n      \"polyclinic\": \"Poli Gigi\",\n      \"payment_method\": \"QRIS\",\n      \"voucher_code\": \"VOUCHER123\",\n      \"bill_regist\": 75000,\n      \"bill_action\": 150000,\n      \"bill_lab\": 0,\n      \"bill_drug\": 100000,\n      \"bill_total\": 325000,\n      \"covered_regist\": 0,\n      \"covered_action\": 0,\n      \"covered_lab\": 0,\n      \"covered_drug\": 0,\n      \"covered_total\": 0,\n      \"paid_regist\": 75000,\n      \"paid_action\": 150000,\n      \"paid_lab\": 0,\n      \"paid_drug\": 100000,\n      \"paid_rounding\": 0,\n      \"paid_discount\": 10000,\n      \"paid_tax\": 0,\n      \"paid_voucher_amt\": 5000,\n      \"paid_total\": 320000,\n      \"receivable_regist\": 0,\n      \"receivable_action\": 0,\n      \"receivable_lab\": 0,\n      \"receivable_drug\": 0,\n      \"receivable_total\": 0\n    }\n  ]\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/api/transactions/insert",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"transactions",
+								"insert"
+							]
+						}
+					},
+					"status": "OK",
+					"code": 200,
+					"_postman_previewlanguage": "json",
+					"header": [
+						{
+							"key": "Content-Type",
+							"value": "application/json"
+						}
+					],
+					"cookie": [],
+					"body": "{\n  \"success\": true,\n  \"message\": \"Insert transaksi berhasil\",\n  \"data\": {\n    \"total_processed\": 2,\n    \"inserted\": 2,\n    \"zains_inserted\": 8,\n    \"skipped\": 0\n  }\n}"
+				}
+			]
+		}
+	],
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "http://localhost:3000",
+			"type": "string"
+		}
+	]
+}

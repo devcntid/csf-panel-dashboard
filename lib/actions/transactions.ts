@@ -1,9 +1,11 @@
 'use server'
 
-import { sql } from '@/lib/db'
+import { sql, getSqlClient } from '@/lib/db'
 import { cache } from 'react'
 
-export const getTransactions = cache(async (
+// Legacy implementation (masih disimpan jika suatu saat perlu dirujuk kembali)
+// Jangan digunakan langsung di code baru.
+export const getTransactionsLegacy = cache(async (
   search?: string,
   clinicId?: number,
   dateFrom?: string,
@@ -38,10 +40,9 @@ export const getTransactions = cache(async (
       hasDateFilter = true
     }
     
-    // Build date condition SQL directly - avoid nested sql template issues
-    // Only create if hasDateFilter is true - will be used only in blocks where hasDateFilter is true
-    // Note: dateCondition will only be used in blocks where hasDateFilter is true
-    let dateCondition: any = undefined
+    // Build date condition SQL secara dinamis (fragment)
+    // Hanya digunakan di dalam template sql utama
+    let dateCondition: any = sql``
     if (hasDateFilter) {
       if (dateFromValue && dateToValue) {
         dateCondition = sql`AND DATE(t.trx_date) >= DATE(${dateFromValue}) AND DATE(t.trx_date) <= DATE(${dateToValue})`
@@ -89,9 +90,17 @@ export const getTransactions = cache(async (
               t.patient_name ILIKE ${searchPattern} OR
               t.erm_no ILIKE ${searchPattern}
             ) AND t.clinic_id = ${clinicId}
-            ${dateCondition}
-            ${polyFilter}
-            ${insuranceFilter}
+            ${
+              hasDateFilter && dateFromValue && dateToValue
+                ? sql`AND DATE(t.trx_date) >= DATE(${dateFromValue}) AND DATE(t.trx_date) <= DATE(${dateToValue})`
+                : hasDateFilter && dateFromValue
+                ? sql`AND DATE(t.trx_date) >= DATE(${dateFromValue})`
+                : hasDateFilter && dateToValue
+                ? sql`AND DATE(t.trx_date) <= DATE(${dateToValue})`
+                : sql``
+            }
+            ${hasPolyFilter ? sql`AND t.poly_id = ${polyId}` : sql``}
+            ${hasInsuranceFilter ? sql`AND t.insurance_type_id = ${insuranceTypeId}` : sql``}
             ORDER BY t.trx_date DESC, t.trx_time DESC
             LIMIT ${limit} OFFSET ${offset}
           `,
@@ -103,9 +112,17 @@ export const getTransactions = cache(async (
               t.patient_name ILIKE ${searchPattern} OR
               t.erm_no ILIKE ${searchPattern}
             ) AND t.clinic_id = ${clinicId}
-            ${dateCondition}
-            ${polyFilter}
-            ${insuranceFilter}
+            ${
+              hasDateFilter && dateFromValue && dateToValue
+                ? sql`AND DATE(t.trx_date) >= DATE(${dateFromValue}) AND DATE(t.trx_date) <= DATE(${dateToValue})`
+                : hasDateFilter && dateFromValue
+                ? sql`AND DATE(t.trx_date) >= DATE(${dateFromValue})`
+                : hasDateFilter && dateToValue
+                ? sql`AND DATE(t.trx_date) <= DATE(${dateToValue})`
+                : sql``
+            }
+            ${hasPolyFilter ? sql`AND t.poly_id = ${polyId}` : sql``}
+            ${hasInsuranceFilter ? sql`AND t.insurance_type_id = ${insuranceTypeId}` : sql``}
           `
         ])
         const countResult = Array.isArray(countResultRaw) ? countResultRaw[0] : countResultRaw
@@ -132,8 +149,16 @@ export const getTransactions = cache(async (
               t.patient_name ILIKE ${searchPattern} OR
               t.erm_no ILIKE ${searchPattern}
             ) AND t.clinic_id = ${clinicId}
-            ${dateCondition}
-            ${polyFilter}
+            ${
+              hasDateFilter && dateFromValue && dateToValue
+                ? sql`AND DATE(t.trx_date) >= DATE(${dateFromValue}) AND DATE(t.trx_date) <= DATE(${dateToValue})`
+                : hasDateFilter && dateFromValue
+                ? sql`AND DATE(t.trx_date) >= DATE(${dateFromValue})`
+                : hasDateFilter && dateToValue
+                ? sql`AND DATE(t.trx_date) <= DATE(${dateToValue})`
+                : sql``
+            }
+            ${hasPolyFilter ? sql`AND t.poly_id = ${polyId}` : sql``}
             ORDER BY t.trx_date DESC, t.trx_time DESC
             LIMIT ${limit} OFFSET ${offset}
           `,
@@ -173,8 +198,16 @@ export const getTransactions = cache(async (
               t.patient_name ILIKE ${searchPattern} OR
               t.erm_no ILIKE ${searchPattern}
             ) AND t.clinic_id = ${clinicId}
-            ${dateCondition}
-            ${insuranceFilter}
+            ${
+              hasDateFilter && dateFromValue && dateToValue
+                ? sql`AND DATE(t.trx_date) >= DATE(${dateFromValue}) AND DATE(t.trx_date) <= DATE(${dateToValue})`
+                : hasDateFilter && dateFromValue
+                ? sql`AND DATE(t.trx_date) >= DATE(${dateFromValue})`
+                : hasDateFilter && dateToValue
+                ? sql`AND DATE(t.trx_date) <= DATE(${dateToValue})`
+                : sql``
+            }
+            ${hasInsuranceFilter ? sql`AND t.insurance_type_id = ${insuranceTypeId}` : sql``}
             ORDER BY t.trx_date DESC, t.trx_time DESC
             LIMIT ${limit} OFFSET ${offset}
           `,
@@ -214,8 +247,8 @@ export const getTransactions = cache(async (
               t.patient_name ILIKE ${searchPattern} OR
               t.erm_no ILIKE ${searchPattern}
             ) AND t.clinic_id = ${clinicId}
-            ${polyFilter}
-            ${insuranceFilter}
+            ${hasPolyFilter ? sql`AND t.poly_id = ${polyId}` : sql``}
+            ${hasInsuranceFilter ? sql`AND t.insurance_type_id = ${insuranceTypeId}` : sql``}
             ORDER BY t.trx_date DESC, t.trx_time DESC
             LIMIT ${limit} OFFSET ${offset}
           `,
@@ -255,7 +288,15 @@ export const getTransactions = cache(async (
               t.patient_name ILIKE ${searchPattern} OR
               t.erm_no ILIKE ${searchPattern}
             ) AND t.clinic_id = ${clinicId}
-            ${dateCondition}
+            ${
+              hasDateFilter && dateFromValue && dateToValue
+                ? sql`AND DATE(t.trx_date) >= DATE(${dateFromValue}) AND DATE(t.trx_date) <= DATE(${dateToValue})`
+                : hasDateFilter && dateFromValue
+                ? sql`AND DATE(t.trx_date) >= DATE(${dateFromValue})`
+                : hasDateFilter && dateToValue
+                ? sql`AND DATE(t.trx_date) <= DATE(${dateToValue})`
+                : sql``
+            }
             ORDER BY t.trx_date DESC, t.trx_time DESC
             LIMIT ${limit} OFFSET ${offset}
           `,
@@ -425,9 +466,17 @@ export const getTransactions = cache(async (
               t.patient_name ILIKE ${searchPattern} OR
               t.erm_no ILIKE ${searchPattern}
             )
-            ${dateCondition}
-            ${polyFilter}
-            ${insuranceFilter}
+            ${
+              hasDateFilter && dateFromValue && dateToValue
+                ? sql`AND DATE(t.trx_date) >= DATE(${dateFromValue}) AND DATE(t.trx_date) <= DATE(${dateToValue})`
+                : hasDateFilter && dateFromValue
+                ? sql`AND DATE(t.trx_date) >= DATE(${dateFromValue})`
+                : hasDateFilter && dateToValue
+                ? sql`AND DATE(t.trx_date) <= DATE(${dateToValue})`
+                : sql``
+            }
+            ${hasPolyFilter ? sql`AND t.poly_id = ${polyId}` : sql``}
+            ${hasInsuranceFilter ? sql`AND t.insurance_type_id = ${insuranceTypeId}` : sql``}
             ORDER BY t.trx_date DESC, t.trx_time DESC
             LIMIT ${limit} OFFSET ${offset}
           `,
@@ -439,9 +488,17 @@ export const getTransactions = cache(async (
               t.patient_name ILIKE ${searchPattern} OR
               t.erm_no ILIKE ${searchPattern}
             )
-            ${dateCondition}
-            ${polyFilter}
-            ${insuranceFilter}
+            ${
+              hasDateFilter && dateFromValue && dateToValue
+                ? sql`AND DATE(t.trx_date) >= DATE(${dateFromValue}) AND DATE(t.trx_date) <= DATE(${dateToValue})`
+                : hasDateFilter && dateFromValue
+                ? sql`AND DATE(t.trx_date) >= DATE(${dateFromValue})`
+                : hasDateFilter && dateToValue
+                ? sql`AND DATE(t.trx_date) <= DATE(${dateToValue})`
+                : sql``
+            }
+            ${hasPolyFilter ? sql`AND t.poly_id = ${polyId}` : sql``}
+            ${hasInsuranceFilter ? sql`AND t.insurance_type_id = ${insuranceTypeId}` : sql``}
           `
         ])
         const countResult = Array.isArray(countResultRaw) ? countResultRaw[0] : countResultRaw
@@ -468,8 +525,16 @@ export const getTransactions = cache(async (
               t.patient_name ILIKE ${searchPattern} OR
               t.erm_no ILIKE ${searchPattern}
             )
-            ${dateCondition}
-            ${polyFilter}
+            ${
+              hasDateFilter && dateFromValue && dateToValue
+                ? sql`AND DATE(t.trx_date) >= DATE(${dateFromValue}) AND DATE(t.trx_date) <= DATE(${dateToValue})`
+                : hasDateFilter && dateFromValue
+                ? sql`AND DATE(t.trx_date) >= DATE(${dateFromValue})`
+                : hasDateFilter && dateToValue
+                ? sql`AND DATE(t.trx_date) <= DATE(${dateToValue})`
+                : sql``
+            }
+            ${hasPolyFilter ? sql`AND t.poly_id = ${polyId}` : sql``}
             ORDER BY t.trx_date DESC, t.trx_time DESC
             LIMIT ${limit} OFFSET ${offset}
           `,
@@ -509,8 +574,16 @@ export const getTransactions = cache(async (
               t.patient_name ILIKE ${searchPattern} OR
               t.erm_no ILIKE ${searchPattern}
             )
-            ${dateCondition}
-            ${insuranceFilter}
+            ${
+              hasDateFilter && dateFromValue && dateToValue
+                ? sql`AND DATE(t.trx_date) >= DATE(${dateFromValue}) AND DATE(t.trx_date) <= DATE(${dateToValue})`
+                : hasDateFilter && dateFromValue
+                ? sql`AND DATE(t.trx_date) >= DATE(${dateFromValue})`
+                : hasDateFilter && dateToValue
+                ? sql`AND DATE(t.trx_date) <= DATE(${dateToValue})`
+                : sql``
+            }
+            ${hasInsuranceFilter ? sql`AND t.insurance_type_id = ${insuranceTypeId}` : sql``}
             ORDER BY t.trx_date DESC, t.trx_time DESC
             LIMIT ${limit} OFFSET ${offset}
           `,
@@ -550,8 +623,8 @@ export const getTransactions = cache(async (
               t.patient_name ILIKE ${searchPattern} OR
               t.erm_no ILIKE ${searchPattern}
             )
-            ${polyFilter}
-            ${insuranceFilter}
+            ${hasPolyFilter ? sql`AND t.poly_id = ${polyId}` : sql``}
+            ${hasInsuranceFilter ? sql`AND t.insurance_type_id = ${insuranceTypeId}` : sql``}
             ORDER BY t.trx_date DESC, t.trx_time DESC
             LIMIT ${limit} OFFSET ${offset}
           `,
@@ -591,7 +664,15 @@ export const getTransactions = cache(async (
               t.patient_name ILIKE ${searchPattern} OR
               t.erm_no ILIKE ${searchPattern}
             )
-            ${dateCondition}
+            ${
+              hasDateFilter && dateFromValue && dateToValue
+                ? sql`AND DATE(t.trx_date) >= DATE(${dateFromValue}) AND DATE(t.trx_date) <= DATE(${dateToValue})`
+                : hasDateFilter && dateFromValue
+                ? sql`AND DATE(t.trx_date) >= DATE(${dateFromValue})`
+                : hasDateFilter && dateToValue
+                ? sql`AND DATE(t.trx_date) <= DATE(${dateToValue})`
+                : sql``
+            }
             ORDER BY t.trx_date DESC, t.trx_time DESC
             LIMIT ${limit} OFFSET ${offset}
           `,
@@ -1325,6 +1406,148 @@ export const getTransactions = cache(async (
   }
 })
 
+// Implementasi baru getTransactions dengan builder query yang jauh lebih sederhana
+// Menggunakan getSqlClient() dan text query + parameter array agar tidak ada nested template sql
+export const getTransactions = cache(async (
+  search?: string,
+  clinicId?: number,
+  dateFrom?: string,
+  dateTo?: string,
+  page: number = 1,
+  limit: number = 10,
+  polyId?: number,
+  insuranceTypeId?: number
+) => {
+  try {
+    const offset = (page - 1) * limit
+    const client = getSqlClient()
+
+    // Normalisasi input
+    const trimmedSearch = search && search.trim() !== '' ? search.trim() : undefined
+    const validDateFrom = dateFrom && dateFrom.trim() !== '' ? dateFrom : undefined
+    const validDateTo = dateTo && dateTo.trim() !== '' ? dateTo : undefined
+
+    const whereClauses: string[] = []
+    const params: any[] = []
+    let paramIndex = 0
+
+    // Filter klinik
+    if (clinicId) {
+      paramIndex++
+      params.push(clinicId)
+      whereClauses.push(`t.clinic_id = $${paramIndex}`)
+    }
+
+    // Filter search (trx_no, patient_name, erm_no)
+    if (trimmedSearch) {
+      paramIndex++
+      params.push(`%${trimmedSearch}%`)
+      const idx = paramIndex
+      whereClauses.push(
+        `(t.trx_no ILIKE $${idx} OR t.patient_name ILIKE $${idx} OR t.erm_no ILIKE $${idx})`,
+      )
+    }
+
+    // Filter tanggal
+    if (validDateFrom && validDateTo) {
+      paramIndex++
+      const fromIdx = paramIndex
+      params.push(validDateFrom)
+
+      paramIndex++
+      const toIdx = paramIndex
+      params.push(validDateTo)
+
+      whereClauses.push(
+        `DATE(t.trx_date) >= DATE($${fromIdx}) AND DATE(t.trx_date) <= DATE($${toIdx})`,
+      )
+    } else if (validDateFrom) {
+      paramIndex++
+      params.push(validDateFrom)
+      whereClauses.push(`DATE(t.trx_date) >= DATE($${paramIndex})`)
+    } else if (validDateTo) {
+      paramIndex++
+      params.push(validDateTo)
+      whereClauses.push(`DATE(t.trx_date) <= DATE($${paramIndex})`)
+    }
+
+    // Filter poli
+    if (polyId) {
+      paramIndex++
+      params.push(polyId)
+      whereClauses.push(`t.poly_id = $${paramIndex}`)
+    }
+
+    // Filter jenis asuransi
+    if (insuranceTypeId) {
+      paramIndex++
+      params.push(insuranceTypeId)
+      whereClauses.push(`t.insurance_type_id = $${paramIndex}`)
+    }
+
+    const whereSql = whereClauses.length > 0 ? whereClauses.join(' AND ') : 'TRUE'
+
+    // Tambahkan parameter limit & offset
+    paramIndex++
+    const limitIdx = paramIndex
+    params.push(limit)
+
+    paramIndex++
+    const offsetIdx = paramIndex
+    params.push(offset)
+
+    const baseFromWhere = `
+      FROM transactions t
+      JOIN clinics c ON c.id = t.clinic_id
+      LEFT JOIN master_polies mp ON mp.id = t.poly_id
+      LEFT JOIN master_insurance_types mit ON mit.id = t.insurance_type_id
+      WHERE ${whereSql}
+    `
+
+    const filterParams = params.slice(0, limitIdx - 1)
+
+    const [transactions, countResultRaw] = await Promise.all([
+      client(
+        `
+        SELECT 
+          t.*,
+          c.name AS clinic_name,
+          mp.name AS master_poly_name,
+          mit.name AS master_insurance_name
+        ${baseFromWhere}
+        ORDER BY t.trx_date DESC, t.trx_time DESC
+        LIMIT $${limitIdx} OFFSET $${offsetIdx}
+        `,
+        params,
+      ),
+      client(
+        `
+        SELECT COUNT(*) AS total
+        ${baseFromWhere}
+        `,
+        filterParams,
+      ),
+    ])
+
+    const countResult = Array.isArray(countResultRaw) ? countResultRaw[0] : countResultRaw
+
+    return {
+      transactions: Array.isArray(transactions) ? transactions : [],
+      total: Number((countResult as any)?.total || 0),
+      page,
+      limit,
+    }
+  } catch (error) {
+    console.error('Error fetching transactions:', error)
+    return {
+      transactions: [],
+      total: 0,
+      page,
+      limit,
+    }
+  }
+})
+
 export const getTransactionsByPatient = cache(async (
   patientId?: number,
   ermNo?: string,
@@ -1431,16 +1654,94 @@ export const getTransactionById = cache(async (id: string | number) => {
   }
 })
 
-export const getTransactionStats = cache(async () => {
+export const getTransactionStats = cache(async (
+  search?: string,
+  clinicId?: number,
+  dateFrom?: string,
+  dateTo?: string,
+  polyId?: number,
+  insuranceTypeId?: number
+) => {
   try {
-    const statsRaw = await sql`
+    const client = getSqlClient()
+
+    const trimmedSearch = search && search.trim() !== '' ? search.trim() : undefined
+    const validDateFrom = dateFrom && dateFrom.trim() !== '' ? dateFrom : undefined
+    const validDateTo = dateTo && dateTo.trim() !== '' ? dateTo : undefined
+
+    const whereClauses: string[] = []
+    const params: any[] = []
+    let paramIndex = 0
+
+    // Filter klinik
+    if (clinicId) {
+      paramIndex++
+      params.push(clinicId)
+      whereClauses.push(`t.clinic_id = $${paramIndex}`)
+    }
+
+    // Filter search
+    if (trimmedSearch) {
+      paramIndex++
+      params.push(`%${trimmedSearch}%`)
+      const idx = paramIndex
+      whereClauses.push(
+        `(t.trx_no ILIKE $${idx} OR t.patient_name ILIKE $${idx} OR t.erm_no ILIKE $${idx})`,
+      )
+    }
+
+    // Filter tanggal
+    if (validDateFrom && validDateTo) {
+      paramIndex++
+      const fromIdx = paramIndex
+      params.push(validDateFrom)
+
+      paramIndex++
+      const toIdx = paramIndex
+      params.push(validDateTo)
+
+      whereClauses.push(
+        `DATE(t.trx_date) >= DATE($${fromIdx}) AND DATE(t.trx_date) <= DATE($${toIdx})`,
+      )
+    } else if (validDateFrom) {
+      paramIndex++
+      params.push(validDateFrom)
+      whereClauses.push(`DATE(t.trx_date) >= DATE($${paramIndex})`)
+    } else if (validDateTo) {
+      paramIndex++
+      params.push(validDateTo)
+      whereClauses.push(`DATE(t.trx_date) <= DATE($${paramIndex})`)
+    }
+
+    // Filter poli
+    if (polyId) {
+      paramIndex++
+      params.push(polyId)
+      whereClauses.push(`t.poly_id = $${paramIndex}`)
+    }
+
+    // Filter jenis asuransi
+    if (insuranceTypeId) {
+      paramIndex++
+      params.push(insuranceTypeId)
+      whereClauses.push(`t.insurance_type_id = $${paramIndex}`)
+    }
+
+    const whereSql = whereClauses.length > 0 ? whereClauses.join(' AND ') : 'TRUE'
+
+    const statsRaw = await client(
+      `
       SELECT 
         COUNT(*) as total_transactions,
         COUNT(CASE WHEN zains_synced = true THEN 1 END) as synced_count,
         COUNT(CASE WHEN zains_synced = false THEN 1 END) as pending_count,
         COALESCE(SUM(bill_total), 0) as total_revenue
-      FROM transactions
-    `
+      FROM transactions t
+      WHERE ${whereSql}
+      `,
+      params,
+    )
+
     const stats = Array.isArray(statsRaw) ? statsRaw[0] : statsRaw
     
     return {

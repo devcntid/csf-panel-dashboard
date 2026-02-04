@@ -29,7 +29,7 @@ export default async function TransaksiPage({
   
   const [transactionsData, stats, clinics, polies, insuranceTypes] = await Promise.all([
     getTransactions(search, clinicId, dateFrom, dateTo, page, 10, polyId, insuranceTypeId),
-    getTransactionStats(),
+    getTransactionStats(search, clinicId, dateFrom, dateTo, polyId, insuranceTypeId),
     getAllClinics(),
     getMasterPolies(),
     getMasterInsuranceTypes(),
