@@ -309,15 +309,18 @@ async function seed() {
       `;
       
       if (clinic.length > 0) {
+        const clinicId = clinic[0].id
+        const ermNoForZains = `${clinicId}${patient.erm_no}`
         await sql`
-          INSERT INTO patients (clinic_id, erm_no, full_name, first_visit_at, last_visit_at, visit_count)
+          INSERT INTO patients (clinic_id, erm_no, full_name, first_visit_at, last_visit_at, visit_count, erm_no_for_zains)
           VALUES (
-            ${clinic[0].id},
+            ${clinicId},
             ${patient.erm_no},
             ${patient.full_name},
             ${patient.visit_date},
             ${patient.visit_date},
-            1
+            1,
+            ${ermNoForZains}
           )
           ON CONFLICT (clinic_id, erm_no) DO NOTHING
         `;

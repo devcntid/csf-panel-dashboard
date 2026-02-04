@@ -13,21 +13,29 @@ interface ZainsSyncPayload {
 }
 
 interface ZainsSyncResponse {
-  id_donatur?: string
-  success?: boolean
+  status?: boolean
   message?: string
+  data?: {
+    id_donatur?: string
+    donatur?: string
+    [key: string]: any
+  }
+  id_donatur?: string  // Bisa di level root response (untuk case sudah terdaftar)
+  success?: boolean
   error?: string
 }
 
 /**
- * Extract phone number from erm_no
- * Menggunakan no_erm langsung sebagai hp dan telpon
+ * Extract phone and email from erm_no_for_zains
+ * Menggunakan erm_no_for_zains untuk hp, telpon, dan email
  */
-function extractPhoneFromErm(ermNo: string): { hp: string; telpon: string } {
-  // Langsung gunakan erm_no sebagai hp dan telpon
+function extractContactFromErmNoForZains(ermNoForZains: string): { hp: string; telpon: string; email: string } {
+  // Gunakan erm_no_for_zains untuk hp dan telpon
+  // Email format: {erm_no_for_zains}@gmail.com
   return {
-    hp: ermNo || '',
-    telpon: ermNo || ''
+    hp: ermNoForZains || '',
+    telpon: ermNoForZains || '',
+    email: ermNoForZains ? `${ermNoForZains}@gmail.com` : ''
   }
 }
 
@@ -72,16 +80,17 @@ export async function syncPatientToZains(patient: any): Promise<{
     }
   }
 
-  const { hp, telpon } = extractPhoneFromErm(patient.erm_no || '')
+  // Gunakan erm_no_for_zains untuk hp, telpon, dan email
+  const { hp, telpon, email } = extractContactFromErmNoForZains(patient.erm_no_for_zains || '')
   
   const payload: ZainsSyncPayload = {
     nama: patient.full_name || '',
     id_jenis: 1,
     hp: hp,
     telpon: telpon,
-    email: '',
-    alamat: '',
-    id_crm: ''
+    email: email,
+    alamat: '-',
+    id_crm: '-'
   }
 
   try {
@@ -105,21 +114,52 @@ export async function syncPatientToZains(patient: any): Promise<{
 
     const data: ZainsSyncResponse = await response.json()
     
-    if (data.id_donatur) {
-      // Update patient dengan id_donatur_zains
+    // Ambil id_donatur dari response API Zains (prioritas: data.data.id_donatur, lalu data.id_donatur)
+    const idDonatur = data.data?.id_donatur || data.id_donatur
+    
+    // Handle case: Mitra sudah terdaftar (tidak perlu retry)
+    if (data.status === false && data.message && data.message.includes('sudah terdaftar')) {
+      // Patient sudah terdaftar di Zains
+      // Update patient dengan id_donatur dari response jika ada
+      if (idDonatur) {
+        await sql`
+          UPDATE patients
+          SET id_donatur_zains = ${idDonatur},
+              updated_at = NOW()
+          WHERE id = ${patient.id}
+        `
+        
+        return {
+          success: true,
+          id_donatur: idDonatur,
+          patientId: patient.id
+        }
+      } else {
+        // Jika tidak ada id_donatur di response, tetap mark as success agar tidak retry
+        return {
+          success: true,
+          id_donatur: 'already_registered',
+          patientId: patient.id
+        }
+      }
+    }
+    
+    // Handle response sukses: Update patient dengan id_donatur dari response
+    if (idDonatur) {
       await sql`
         UPDATE patients
-        SET id_donatur_zains = ${data.id_donatur},
+        SET id_donatur_zains = ${idDonatur},
             updated_at = NOW()
         WHERE id = ${patient.id}
       `
       
       return {
         success: true,
-        id_donatur: data.id_donatur,
+        id_donatur: idDonatur,
         patientId: patient.id
       }
     } else {
+      // Jika tidak ada id_donatur di response, return error
       return {
         success: false,
         error: data.message || data.error || 'id_donatur tidak ditemukan di response',
@@ -138,12 +178,14 @@ export async function syncPatientToZains(patient: any): Promise<{
 /**
  * Get batch of patients yang belum di-sync (id_donatur_zains kosong)
  */
-export async function getUnsyncedPatients(limit: number = 20): Promise<any[]> {
+export async function getUnsyncedPatients(limit: number = 10): Promise<any[]> {
   try {
     const patients = await sql`
-      SELECT id, clinic_id, erm_no, full_name
+      SELECT id, clinic_id, erm_no, full_name, erm_no_for_zains
       FROM patients
       WHERE (id_donatur_zains IS NULL OR id_donatur_zains = '')
+        AND erm_no_for_zains IS NOT NULL
+        AND erm_no_for_zains != ''
       ORDER BY created_at ASC
       LIMIT ${limit}
     `
@@ -182,7 +224,7 @@ export async function logSyncResult(
 
 /**
  * Sync batch of patients to Zains (async, non-blocking)
- * This function processes 20 patients at a time in parallel
+ * This function processes 10 patients at a time in parallel
  */
 export async function syncPatientsBatchToZains(): Promise<{
   total: number
@@ -195,7 +237,7 @@ export async function syncPatientsBatchToZains(): Promise<{
     error?: string
   }>
 }> {
-  const patients = await getUnsyncedPatients(20)
+  const patients = await getUnsyncedPatients(10)
   
   if (patients.length === 0) {
     return {
@@ -259,5 +301,48 @@ export async function syncPatientsBatchToZains(): Promise<{
       id_donatur: r.id_donatur,
       error: r.error
     }))
+  }
+}
+
+/**
+ * Sync single patient to Zains (untuk workflow integration)
+ * Digunakan setelah transaction to zains sukses dan patient sudah di-insert/update
+ * Async, non-blocking - tidak throw error, hanya log
+ */
+export async function syncPatientToZainsWorkflow(patientId: number): Promise<void> {
+  try {
+    // Get patient data dengan erm_no_for_zains
+    const [patient] = await sql`
+      SELECT id, clinic_id, erm_no, full_name, erm_no_for_zains, id_donatur_zains
+      FROM patients
+      WHERE id = ${patientId}
+        AND (id_donatur_zains IS NULL OR id_donatur_zains = '')
+        AND erm_no_for_zains IS NOT NULL
+        AND erm_no_for_zains != ''
+      LIMIT 1
+    `
+
+    if (!patient || patient.length === 0) {
+      // Patient sudah di-sync atau tidak ada erm_no_for_zains, skip
+      return
+    }
+
+    const patientData = Array.isArray(patient) ? patient[0] : patient
+
+    // Sync patient ke Zains (async, non-blocking)
+    syncPatientToZains(patientData)
+      .then(result => {
+        if (result.success) {
+          console.log(`✅ [Workflow] Patient ID ${patientId} berhasil di-sync ke Zains, id_donatur: ${result.id_donatur}`)
+        } else {
+          console.warn(`⚠️  [Workflow] Patient ID ${patientId} gagal di-sync ke Zains: ${result.error}`)
+        }
+      })
+      .catch(error => {
+        console.error(`❌ [Workflow] Error saat sync patient ID ${patientId} ke Zains:`, error)
+      })
+  } catch (error) {
+    // Jangan throw error, hanya log
+    console.error(`❌ [Workflow] Error saat fetch patient ID ${patientId} untuk sync:`, error)
   }
 }

@@ -136,6 +136,9 @@ export async function GET(request: NextRequest) {
         'Asuransi',
         'Total Tagihan',
         'Total Pembayaran',
+        'Paid Action',
+        'Paid Action (Setelah Diskon)',
+        'Paid Discount',
         'Total Piutang',
         'Status',
         'Sync',
@@ -168,6 +171,9 @@ export async function GET(request: NextRequest) {
           trx.insurance_type || '',
           trx.bill_total || 0,
           trx.paid_total || 0,
+          trx.paid_action || 0,
+          trx.paid_action_after_discount || trx.paid_action || 0,
+          trx.paid_discount || 0,
           trx.receivable_total || 0,
           trx.insurance_type || '-',
           trx.zains_synced ? 'Synced' : 'Pending',
@@ -193,6 +199,9 @@ export async function GET(request: NextRequest) {
       { wch: 15 }, // Asuransi
       { wch: 15 }, // Total Tagihan
       { wch: 15 }, // Total Pembayaran
+      { wch: 15 }, // Paid Action
+      { wch: 25 }, // Paid Action (Setelah Diskon)
+      { wch: 15 }, // Paid Discount
       { wch: 15 }, // Total Piutang
       { wch: 12 }, // Status
       { wch: 12 }, // Sync

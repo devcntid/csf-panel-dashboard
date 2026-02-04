@@ -81,10 +81,14 @@ CREATE TABLE patients (
     last_visit_at DATE NOT NULL,
     visit_count INT DEFAULT 1,
     id_donatur_zains VARCHAR(100) UNIQUE,
+    erm_no_for_zains VARCHAR(100),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     CONSTRAINT unique_patient_per_clinic UNIQUE (clinic_id, erm_no)
 );
+
+-- Index untuk erm_no_for_zains
+CREATE INDEX IF NOT EXISTS idx_patients_erm_no_for_zains ON patients(erm_no_for_zains);
 
 -- =============================================
 -- 5. CONFIG: POLYCLINIC MAPPING
@@ -270,6 +274,7 @@ CREATE TABLE transactions (
     -- === 3. JUMLAH PEMBAYARAN / TUNAI ===
     paid_regist     DECIMAL(15, 2) DEFAULT 0,
     paid_action     DECIMAL(15, 2) DEFAULT 0,
+    paid_action_after_discount DECIMAL(15, 2) DEFAULT 0,
     paid_lab        DECIMAL(15, 2) DEFAULT 0,
     paid_drug       DECIMAL(15, 2) DEFAULT 0,
     paid_alkes      DECIMAL(15, 2) DEFAULT 0,
