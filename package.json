@@ -80,6 +80,7 @@
     "@types/better-sqlite3": "latest",
     "@types/pg": "latest",
     "@types/sql.js": "latest",
+    "@upstash/qstash": "^2.9.0",
     "@upstash/redis": "^1.34.0",
     "@upstash/workflow": "^0.3.0-rc",
     "@vercel/analytics": "1.3.1",

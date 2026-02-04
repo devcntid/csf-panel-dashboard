@@ -7,7 +7,7 @@ Endpoint ini digunakan untuk insert transaksi secara manual dengan logika yang s
 1. Insert/update patient dengan logika `first_visit_at`, `last_visit_at`, dan `visit_count`
 2. Insert/update transaction dengan semua field yang diperlukan
 3. Insert ke `transactions_to_zains` untuk setiap kategori pembayaran yang memiliki nilai > 0
-4. Sync patient ke Zains jika diperlukan (workflow integration)
+4. Sync patient ke Zains jika diperlukan (via Upstash Workflow integration)
 
 ---
 
@@ -314,7 +314,7 @@ atau
   - Radiologi → `id_program` dari master_target_categories
   - Pembulatan → `id_program` dari master_target_categories
 - Jika `payment_method` mengandung "QRIS", `id_rekening` akan diisi
-- Jika patient belum punya `id_donatur_zains` dan ada insert ke `transactions_to_zains`, akan trigger sync ke Zains
+- Jika patient belum punya `id_donatur_zains` dan ada insert ke `transactions_to_zains`, akan trigger sync ke Zains via **Upstash Workflow** (menggunakan QStash untuk trigger async HTTP request ke endpoint `/api/workflow/sync-patient-to-zains`)
 
 ### 4. Poly dan Insurance Mapping
 
@@ -340,7 +340,13 @@ atau
 
 4. **Error Handling**: Jika ada error pada salah satu transaksi, transaksi tersebut akan di-skip dan error akan dicatat di response. Transaksi lainnya akan tetap diproses.
 
-5. **Zains Integration**: Pastikan clinic memiliki `id_kantor_zains` yang valid untuk insert ke `transactions_to_zains`
+5. **Zains Integration**: 
+   - Pastikan clinic memiliki `id_kantor_zains` yang valid untuk insert ke `transactions_to_zains`
+   - Sync patient ke Zains dilakukan via **Upstash Workflow** (QStash) untuk proses async yang tidak blocking
+   - Environment variables yang diperlukan:
+     - `QSTASH_TOKEN` atau `UPSTASH_QSTASH_TOKEN`: Token untuk Upstash QStash
+     - `NEXT_PUBLIC_APP_URL` atau `VERCEL_URL`: URL aplikasi untuk workflow endpoint
+   - Jika QStash tidak dikonfigurasi, sistem akan fallback ke direct sync (synchronous)
 
 ---
 

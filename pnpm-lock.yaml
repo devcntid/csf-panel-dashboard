@@ -182,6 +182,9 @@ importers:
       '@types/sql.js':
         specifier: latest
         version: 1.4.9
+      '@upstash/qstash':
+        specifier: ^2.9.0
+        version: 2.9.0
       '@upstash/redis':
         specifier: ^1.34.0
         version: 1.34.0
