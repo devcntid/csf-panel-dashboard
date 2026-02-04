@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { chromium } from 'playwright'
 import { sql } from '@/lib/db'
+import { syncPatientToZainsWorkflow } from '@/lib/services/zains-sync'
 
 // Check if we're running in Vercel (serverless environment without browser binaries)
 const isVercelEnv = process.env.VERCEL === '1'
@@ -482,6 +483,9 @@ export async function POST(request: NextRequest) {
           const paidVoucherAmt = parseIndonesianNumber(row['Jumlah Pembayaran ( Rp. ) - Voucher'])
           const paidTotal = parseIndonesianNumber(row['Jumlah Pembayaran ( Rp. ) - Total'])
 
+          // Hitung paid_action_after_discount: jika paid_discount > 0 maka paid_action_after_discount = paid_action - paid_discount
+          const paidActionAfterDiscount = paidDiscount > 0 ? paidAction - paidDiscount : paidAction
+
           const receivableRegist = parseIndonesianNumber(row['Jumlah Piutang ( Rp. ) - Karcis'])
           const receivableAction = parseIndonesianNumber(row['Jumlah Piutang ( Rp. ) - Tindakan'])
           const receivableLab = parseIndonesianNumber(row['Jumlah Piutang ( Rp. ) - Laboratorium'])
@@ -509,6 +513,7 @@ export async function POST(request: NextRequest) {
 
           // Insert atau update patient dengan logika first_visit_at, last_visit_at
           // visit_count akan di-increment setelah transaksi berhasil di-insert (hanya jika transaksi baru)
+          const ermNoForZains = `${clinic_id}${ermNo}`
           const [insertedPatient] = await sql`
             INSERT INTO patients (
               clinic_id, 
@@ -516,7 +521,8 @@ export async function POST(request: NextRequest) {
               full_name, 
               first_visit_at, 
               last_visit_at, 
-              visit_count
+              visit_count,
+              erm_no_for_zains
             )
             VALUES (
               ${clinic_id},
@@ -524,13 +530,15 @@ export async function POST(request: NextRequest) {
               ${patientName},
               ${trxDateFormatted},
               ${trxDateFormatted},
-              1
+              1,
+              ${ermNoForZains}
             )
             ON CONFLICT (clinic_id, erm_no) 
             DO UPDATE SET
               full_name = COALESCE(NULLIF(EXCLUDED.full_name, ''), patients.full_name),
               first_visit_at = LEAST(patients.first_visit_at, EXCLUDED.first_visit_at),
               last_visit_at = GREATEST(patients.last_visit_at, EXCLUDED.last_visit_at),
+              erm_no_for_zains = EXCLUDED.erm_no_for_zains,
               updated_at = NOW()
             RETURNING id, visit_count
           `
@@ -571,7 +579,7 @@ export async function POST(request: NextRequest) {
               insurance_type, polyclinic, payment_method, voucher_code,
               bill_regist, bill_action, bill_lab, bill_drug, bill_alkes, bill_mcu, bill_radio, bill_total,
               covered_regist, covered_action, covered_lab, covered_drug, covered_alkes, covered_mcu, covered_radio, covered_total,
-              paid_regist, paid_action, paid_lab, paid_drug, paid_alkes, paid_mcu, paid_radio, 
+              paid_regist, paid_action, paid_action_after_discount, paid_lab, paid_drug, paid_alkes, paid_mcu, paid_radio, 
               paid_rounding, paid_discount, paid_tax, paid_voucher_amt, paid_total,
               receivable_regist, receivable_action, receivable_lab, receivable_drug, receivable_alkes, 
               receivable_mcu, receivable_radio, receivable_total,
@@ -582,7 +590,7 @@ export async function POST(request: NextRequest) {
               ${insuranceType}, ${polyclinic}, ${paymentMethod}, ${voucherCode === '-' ? null : voucherCode},
               ${billRegist}, ${billAction}, ${billLab}, ${billDrug}, ${billAlkes}, ${billMcu}, ${billRadio}, ${billTotal},
               ${coveredRegist}, ${coveredAction}, ${coveredLab}, ${coveredDrug}, ${coveredAlkes}, ${coveredMcu}, ${coveredRadio}, ${coveredTotal},
-              ${paidRegist}, ${paidAction}, ${paidLab}, ${paidDrug}, ${paidAlkes}, ${paidMcu}, ${paidRadio},
+              ${paidRegist}, ${paidAction}, ${paidActionAfterDiscount}, ${paidLab}, ${paidDrug}, ${paidAlkes}, ${paidMcu}, ${paidRadio},
               ${paidRounding}, ${paidDiscount}, ${paidTax}, ${paidVoucherAmt}, ${paidTotal},
               ${receivableRegist}, ${receivableAction}, ${receivableLab}, ${receivableDrug}, ${receivableAlkes},
               ${receivableMcu}, ${receivableRadio}, ${receivableTotal},
@@ -597,6 +605,7 @@ export async function POST(request: NextRequest) {
               voucher_code = EXCLUDED.voucher_code,
               raw_json_data = EXCLUDED.raw_json_data,
               input_type = 'scrap',
+              paid_action_after_discount = EXCLUDED.paid_action_after_discount,
               updated_at = NOW()
             RETURNING id
           `
@@ -620,9 +629,10 @@ export async function POST(request: NextRequest) {
           // 12. Break data ke transactions_to_zains berdasarkan master_target_categories
           // Hanya ambil field "Jumlah Pembayaran" yang ada nilainya (tidak 0)
           // Mapping sesuai dengan nama di master_target_categories
+          // Khusus untuk kategori Tindakan: jika ada diskon (paid_discount > 0), gunakan paid_action_after_discount
           const paidFields = [
             { key: 'Jumlah Pembayaran ( Rp. ) - Karcis', category: 'Karcis', value: paidRegist },
-            { key: 'Jumlah Pembayaran ( Rp. ) - Tindakan', category: 'Tindakan', value: paidAction },
+            { key: 'Jumlah Pembayaran ( Rp. ) - Tindakan', category: 'Tindakan', value: paidActionAfterDiscount },
             { key: 'Jumlah Pembayaran ( Rp. ) - Laboratorium', category: 'Laboratorium', value: paidLab },
             { key: 'Jumlah Pembayaran ( Rp. ) - Obat', category: 'Obat-obatan', value: paidDrug },
             { key: 'Jumlah Pembayaran ( Rp. ) - Alkes', category: 'Alat Kesehatan', value: paidAlkes },
@@ -638,6 +648,9 @@ export async function POST(request: NextRequest) {
             LIMIT 1
           `
           const idDonatur = patientData ? (patientData as any).id_donatur_zains : null
+
+          // Counter untuk transaction to zains per transaction (untuk workflow integration)
+          let transactionZainsInsertedCount = 0
 
           // Insert ke transactions_to_zains untuk setiap field yang memiliki nilai > 0
           for (const field of paidFields) {
@@ -684,11 +697,18 @@ export async function POST(request: NextRequest) {
                     )
                   `
                   zainsInsertedCount++
+                  transactionZainsInsertedCount++
                 }
               } else {
                 console.warn(`⚠️  Category "${field.category}" tidak memiliki id_program_zains atau id_kantor_zains tidak tersedia`)
               }
             }
+          }
+
+          // Sync patient ke Zains setelah transaction to zains berhasil (workflow integration)
+          // Hanya sync jika ada insert ke transactions_to_zains dan patient belum punya id_donatur_zains
+          if (transactionZainsInsertedCount > 0 && patientId && !idDonatur) {
+            syncPatientToZainsWorkflow(patientId)
           }
         } catch (error: any) {
           console.error('❌ Error processing row:', error.message, row)

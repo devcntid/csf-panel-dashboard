@@ -187,6 +187,12 @@ export function TransaksiDetail({ data, onClose }: { data: any; onClose: () => v
                 <span className="text-slate-600">Tindakan</span>
                 <span className="font-medium">{formatCurrency(data.paid_action)}</span>
               </div>
+              {data.paid_discount > 0 && data.paid_action_after_discount !== undefined && (
+                <div className="flex justify-between">
+                  <span className="text-slate-600">Tindakan (Setelah Diskon)</span>
+                  <span className="font-medium text-teal-600">{formatCurrency(data.paid_action_after_discount)}</span>
+                </div>
+              )}
               <div className="flex justify-between">
                 <span className="text-slate-600">Laboratorium</span>
                 <span className="font-medium">{formatCurrency(data.paid_lab)}</span>

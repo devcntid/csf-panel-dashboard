@@ -17,7 +17,6 @@
     "scrap:queue:cleanup": "tsx scripts/cleanup-scrap-queue.ts",
     "seed": "tsx scripts/seed.ts",
     "start": "next start",
-    "railway:worker": "node server.js",
     "test": "playwright test",
     "test:headed": "playwright test --headed",
     "test:ui": "playwright test --ui"

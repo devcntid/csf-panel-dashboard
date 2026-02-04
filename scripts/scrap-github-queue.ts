@@ -1,10 +1,9 @@
 import { chromium } from 'playwright'
 import { sql } from '@/lib/db'
+import { syncPatientToZainsWorkflow } from '@/lib/services/zains-sync'
 
-const GITHUB_RUN_ID = process.env.GITHUB_RUN_ID || process.env.RAILWAY_RUN_ID || 'manual'
+const RUN_ID = process.env.GITHUB_RUN_ID || 'manual'
 const PROCESS_LIMIT = parseInt(process.env.PROCESS_LIMIT || '5')
-const SCRAPERAPI_KEY = process.env.SCRAPERAPI_KEY
-const USE_SCRAPERAPI = !!SCRAPERAPI_KEY
 
 interface QueueItem {
   id: number
@@ -214,7 +213,7 @@ async function updateQueueStatus(
         status = ${status},
         updated_at = ${now},
         started_at = COALESCE(started_at, ${now}),
-        github_run_id = ${GITHUB_RUN_ID},
+        github_run_id = ${RUN_ID},
         error_message = ${errorMessage ?? null}
       WHERE id = ${queueId}
     `
@@ -225,7 +224,7 @@ async function updateQueueStatus(
         status = ${status},
         updated_at = ${now},
         completed_at = ${now},
-        github_run_id = ${GITHUB_RUN_ID},
+        github_run_id = ${RUN_ID},
         error_message = ${errorMessage ?? null}
       WHERE id = ${queueId}
     `
@@ -235,7 +234,7 @@ async function updateQueueStatus(
     SET 
       status = ${status},
       updated_at = ${now},
-        github_run_id = ${GITHUB_RUN_ID},
+        github_run_id = ${RUN_ID},
         error_message = ${errorMessage ?? null}
     WHERE id = ${queueId}
   `
@@ -279,23 +278,14 @@ async function performScraping(
 
   let browser: any = null
   try {
-    console.log(`[v0] 🔧 HTTP proxy: ${USE_SCRAPERAPI ? 'ScraperAPI' : 'Direct'}`)
-
-    // Launch browser dengan konfigurasi untuk Railway (optimized untuk limited resources)
+    // Launch browser dengan konfigurasi untuk environment lokal / worker tanpa proxy
     browser = await chromium.launch({
       headless: true,
       slowMo: 100, // Kurangi dari 500 ke 100 untuk lebih cepat (masih smooth)
-      proxy: USE_SCRAPERAPI
-        ? {
-            server: 'http://proxy-server.scraperapi.com:8001',
-            username: 'scraperapi',
-            password: SCRAPERAPI_KEY!,
-          }
-        : undefined,
       args: [
         '--no-sandbox',
         '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage', // Penting untuk Railway agar tidak kehabisan memory
+        '--disable-dev-shm-usage', // Penting untuk environment dengan memory terbatas
         '--disable-gpu',
         '--disable-software-rasterizer',
         '--disable-extensions',
@@ -304,9 +294,8 @@ async function performScraping(
         '--disable-renderer-backgrounding',
         '--disable-backgrounding-occluded-windows',
         '--disable-ipc-flooding-protection',
-        '--memory-pressure-off', // Penting untuk Railway free tier
-        '--max_old_space_size=512', // Limit memory usage untuk Railway
-        // Jangan pakai --single-process di Railway (bisa lebih lambat)
+        '--memory-pressure-off', // Penting untuk environment dengan memory terbatas
+        '--max_old_space_size=512', // Limit memory usage
       ],
     })
     console.log('[v0] ✅ Browser launched')
@@ -317,10 +306,8 @@ async function performScraping(
       viewport: { width: 1920, height: 1080 },
       locale: 'id-ID',
       timezoneId: 'Asia/Jakarta',
-      // ScraperAPI bertindak sebagai proxy dan melakukan TLS termination sendiri,
-      // sehingga certificate chain bisa berbeda dari yang diharapkan browser normal.
-      // ignoreHTTPSErrors=true diperlukan agar Playwright tidak memblokir dengan
-      // net::ERR_CERT_AUTHORITY_INVALID ketika lewat proxy.
+      // Biarkan Playwright mengabaikan error sertifikat kecil (aman untuk lingkungan controlled)
+      // dan menghindari error net::ERR_CERT_AUTHORITY_INVALID di beberapa environment.
       ignoreHTTPSErrors: true,
       // JANGAN set extraHTTPHeaders - biarkan Playwright menggunakan header default browser
       // Semua header custom (Cache-Control, Upgrade-Insecure-Requests, dll) menyebabkan CORS error dengan Cloudflare Turnstile
@@ -372,7 +359,7 @@ async function performScraping(
     // Wait for Cloudflare challenge to complete
     console.log('[v0] ⏳ Waiting for Cloudflare challenge to complete...')
     let attempts = 0
-    const maxAttempts = 120 // Max 120 detik (2 menit) - Cloudflare bisa butuh waktu lebih lama di Railway
+    const maxAttempts = 120 // Max 120 detik (2 menit) - Cloudflare bisa butuh waktu lebih lama
     
     while (attempts < maxAttempts) {
       const pageTitle = await page.title()
@@ -836,6 +823,9 @@ async function performScraping(
         const paidVoucherAmt = parseIndonesianNumber(row['Jumlah Pembayaran ( Rp. ) - Voucher'])
         const paidTotal = parseIndonesianNumber(row['Jumlah Pembayaran ( Rp. ) - Total'])
 
+        // Hitung paid_action_after_discount: jika paid_discount > 0 maka paid_action_after_discount = paid_action - paid_discount
+        const paidActionAfterDiscount = paidDiscount > 0 ? paidAction - paidDiscount : paidAction
+
         const receivableRegist = parseIndonesianNumber(row['Jumlah Piutang ( Rp. ) - Karcis'])
         const receivableAction = parseIndonesianNumber(row['Jumlah Piutang ( Rp. ) - Tindakan'])
         const receivableLab = parseIndonesianNumber(row['Jumlah Piutang ( Rp. ) - Laboratorium'])
@@ -864,6 +854,7 @@ async function performScraping(
 
         // Insert atau update patient dengan logika first_visit_at, last_visit_at
         // visit_count akan di-increment setelah transaksi berhasil di-insert (hanya jika transaksi baru)
+        const ermNoForZains = `${clinic_id}${ermNo}`
         const [insertedPatient] = await sql`
           INSERT INTO patients (
             clinic_id, 
@@ -871,7 +862,8 @@ async function performScraping(
             full_name, 
             first_visit_at, 
             last_visit_at, 
-            visit_count
+            visit_count,
+            erm_no_for_zains
           )
           VALUES (
             ${clinic_id},
@@ -879,13 +871,15 @@ async function performScraping(
             ${patientName},
             ${trxDateFormatted},
             ${trxDateFormatted},
-            1
+            1,
+            ${ermNoForZains}
           )
           ON CONFLICT (clinic_id, erm_no) 
           DO UPDATE SET
             full_name = COALESCE(NULLIF(EXCLUDED.full_name, ''), patients.full_name),
             first_visit_at = LEAST(patients.first_visit_at, EXCLUDED.first_visit_at),
             last_visit_at = GREATEST(patients.last_visit_at, EXCLUDED.last_visit_at),
+            erm_no_for_zains = EXCLUDED.erm_no_for_zains,
             updated_at = NOW()
           RETURNING id, visit_count
         `
@@ -926,7 +920,7 @@ async function performScraping(
             insurance_type, polyclinic, payment_method, voucher_code,
             bill_regist, bill_action, bill_lab, bill_drug, bill_alkes, bill_mcu, bill_radio, bill_total,
             covered_regist, covered_action, covered_lab, covered_drug, covered_alkes, covered_mcu, covered_radio, covered_total,
-            paid_regist, paid_action, paid_lab, paid_drug, paid_alkes, paid_mcu, paid_radio, 
+            paid_regist, paid_action, paid_action_after_discount, paid_lab, paid_drug, paid_alkes, paid_mcu, paid_radio, 
             paid_rounding, paid_discount, paid_tax, paid_voucher_amt, paid_total,
             receivable_regist, receivable_action, receivable_lab, receivable_drug, receivable_alkes, 
             receivable_mcu, receivable_radio, receivable_total,
@@ -937,7 +931,7 @@ async function performScraping(
             ${insuranceType}, ${polyclinic}, ${paymentMethod}, ${voucherCode === '-' ? null : voucherCode},
             ${billRegist}, ${billAction}, ${billLab}, ${billDrug}, ${billAlkes}, ${billMcu}, ${billRadio}, ${billTotal},
             ${coveredRegist}, ${coveredAction}, ${coveredLab}, ${coveredDrug}, ${coveredAlkes}, ${coveredMcu}, ${coveredRadio}, ${coveredTotal},
-            ${paidRegist}, ${paidAction}, ${paidLab}, ${paidDrug}, ${paidAlkes}, ${paidMcu}, ${paidRadio},
+            ${paidRegist}, ${paidAction}, ${paidActionAfterDiscount}, ${paidLab}, ${paidDrug}, ${paidAlkes}, ${paidMcu}, ${paidRadio},
             ${paidRounding}, ${paidDiscount}, ${paidTax}, ${paidVoucherAmt}, ${paidTotal},
             ${receivableRegist}, ${receivableAction}, ${receivableLab}, ${receivableDrug}, ${receivableAlkes},
             ${receivableMcu}, ${receivableRadio}, ${receivableTotal},
@@ -952,6 +946,7 @@ async function performScraping(
             voucher_code = EXCLUDED.voucher_code,
             raw_json_data = EXCLUDED.raw_json_data,
             input_type = 'scrap',
+            paid_action_after_discount = EXCLUDED.paid_action_after_discount,
             updated_at = NOW()
           RETURNING id
         `
@@ -975,9 +970,10 @@ async function performScraping(
         // 12. Break data ke transactions_to_zains berdasarkan master_target_categories
         // Hanya ambil field "Jumlah Pembayaran" yang ada nilainya (tidak 0)
         // Mapping sesuai dengan nama di master_target_categories
+        // Khusus untuk kategori Tindakan: jika ada diskon (paid_discount > 0), gunakan paid_action_after_discount
         const paidFields = [
           { key: 'Jumlah Pembayaran ( Rp. ) - Karcis', category: 'Karcis', value: paidRegist },
-          { key: 'Jumlah Pembayaran ( Rp. ) - Tindakan', category: 'Tindakan', value: paidAction },
+          { key: 'Jumlah Pembayaran ( Rp. ) - Tindakan', category: 'Tindakan', value: paidActionAfterDiscount },
           { key: 'Jumlah Pembayaran ( Rp. ) - Laboratorium', category: 'Laboratorium', value: paidLab },
           { key: 'Jumlah Pembayaran ( Rp. ) - Obat', category: 'Obat-obatan', value: paidDrug },
           { key: 'Jumlah Pembayaran ( Rp. ) - Alkes', category: 'Alat Kesehatan', value: paidAlkes },
@@ -993,6 +989,9 @@ async function performScraping(
           LIMIT 1
         `
         const idDonatur = patientData ? (patientData as any).id_donatur_zains : null
+
+        // Counter untuk transaction to zains per transaction (untuk workflow integration)
+        let transactionZainsInsertedCount = 0
 
         // Insert ke transactions_to_zains untuk setiap field yang memiliki nilai > 0
         for (const field of paidFields) {
@@ -1039,11 +1038,18 @@ async function performScraping(
                   )
                 `
                 zainsInsertedCount++
+                transactionZainsInsertedCount++
               }
             } else {
               console.warn(`[v0] ⚠️  Category "${field.category}" tidak memiliki id_program_zains atau id_kantor_zains tidak tersedia`)
             }
           }
+        }
+
+        // Sync patient ke Zains setelah transaction to zains berhasil (workflow integration)
+        // Hanya sync jika ada insert ke transactions_to_zains dan patient belum punya id_donatur_zains
+        if (transactionZainsInsertedCount > 0 && patientId && !idDonatur) {
+          syncPatientToZainsWorkflow(patientId)
         }
       } catch (error: any) {
         console.error('[v0] ❌ Error processing row:', error.message, row)
