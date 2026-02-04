@@ -66,6 +66,21 @@ Dashboard untuk monitoring dan manajemen data klinik Cita Sehat Foundation denga
 DATABASE_URL=<neon_postgres_connection_string>
 POSTGRES_URL=<sama dengan DATABASE_URL>
 NEXT_PUBLIC_DATABASE_URL=<sama dengan DATABASE_URL>
+
+# Upstash Workflow (untuk sync patient ke Zains)
+QSTASH_TOKEN=<upstash_qstash_token>
+# atau
+UPSTASH_QSTASH_TOKEN=<upstash_qstash_token>
+
+# URL aplikasi untuk workflow endpoint
+NEXT_PUBLIC_APP_URL=<https://your-app.vercel.app>
+# atau VERCEL_URL akan otomatis digunakan jika tersedia
+
+# Zains API Configuration
+URL_API_ZAINS_PRODUCTION=<production_url>
+URL_API_ZAINS_STAGING=<staging_url>
+API_KEY_ZAINS=<zains_api_key>
+IS_PRODUCTION=<true|false>
 ```
 
 #### Local Mac (untuk worker)

@@ -1,6 +1,7 @@
 'use server'
 
 import { sql } from '@/lib/db'
+import { Client } from '@upstash/qstash'
 
 interface ZainsSyncPayload {
   nama: string
@@ -305,13 +306,34 @@ export async function syncPatientsBatchToZains(): Promise<{
 }
 
 /**
- * Sync single patient to Zains (untuk workflow integration)
+ * Get Upstash QStash client untuk trigger workflow
+ */
+function getQStashClient(): Client | null {
+  try {
+    const qstashToken = process.env.QSTASH_TOKEN || process.env.UPSTASH_QSTASH_TOKEN
+
+    if (!qstashToken) {
+      console.warn('⚠️  [Workflow] QSTASH_TOKEN atau UPSTASH_QSTASH_TOKEN tidak dikonfigurasi')
+      return null
+    }
+
+    return new Client({
+      token: qstashToken,
+    })
+  } catch (error) {
+    console.error('❌ [Workflow] Error membuat QStash client:', error)
+    return null
+  }
+}
+
+/**
+ * Sync single patient to Zains (untuk workflow integration via Upstash)
  * Digunakan setelah transaction to zains sukses dan patient sudah di-insert/update
  * Async, non-blocking - tidak throw error, hanya log
  */
 export async function syncPatientToZainsWorkflow(patientId: number): Promise<void> {
   try {
-    // Get patient data dengan erm_no_for_zains
+    // Get patient data untuk validasi
     const [patient] = await sql`
       SELECT id, clinic_id, erm_no, full_name, erm_no_for_zains, id_donatur_zains
       FROM patients
@@ -322,25 +344,75 @@ export async function syncPatientToZainsWorkflow(patientId: number): Promise<voi
       LIMIT 1
     `
 
-    if (!patient || patient.length === 0) {
+    if (!patient || (Array.isArray(patient) && patient.length === 0)) {
       // Patient sudah di-sync atau tidak ada erm_no_for_zains, skip
+      console.log(`ℹ️  [Workflow] Patient ID ${patientId} sudah di-sync atau tidak memiliki erm_no_for_zains, skip`)
       return
     }
 
-    const patientData = Array.isArray(patient) ? patient[0] : patient
+    // Get QStash client untuk trigger workflow
+    const qstash = getQStashClient()
+    
+    if (!qstash) {
+      // Fallback ke direct sync jika QStash tidak dikonfigurasi
+      console.warn('⚠️  [Workflow] QStash tidak dikonfigurasi, fallback ke direct sync')
+      const patientData = Array.isArray(patient) ? patient[0] : patient
+      syncPatientToZains(patientData)
+        .then(result => {
+          if (result.success) {
+            console.log(`✅ [Workflow Fallback] Patient ID ${patientId} berhasil di-sync ke Zains, id_donatur: ${result.id_donatur}`)
+          } else {
+            console.warn(`⚠️  [Workflow Fallback] Patient ID ${patientId} gagal di-sync ke Zains: ${result.error}`)
+          }
+        })
+        .catch(error => {
+          console.error(`❌ [Workflow Fallback] Error saat sync patient ID ${patientId} ke Zains:`, error)
+        })
+      return
+    }
 
-    // Sync patient ke Zains (async, non-blocking)
-    syncPatientToZains(patientData)
-      .then(result => {
-        if (result.success) {
-          console.log(`✅ [Workflow] Patient ID ${patientId} berhasil di-sync ke Zains, id_donatur: ${result.id_donatur}`)
-        } else {
-          console.warn(`⚠️  [Workflow] Patient ID ${patientId} gagal di-sync ke Zains: ${result.error}`)
+    // Get workflow endpoint URL
+    let baseUrl = process.env.NEXT_PUBLIC_APP_URL
+    if (!baseUrl && process.env.VERCEL_URL) {
+      baseUrl = `https://${process.env.VERCEL_URL}`
+    }
+    if (!baseUrl) {
+      baseUrl = 'http://localhost:3000'
+    }
+    
+    const workflowEndpoint = `${baseUrl}/api/workflow/sync-patient-to-zains`
+
+    // Trigger Upstash workflow via QStash
+    try {
+      await qstash.publishJSON({
+        url: workflowEndpoint,
+        body: {
+          patientId: patientId
+        },
+        headers: {
+          'Content-Type': 'application/json'
         }
       })
-      .catch(error => {
-        console.error(`❌ [Workflow] Error saat sync patient ID ${patientId} ke Zains:`, error)
-      })
+
+      console.log(`✅ [Upstash Workflow] Workflow triggered via QStash untuk Patient ID ${patientId}`)
+    } catch (workflowError: any) {
+      console.error(`❌ [Upstash Workflow] Error saat trigger workflow untuk Patient ID ${patientId}:`, workflowError)
+      
+      // Fallback ke direct sync jika workflow gagal
+      console.warn('⚠️  [Workflow] Fallback ke direct sync karena workflow trigger gagal')
+      const patientData = Array.isArray(patient) ? patient[0] : patient
+      syncPatientToZains(patientData)
+        .then(result => {
+          if (result.success) {
+            console.log(`✅ [Workflow Fallback] Patient ID ${patientId} berhasil di-sync ke Zains, id_donatur: ${result.id_donatur}`)
+          } else {
+            console.warn(`⚠️  [Workflow Fallback] Patient ID ${patientId} gagal di-sync ke Zains: ${result.error}`)
+          }
+        })
+        .catch(error => {
+          console.error(`❌ [Workflow Fallback] Error saat sync patient ID ${patientId} ke Zains:`, error)
+        })
+    }
   } catch (error) {
     // Jangan throw error, hanya log
     console.error(`❌ [Workflow] Error saat fetch patient ID ${patientId} untuk sync:`, error)
