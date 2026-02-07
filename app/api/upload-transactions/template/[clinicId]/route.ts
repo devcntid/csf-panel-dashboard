@@ -86,6 +86,13 @@ export async function GET(
         'Jumlah Tagihan ( Rp. ) - MCU',
         'Jumlah Tagihan ( Rp. ) - Radiologi',
         'Jumlah Tagihan ( Rp. ) - Total',
+        'Diskon Tagihan ( Rp. ) - Karcis',
+        'Diskon Tagihan ( Rp. ) - Tindakan',
+        'Diskon Tagihan ( Rp. ) - Laboratorium',
+        'Diskon Tagihan ( Rp. ) - Obat',
+        'Diskon Tagihan ( Rp. ) - Alkes',
+        'Diskon Tagihan ( Rp. ) - MCU',
+        'Diskon Tagihan ( Rp. ) - Radiologi',
         'Jumlah Jaminan ( Rp. ) - Karcis',
         'Jumlah Jaminan ( Rp. ) - Tindakan',
         'Jumlah Jaminan ( Rp. ) - Laboratorium',
@@ -141,6 +148,13 @@ export async function GET(
         0,
         0,
         0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
         50000,
         200000,
         150000,
@@ -179,6 +193,13 @@ export async function GET(
         0,
         0,
         575000,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
         50000,
         200000,
         0,
@@ -225,11 +246,19 @@ export async function GET(
         0,
         0,
         1150000,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
         100000,
         400000,
         200000,
         150000,
         50000,
+        0,
         0,
         0,
         900000,
@@ -276,6 +305,13 @@ export async function GET(
       { wch: 15 }, // Bill MCU
       { wch: 15 }, // Bill Radio
       { wch: 15 }, // Bill Total
+      { wch: 15 }, // Bill Regist Discount
+      { wch: 15 }, // Bill Action Discount
+      { wch: 15 }, // Bill Lab Discount
+      { wch: 15 }, // Bill Drug Discount
+      { wch: 15 }, // Bill Alkes Discount
+      { wch: 15 }, // Bill MCU Discount
+      { wch: 15 }, // Bill Radio Discount
       { wch: 15 }, // Covered Regist
       { wch: 15 }, // Covered Action
       { wch: 15 }, // Covered Lab

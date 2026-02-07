@@ -260,6 +260,15 @@ CREATE TABLE transactions (
     bill_mcu    DECIMAL(15, 2) DEFAULT 0,
     bill_radio  DECIMAL(15, 2) DEFAULT 0,
     bill_total  DECIMAL(15, 2) DEFAULT 0,
+    
+    -- === 1a. DISKON TAGIHAN ===
+    bill_regist_discount DECIMAL(15, 2) DEFAULT 0,
+    bill_action_discount DECIMAL(15, 2) DEFAULT 0,
+    bill_lab_discount    DECIMAL(15, 2) DEFAULT 0,
+    bill_drug_discount   DECIMAL(15, 2) DEFAULT 0,
+    bill_alkes_discount  DECIMAL(15, 2) DEFAULT 0,
+    bill_mcu_discount    DECIMAL(15, 2) DEFAULT 0,
+    bill_radio_discount  DECIMAL(15, 2) DEFAULT 0,
 
     -- === 2. JUMLAH JAMINAN / BPJS ===
     covered_regist DECIMAL(15, 2) DEFAULT 0,
@@ -274,7 +283,6 @@ CREATE TABLE transactions (
     -- === 3. JUMLAH PEMBAYARAN / TUNAI ===
     paid_regist     DECIMAL(15, 2) DEFAULT 0,
     paid_action     DECIMAL(15, 2) DEFAULT 0,
-    paid_action_after_discount DECIMAL(15, 2) DEFAULT 0,
     paid_lab        DECIMAL(15, 2) DEFAULT 0,
     paid_drug       DECIMAL(15, 2) DEFAULT 0,
     paid_alkes      DECIMAL(15, 2) DEFAULT 0,

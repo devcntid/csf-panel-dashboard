@@ -117,6 +117,17 @@ export function TransaksiZainsDetail({
                     </tr>
                   ))}
                 </tbody>
+                <tfoot className="border-t-2 border-slate-300 bg-slate-50">
+                  <tr>
+                    <td colSpan={10} className="py-3 px-4 text-sm font-semibold text-slate-700 text-right">
+                      Grand Total:
+                    </td>
+                    <td className="py-3 px-4 text-sm text-right font-bold text-teal-600">
+                      {formatCurrency(zainsData.reduce((sum, item) => sum + (item.nominal_transaksi || 0), 0))}
+                    </td>
+                    <td colSpan={2}></td>
+                  </tr>
+                </tfoot>
               </table>
             </div>
           )}

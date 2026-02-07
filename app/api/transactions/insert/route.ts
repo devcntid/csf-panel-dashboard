@@ -138,6 +138,15 @@ export async function POST(request: NextRequest) {
         const billRadio = parseIndonesianNumber(row['bill_radio'] || row['Jumlah Tagihan ( Rp. ) - Radiologi'] || 0)
         const billTotal = parseIndonesianNumber(row['bill_total'] || row['Jumlah Tagihan ( Rp. ) - Total'] || 0)
 
+        // Parse diskon tagihan
+        const billRegistDiscount = parseIndonesianNumber(row['bill_regist_discount'] || row['Diskon Tagihan ( Rp. ) - Karcis'] || 0)
+        const billActionDiscount = parseIndonesianNumber(row['bill_action_discount'] || row['Diskon Tagihan ( Rp. ) - Tindakan'] || 0)
+        const billLabDiscount = parseIndonesianNumber(row['bill_lab_discount'] || row['Diskon Tagihan ( Rp. ) - Laboratorium'] || 0)
+        const billDrugDiscount = parseIndonesianNumber(row['bill_drug_discount'] || row['Diskon Tagihan ( Rp. ) - Obat'] || 0)
+        const billAlkesDiscount = parseIndonesianNumber(row['bill_alkes_discount'] || row['Diskon Tagihan ( Rp. ) - Alkes'] || 0)
+        const billMcuDiscount = parseIndonesianNumber(row['bill_mcu_discount'] || row['Diskon Tagihan ( Rp. ) - MCU'] || 0)
+        const billRadioDiscount = parseIndonesianNumber(row['bill_radio_discount'] || row['Diskon Tagihan ( Rp. ) - Radiologi'] || 0)
+
         const coveredRegist = parseIndonesianNumber(row['covered_regist'] || row['Jumlah Jaminan ( Rp. ) - Karcis'] || 0)
         const coveredAction = parseIndonesianNumber(row['covered_action'] || row['Jumlah Jaminan ( Rp. ) - Tindakan'] || 0)
         const coveredLab = parseIndonesianNumber(row['covered_lab'] || row['Jumlah Jaminan ( Rp. ) - Laboratorium'] || 0)
@@ -168,9 +177,6 @@ export async function POST(request: NextRequest) {
         const receivableMcu = parseIndonesianNumber(row['receivable_mcu'] || row['Jumlah Piutang ( Rp. ) - MCU'] || 0)
         const receivableRadio = parseIndonesianNumber(row['receivable_radio'] || row['Jumlah Piutang ( Rp. ) - Radiologi'] || 0)
         const receivableTotal = parseIndonesianNumber(row['receivable_total'] || row['Jumlah Piutang ( Rp. ) - Total'] || 0)
-
-        // Hitung paid_action_after_discount: jika paid_discount > 0 maka paid_action_after_discount = paid_action - paid_discount
-        const paidActionAfterDiscount = paidDiscount > 0 ? paidAction - paidDiscount : paidAction
 
         // Format tanggal untuk patient
         const trxDateFormatted = formatDateToYYYYMMDD(trxDate)
@@ -255,8 +261,9 @@ export async function POST(request: NextRequest) {
             clinic_id, patient_id, poly_id, insurance_type_id, trx_date, trx_no, erm_no, patient_name,
             insurance_type, polyclinic, payment_method, voucher_code,
             bill_regist, bill_action, bill_lab, bill_drug, bill_alkes, bill_mcu, bill_radio, bill_total,
+            bill_regist_discount, bill_action_discount, bill_lab_discount, bill_drug_discount, bill_alkes_discount, bill_mcu_discount, bill_radio_discount,
             covered_regist, covered_action, covered_lab, covered_drug, covered_alkes, covered_mcu, covered_radio, covered_total,
-            paid_regist, paid_action, paid_action_after_discount, paid_lab, paid_drug, paid_alkes, paid_mcu, paid_radio, 
+            paid_regist, paid_action, paid_lab, paid_drug, paid_alkes, paid_mcu, paid_radio, 
             paid_rounding, paid_discount, paid_tax, paid_voucher_amt, paid_total,
             receivable_regist, receivable_action, receivable_lab, receivable_drug, receivable_alkes, 
             receivable_mcu, receivable_radio, receivable_total,
@@ -266,8 +273,9 @@ export async function POST(request: NextRequest) {
             ${clinic_id}, ${patientId}, ${polyId}, ${insuranceTypeId}, ${formatDateToYYYYMMDD(trxDate)}, ${trxNo}, ${ermNo}, ${patientName},
             ${insuranceType}, ${polyclinic}, ${paymentMethod}, ${voucherCode === '-' ? null : voucherCode},
             ${billRegist}, ${billAction}, ${billLab}, ${billDrug}, ${billAlkes}, ${billMcu}, ${billRadio}, ${billTotal},
+            ${billRegistDiscount}, ${billActionDiscount}, ${billLabDiscount}, ${billDrugDiscount}, ${billAlkesDiscount}, ${billMcuDiscount}, ${billRadioDiscount},
             ${coveredRegist}, ${coveredAction}, ${coveredLab}, ${coveredDrug}, ${coveredAlkes}, ${coveredMcu}, ${coveredRadio}, ${coveredTotal},
-            ${paidRegist}, ${paidAction}, ${paidActionAfterDiscount}, ${paidLab}, ${paidDrug}, ${paidAlkes}, ${paidMcu}, ${paidRadio},
+            ${paidRegist}, ${paidAction}, ${paidLab}, ${paidDrug}, ${paidAlkes}, ${paidMcu}, ${paidRadio},
             ${paidRounding}, ${paidDiscount}, ${paidTax}, ${paidVoucherAmt}, ${paidTotal},
             ${receivableRegist}, ${receivableAction}, ${receivableLab}, ${receivableDrug}, ${receivableAlkes},
             ${receivableMcu}, ${receivableRadio}, ${receivableTotal},
@@ -282,7 +290,13 @@ export async function POST(request: NextRequest) {
             voucher_code = EXCLUDED.voucher_code,
             raw_json_data = EXCLUDED.raw_json_data,
             input_type = 'manual',
-            paid_action_after_discount = EXCLUDED.paid_action_after_discount,
+            bill_regist_discount = EXCLUDED.bill_regist_discount,
+            bill_action_discount = EXCLUDED.bill_action_discount,
+            bill_lab_discount = EXCLUDED.bill_lab_discount,
+            bill_drug_discount = EXCLUDED.bill_drug_discount,
+            bill_alkes_discount = EXCLUDED.bill_alkes_discount,
+            bill_mcu_discount = EXCLUDED.bill_mcu_discount,
+            bill_radio_discount = EXCLUDED.bill_radio_discount,
             updated_at = NOW()
           RETURNING id
         `
@@ -306,15 +320,15 @@ export async function POST(request: NextRequest) {
         // Break data ke transactions_to_zains berdasarkan master_target_categories
         // Hanya ambil field "Jumlah Pembayaran" yang ada nilainya (tidak 0)
         // Mapping sesuai dengan nama di master_target_categories
-        // Khusus untuk kategori Tindakan: jika ada diskon (paid_discount > 0), gunakan paid_action_after_discount
+        // Setiap kategori dikurangi diskonnya masing-masing jika ada (dengan Math.max untuk memastikan tidak negatif)
         const paidFields = [
-          { key: 'Jumlah Pembayaran ( Rp. ) - Karcis', category: 'Karcis', value: paidRegist },
-          { key: 'Jumlah Pembayaran ( Rp. ) - Tindakan', category: 'Tindakan', value: paidActionAfterDiscount },
-          { key: 'Jumlah Pembayaran ( Rp. ) - Laboratorium', category: 'Laboratorium', value: paidLab },
-          { key: 'Jumlah Pembayaran ( Rp. ) - Obat', category: 'Obat-obatan', value: paidDrug },
-          { key: 'Jumlah Pembayaran ( Rp. ) - Alkes', category: 'Alat Kesehatan', value: paidAlkes },
-          { key: 'Jumlah Pembayaran ( Rp. ) - MCU', category: 'MCU', value: paidMcu },
-          { key: 'Jumlah Pembayaran ( Rp. ) - Radiologi', category: 'Radiologi', value: paidRadio },
+          { key: 'Jumlah Pembayaran ( Rp. ) - Karcis', category: 'Karcis', value: billRegistDiscount > 0 ? Math.max(0, paidRegist - billRegistDiscount) : paidRegist },
+          { key: 'Jumlah Pembayaran ( Rp. ) - Tindakan', category: 'Tindakan', value: billActionDiscount > 0 ? Math.max(0, paidAction - billActionDiscount) : paidAction },
+          { key: 'Jumlah Pembayaran ( Rp. ) - Laboratorium', category: 'Laboratorium', value: billLabDiscount > 0 ? Math.max(0, paidLab - billLabDiscount) : paidLab },
+          { key: 'Jumlah Pembayaran ( Rp. ) - Obat', category: 'Obat-obatan', value: billDrugDiscount > 0 ? Math.max(0, paidDrug - billDrugDiscount) : paidDrug },
+          { key: 'Jumlah Pembayaran ( Rp. ) - Alkes', category: 'Alat Kesehatan', value: billAlkesDiscount > 0 ? Math.max(0, paidAlkes - billAlkesDiscount) : paidAlkes },
+          { key: 'Jumlah Pembayaran ( Rp. ) - MCU', category: 'MCU', value: billMcuDiscount > 0 ? Math.max(0, paidMcu - billMcuDiscount) : paidMcu },
+          { key: 'Jumlah Pembayaran ( Rp. ) - Radiologi', category: 'Radiologi', value: billRadioDiscount > 0 ? Math.max(0, paidRadio - billRadioDiscount) : paidRadio },
           { key: 'Jumlah Pembayaran ( Rp. ) - Pembulatan', category: 'Pembulatan', value: paidRounding },
         ]
 
