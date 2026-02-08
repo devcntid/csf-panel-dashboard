@@ -50,10 +50,8 @@ export function CRUDInsuranceType({
   }
 
   useEffect(() => {
-    // Hanya fetch jika initialData tidak ada atau page/limit berubah
-    if (!initialData || page !== initialData.page || limit !== initialData.limit) {
-      loadInsuranceTypes()
-    }
+    // Always fetch when page or limit changes
+    loadInsuranceTypes()
   }, [page, limit])
 
   const handleSubmit = async (e: React.FormEvent) => {

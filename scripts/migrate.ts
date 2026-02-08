@@ -195,11 +195,6 @@ CREATE TABLE clinic_daily_targets (
     -- Untuk mode KUMULATIF: target_month dan target_year digunakan (target_date diabaikan)
     target_month INT CHECK (target_month IS NULL OR (target_month >= 1 AND target_month <= 12)), -- Bulan (1-12) untuk target kumulatif
     target_year INT,                     -- Tahun untuk target kumulatif
-    
-    -- Generated columns untuk mode harian (hanya digunakan jika target_date ada)
-    tgl INT GENERATED ALWAYS AS (CASE WHEN target_date IS NOT NULL THEN EXTRACT(DAY FROM target_date) ELSE NULL END) STORED,
-    bulan INT GENERATED ALWAYS AS (CASE WHEN target_date IS NOT NULL THEN EXTRACT(MONTH FROM target_date) WHEN target_month IS NOT NULL THEN target_month ELSE NULL END) STORED,
-    tahun INT GENERATED ALWAYS AS (CASE WHEN target_date IS NOT NULL THEN EXTRACT(YEAR FROM target_date) WHEN target_year IS NOT NULL THEN target_year ELSE NULL END) STORED,
 
     -- Variabel Target
     target_visits INT DEFAULT 0, -- Rencana Jumlah Kunjungan (Kunjungan Layanan Klinik)
@@ -215,7 +210,7 @@ CREATE TABLE clinic_daily_targets (
 
 -- Optimasi Indexing (High Performance Reporting)
 CREATE INDEX idx_daily_target_date ON clinic_daily_targets(target_date);
-CREATE INDEX idx_daily_target_period ON clinic_daily_targets(clinic_id, tahun, bulan);
+CREATE INDEX idx_daily_target_period ON clinic_daily_targets(clinic_id, target_year, target_month);
 CREATE INDEX idx_daily_target_source ON clinic_daily_targets(source_id);
 CREATE INDEX idx_daily_target_type ON clinic_daily_targets(target_type);
 
@@ -260,6 +255,15 @@ CREATE TABLE transactions (
     bill_mcu    DECIMAL(15, 2) DEFAULT 0,
     bill_radio  DECIMAL(15, 2) DEFAULT 0,
     bill_total  DECIMAL(15, 2) DEFAULT 0,
+    
+    -- === 1a. DISKON TAGIHAN ===
+    bill_regist_discount DECIMAL(15, 2) DEFAULT 0,
+    bill_action_discount DECIMAL(15, 2) DEFAULT 0,
+    bill_lab_discount    DECIMAL(15, 2) DEFAULT 0,
+    bill_drug_discount   DECIMAL(15, 2) DEFAULT 0,
+    bill_alkes_discount  DECIMAL(15, 2) DEFAULT 0,
+    bill_mcu_discount    DECIMAL(15, 2) DEFAULT 0,
+    bill_radio_discount  DECIMAL(15, 2) DEFAULT 0,
 
     -- === 2. JUMLAH JAMINAN / BPJS ===
     covered_regist DECIMAL(15, 2) DEFAULT 0,
@@ -274,7 +278,6 @@ CREATE TABLE transactions (
     -- === 3. JUMLAH PEMBAYARAN / TUNAI ===
     paid_regist     DECIMAL(15, 2) DEFAULT 0,
     paid_action     DECIMAL(15, 2) DEFAULT 0,
-    paid_action_after_discount DECIMAL(15, 2) DEFAULT 0,
     paid_lab        DECIMAL(15, 2) DEFAULT 0,
     paid_drug       DECIMAL(15, 2) DEFAULT 0,
     paid_alkes      DECIMAL(15, 2) DEFAULT 0,

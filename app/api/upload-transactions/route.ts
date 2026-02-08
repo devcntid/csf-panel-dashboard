@@ -223,6 +223,15 @@ export async function POST(request: NextRequest) {
         const billRadio = parseIndonesianNumber(row['Jumlah Tagihan ( Rp. ) - Radiologi'] || row['Bill Radio'] || 0)
         const billTotal = parseIndonesianNumber(row['Jumlah Tagihan ( Rp. ) - Total'] || row['Bill Total'] || 0)
 
+        // Parse diskon tagihan
+        const billRegistDiscount = parseIndonesianNumber(row['Diskon Tagihan ( Rp. ) - Karcis'] || row['Bill Regist Discount'] || 0)
+        const billActionDiscount = parseIndonesianNumber(row['Diskon Tagihan ( Rp. ) - Tindakan'] || row['Bill Action Discount'] || 0)
+        const billLabDiscount = parseIndonesianNumber(row['Diskon Tagihan ( Rp. ) - Laboratorium'] || row['Bill Lab Discount'] || 0)
+        const billDrugDiscount = parseIndonesianNumber(row['Diskon Tagihan ( Rp. ) - Obat'] || row['Bill Drug Discount'] || 0)
+        const billAlkesDiscount = parseIndonesianNumber(row['Diskon Tagihan ( Rp. ) - Alkes'] || row['Bill Alkes Discount'] || 0)
+        const billMcuDiscount = parseIndonesianNumber(row['Diskon Tagihan ( Rp. ) - MCU'] || row['Bill MCU Discount'] || 0)
+        const billRadioDiscount = parseIndonesianNumber(row['Diskon Tagihan ( Rp. ) - Radiologi'] || row['Bill Radio Discount'] || 0)
+
         const coveredRegist = parseIndonesianNumber(row['Jumlah Jaminan ( Rp. ) - Karcis'] || row['Covered Regist'] || 0)
         const coveredAction = parseIndonesianNumber(row['Jumlah Jaminan ( Rp. ) - Tindakan'] || row['Covered Action'] || 0)
         const coveredLab = parseIndonesianNumber(row['Jumlah Jaminan ( Rp. ) - Laboratorium'] || row['Covered Lab'] || 0)
@@ -244,9 +253,6 @@ export async function POST(request: NextRequest) {
         const paidTax = parseIndonesianNumber(row['Jumlah Pembayaran ( Rp. ) - PPN'] || row['Paid Tax'] || 0)
         const paidVoucherAmt = parseIndonesianNumber(row['Jumlah Pembayaran ( Rp. ) - Voucher'] || row['Paid Voucher'] || 0)
         const paidTotal = parseIndonesianNumber(row['Jumlah Pembayaran ( Rp. ) - Total'] || row['Paid Total'] || 0)
-
-        // Hitung paid_action_after_discount: jika paid_discount > 0 maka paid_action_after_discount = paid_action - paid_discount
-        const paidActionAfterDiscount = paidDiscount > 0 ? paidAction - paidDiscount : paidAction
 
         const receivableRegist = parseIndonesianNumber(row['Jumlah Piutang ( Rp. ) - Karcis'] || row['Receivable Regist'] || 0)
         const receivableAction = parseIndonesianNumber(row['Jumlah Piutang ( Rp. ) - Tindakan'] || row['Receivable Action'] || 0)
@@ -308,29 +314,35 @@ export async function POST(request: NextRequest) {
         const patientId = insertedPatient ? (insertedPatient as any).id : null
         const patientVisitCount = insertedPatient ? (insertedPatient as any).visit_count : 0
 
-        // Cari poly_id dari clinic_poly_mappings berdasarkan raw_poly_name
+        // Cari poly_id dari clinic_poly_mappings: clinic_id + raw string polyclinic
+        // Gunakan TRIM + case-insensitive agar match dengan raw_poly_name di mapping
         let polyId: number | null = null
-        if (polyclinic) {
-          const [polyMapping] = await sql`
+        const polyclinicNorm = (polyclinic || '').trim()
+        if (polyclinicNorm) {
+          const polyResults = await sql`
             SELECT master_poly_id 
             FROM clinic_poly_mappings
             WHERE clinic_id = ${clinicId} 
-              AND raw_poly_name = ${polyclinic}
+              AND LOWER(TRIM(raw_poly_name)) = LOWER(${polyclinicNorm})
             LIMIT 1
           `
+          const polyMapping = Array.isArray(polyResults) ? polyResults[0] : polyResults
           polyId = polyMapping ? (polyMapping as any).master_poly_id : null
         }
 
-        // Cari insurance_type_id dari clinic_insurance_mappings berdasarkan raw_insurance_name
+        // Cari insurance_type_id dari clinic_insurance_mappings: clinic_id + raw string insurance_type
+        // Gunakan TRIM + case-insensitive agar match dengan raw_insurance_name di mapping
         let insuranceTypeId: number | null = null
-        if (insuranceType) {
-          const [insuranceMapping] = await sql`
+        const insuranceTypeNorm = (insuranceType || '').trim()
+        if (insuranceTypeNorm) {
+          const insuranceResults = await sql`
             SELECT master_insurance_id 
             FROM clinic_insurance_mappings
             WHERE clinic_id = ${clinicId} 
-              AND raw_insurance_name = ${insuranceType}
+              AND LOWER(TRIM(raw_insurance_name)) = LOWER(${insuranceTypeNorm})
             LIMIT 1
           `
+          const insuranceMapping = Array.isArray(insuranceResults) ? insuranceResults[0] : insuranceResults
           insuranceTypeId = insuranceMapping ? (insuranceMapping as any).master_insurance_id : null
         }
 
@@ -340,8 +352,9 @@ export async function POST(request: NextRequest) {
             clinic_id, patient_id, poly_id, insurance_type_id, trx_date, trx_no, erm_no, patient_name,
             insurance_type, polyclinic, payment_method, voucher_code,
             bill_regist, bill_action, bill_lab, bill_drug, bill_alkes, bill_mcu, bill_radio, bill_total,
+            bill_regist_discount, bill_action_discount, bill_lab_discount, bill_drug_discount, bill_alkes_discount, bill_mcu_discount, bill_radio_discount,
             covered_regist, covered_action, covered_lab, covered_drug, covered_alkes, covered_mcu, covered_radio, covered_total,
-            paid_regist, paid_action, paid_action_after_discount, paid_lab, paid_drug, paid_alkes, paid_mcu, paid_radio, 
+            paid_regist, paid_action, paid_lab, paid_drug, paid_alkes, paid_mcu, paid_radio, 
             paid_rounding, paid_discount, paid_tax, paid_voucher_amt, paid_total,
             receivable_regist, receivable_action, receivable_lab, receivable_drug, receivable_alkes, 
             receivable_mcu, receivable_radio, receivable_total,
@@ -351,8 +364,9 @@ export async function POST(request: NextRequest) {
             ${clinicId}, ${patientId}, ${polyId}, ${insuranceTypeId}, ${trxDateFormatted}, ${trxNo}, ${ermNo}, ${patientName},
             ${insuranceType}, ${polyclinic}, ${paymentMethod}, ${voucherCode === '-' ? null : voucherCode},
             ${billRegist}, ${billAction}, ${billLab}, ${billDrug}, ${billAlkes}, ${billMcu}, ${billRadio}, ${billTotal},
+            ${billRegistDiscount}, ${billActionDiscount}, ${billLabDiscount}, ${billDrugDiscount}, ${billAlkesDiscount}, ${billMcuDiscount}, ${billRadioDiscount},
             ${coveredRegist}, ${coveredAction}, ${coveredLab}, ${coveredDrug}, ${coveredAlkes}, ${coveredMcu}, ${coveredRadio}, ${coveredTotal},
-            ${paidRegist}, ${paidAction}, ${paidActionAfterDiscount}, ${paidLab}, ${paidDrug}, ${paidAlkes}, ${paidMcu}, ${paidRadio},
+            ${paidRegist}, ${paidAction}, ${paidLab}, ${paidDrug}, ${paidAlkes}, ${paidMcu}, ${paidRadio},
             ${paidRounding}, ${paidDiscount}, ${paidTax}, ${paidVoucherAmt}, ${paidTotal},
             ${receivableRegist}, ${receivableAction}, ${receivableLab}, ${receivableDrug}, ${receivableAlkes},
             ${receivableMcu}, ${receivableRadio}, ${receivableTotal},
@@ -367,7 +381,15 @@ export async function POST(request: NextRequest) {
             voucher_code = EXCLUDED.voucher_code,
             raw_json_data = EXCLUDED.raw_json_data,
             input_type = 'upload',
-            paid_action_after_discount = EXCLUDED.paid_action_after_discount,
+            poly_id = EXCLUDED.poly_id,
+            insurance_type_id = EXCLUDED.insurance_type_id,
+            bill_regist_discount = EXCLUDED.bill_regist_discount,
+            bill_action_discount = EXCLUDED.bill_action_discount,
+            bill_lab_discount = EXCLUDED.bill_lab_discount,
+            bill_drug_discount = EXCLUDED.bill_drug_discount,
+            bill_alkes_discount = EXCLUDED.bill_alkes_discount,
+            bill_mcu_discount = EXCLUDED.bill_mcu_discount,
+            bill_radio_discount = EXCLUDED.bill_radio_discount,
             updated_at = NOW()
           RETURNING id
         `
@@ -391,17 +413,41 @@ export async function POST(request: NextRequest) {
         // Break data ke transactions_to_zains berdasarkan master_target_categories
         // Hanya ambil field "Jumlah Pembayaran" yang ada nilainya (tidak 0)
         // Mapping sesuai dengan nama di master_target_categories
-        // Khusus untuk kategori Tindakan: jika ada diskon (paid_discount > 0), gunakan paid_action_after_discount
-        const paidFields = [
-          { key: 'Jumlah Pembayaran ( Rp. ) - Karcis', category: 'Karcis', value: paidRegist },
-          { key: 'Jumlah Pembayaran ( Rp. ) - Tindakan', category: 'Tindakan', value: paidActionAfterDiscount },
-          { key: 'Jumlah Pembayaran ( Rp. ) - Laboratorium', category: 'Laboratorium', value: paidLab },
-          { key: 'Jumlah Pembayaran ( Rp. ) - Obat', category: 'Obat-obatan', value: paidDrug },
-          { key: 'Jumlah Pembayaran ( Rp. ) - Alkes', category: 'Alat Kesehatan', value: paidAlkes },
-          { key: 'Jumlah Pembayaran ( Rp. ) - MCU', category: 'MCU', value: paidMcu },
-          { key: 'Jumlah Pembayaran ( Rp. ) - Radiologi', category: 'Radiologi', value: paidRadio },
-          { key: 'Jumlah Pembayaran ( Rp. ) - Pembulatan', category: 'Pembulatan', value: paidRounding },
-        ]
+        //
+        // KHUSUS UPLOAD EXCEL: Jika bill_*_discount tidak terisi tapi paid_discount ada,
+        // maka diskon hanya mengurangi nominal Tindakan di transactions_to_zains.
+        const allBillDiscountsEmpty =
+          billRegistDiscount === 0 &&
+          billActionDiscount === 0 &&
+          billLabDiscount === 0 &&
+          billDrugDiscount === 0 &&
+          billAlkesDiscount === 0 &&
+          billMcuDiscount === 0 &&
+          billRadioDiscount === 0
+
+        const usePaidDiscountForTindakanOnly = allBillDiscountsEmpty && paidDiscount > 0
+
+        const paidFields = usePaidDiscountForTindakanOnly
+          ? [
+              { key: 'Jumlah Pembayaran ( Rp. ) - Karcis', category: 'Karcis', value: paidRegist },
+              { key: 'Jumlah Pembayaran ( Rp. ) - Tindakan', category: 'Tindakan', value: Math.max(0, paidAction - paidDiscount) },
+              { key: 'Jumlah Pembayaran ( Rp. ) - Laboratorium', category: 'Laboratorium', value: paidLab },
+              { key: 'Jumlah Pembayaran ( Rp. ) - Obat', category: 'Obat-obatan', value: paidDrug },
+              { key: 'Jumlah Pembayaran ( Rp. ) - Alkes', category: 'Alat Kesehatan', value: paidAlkes },
+              { key: 'Jumlah Pembayaran ( Rp. ) - MCU', category: 'MCU', value: paidMcu },
+              { key: 'Jumlah Pembayaran ( Rp. ) - Radiologi', category: 'Radiologi', value: paidRadio },
+              { key: 'Jumlah Pembayaran ( Rp. ) - Pembulatan', category: 'Pembulatan', value: paidRounding },
+            ]
+          : [
+              { key: 'Jumlah Pembayaran ( Rp. ) - Karcis', category: 'Karcis', value: Math.max(0, paidRegist - billRegistDiscount) },
+              { key: 'Jumlah Pembayaran ( Rp. ) - Tindakan', category: 'Tindakan', value: Math.max(0, paidAction - billActionDiscount) },
+              { key: 'Jumlah Pembayaran ( Rp. ) - Laboratorium', category: 'Laboratorium', value: Math.max(0, paidLab - billLabDiscount) },
+              { key: 'Jumlah Pembayaran ( Rp. ) - Obat', category: 'Obat-obatan', value: Math.max(0, paidDrug - billDrugDiscount) },
+              { key: 'Jumlah Pembayaran ( Rp. ) - Alkes', category: 'Alat Kesehatan', value: Math.max(0, paidAlkes - billAlkesDiscount) },
+              { key: 'Jumlah Pembayaran ( Rp. ) - MCU', category: 'MCU', value: Math.max(0, paidMcu - billMcuDiscount) },
+              { key: 'Jumlah Pembayaran ( Rp. ) - Radiologi', category: 'Radiologi', value: Math.max(0, paidRadio - billRadioDiscount) },
+              { key: 'Jumlah Pembayaran ( Rp. ) - Pembulatan', category: 'Pembulatan', value: paidRounding },
+            ]
 
         // Cari id_donatur dari patient jika ada
         const [patientData] = await sql`

@@ -57,11 +57,8 @@ export function SystemLogs({ clinics, initialData }: SystemLogsProps) {
   }
 
   useEffect(() => {
-    // Hanya fetch jika ada filter atau page/limit berubah
-    const hasFilters = filters.search || filters.clinic_id || filters.status || filters.process_type || filters.start_date || filters.end_date
-    if (hasFilters || !initialData || page !== initialData.page || limit !== initialData.limit) {
-      loadLogs()
-    }
+    // Always fetch when page, limit, or filters change
+    loadLogs()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page, limit, filters.clinic_id, filters.status, filters.process_type, filters.start_date, filters.end_date])
 

@@ -1772,10 +1772,12 @@ export const getTransactionsToZains = cache(async (
         tz.*,
         t.trx_no,
         t.trx_date,
-        c.name as clinic_name
+        c.name as clinic_name,
+        mtc.name as program_name
       FROM transactions_to_zains tz
       JOIN transactions t ON t.id = tz.transaction_id
       JOIN clinics c ON c.id = t.clinic_id
+      LEFT JOIN master_target_categories mtc ON mtc.id_program_zains = tz.id_program
       WHERE tz.transaction_id = ${transactionId}
     `
     
@@ -1785,10 +1787,12 @@ export const getTransactionsToZains = cache(async (
           tz.*,
           t.trx_no,
           t.trx_date,
-          c.name as clinic_name
+          c.name as clinic_name,
+          mtc.name as program_name
         FROM transactions_to_zains tz
         JOIN transactions t ON t.id = tz.transaction_id
         JOIN clinics c ON c.id = t.clinic_id
+        LEFT JOIN master_target_categories mtc ON mtc.id_program_zains = tz.id_program
         WHERE tz.transaction_id = ${transactionId}
           AND tz.tgl_transaksi >= ${dateFrom}
       `
@@ -1800,10 +1804,12 @@ export const getTransactionsToZains = cache(async (
           tz.*,
           t.trx_no,
           t.trx_date,
-          c.name as clinic_name
+          c.name as clinic_name,
+          mtc.name as program_name
         FROM transactions_to_zains tz
         JOIN transactions t ON t.id = tz.transaction_id
         JOIN clinics c ON c.id = t.clinic_id
+        LEFT JOIN master_target_categories mtc ON mtc.id_program_zains = tz.id_program
         WHERE tz.transaction_id = ${transactionId}
           ${dateFrom ? sql`AND tz.tgl_transaksi >= ${dateFrom}` : sql``}
           AND tz.tgl_transaksi <= ${dateTo}

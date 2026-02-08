@@ -51,10 +51,8 @@ export function CRUDTargetCategory({
   }
 
   useEffect(() => {
-    // Hanya fetch jika initialData tidak ada atau page/limit berubah
-    if (!initialData || page !== initialData.page || limit !== initialData.limit) {
-      loadCategories()
-    }
+    // Always fetch when page or limit changes
+    loadCategories()
   }, [page, limit])
 
   const handleSubmit = async (e: React.FormEvent) => {

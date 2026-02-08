@@ -63,7 +63,10 @@ export function CRUDDailyTarget({
     clinic_id: '',
     master_poly_id: '',
     source_id: '',
+    target_type: 'daily' as 'daily' | 'cumulative',
     target_date: new Date().toISOString().split('T')[0],
+    target_month: new Date().getMonth() + 1,
+    target_year: new Date().getFullYear(),
     target_visits: 0,
     target_revenue: 0,
     base_rate: 0,
@@ -99,27 +102,22 @@ export function CRUDDailyTarget({
   }
 
   useEffect(() => {
-    // Hanya fetch jika ada filter atau page/limit berubah
-    const hasFilters = filters.clinic_id || filters.poly_id || filters.source_id || filters.start_date || filters.end_date
-    if (hasFilters || !initialData || page !== initialData.page || limit !== initialData.limit) {
-      loadData()
-    } else {
-      // Set initial data jika tidak ada filter
-      if (initialPolies) setPolies(initialPolies)
-      if (initialClinics) setClinics(initialClinics)
-      if (initialSources) setSources(initialSources)
-    }
+    // Always fetch when page, limit, or filters change
+    loadData()
+    // Set initial data for dropdowns if available
+    if (initialPolies) setPolies(initialPolies)
+    if (initialClinics) setClinics(initialClinics)
+    if (initialSources) setSources(initialSources)
   }, [page, limit, filters.clinic_id, filters.poly_id, filters.source_id, filters.start_date, filters.end_date])
 
-  // Load base rate when clinic, poly, or date changes
+  // Load base rate when clinic, poly, or year changes
   useEffect(() => {
-    if (formData.clinic_id && formData.master_poly_id && formData.target_date && isOpen) {
+    if (formData.clinic_id && formData.master_poly_id && isOpen && formData.target_year) {
       const loadBaseRate = async () => {
-        const year = new Date(formData.target_date).getFullYear()
         const rate = await getTargetConfigByClinicPolyYear(
           parseInt(formData.clinic_id),
           parseInt(formData.master_poly_id),
-          year
+          formData.target_year
         )
         
         setFormData(prev => {
@@ -134,7 +132,7 @@ export function CRUDDailyTarget({
       }
       loadBaseRate()
     }
-  }, [formData.clinic_id, formData.master_poly_id, formData.target_date, isOpen])
+  }, [formData.clinic_id, formData.master_poly_id, formData.target_year, isOpen])
 
   // Recalculate revenue when visits or base_rate changes
   useEffect(() => {
@@ -151,9 +149,36 @@ export function CRUDDailyTarget({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    
+    // Validasi: target_month dan target_year harus diisi
+    if (!formData.target_month || !formData.target_year) {
+      toast.error('Bulan dan Tahun wajib diisi')
+      return
+    }
+    
+    // Validasi: jika target_date diisi, pastikan bulan dan tahun sesuai
+    if (formData.target_date) {
+      const date = new Date(formData.target_date)
+      const dateMonth = date.getMonth() + 1
+      const dateYear = date.getFullYear()
+      
+      if (dateMonth !== formData.target_month || dateYear !== formData.target_year) {
+        toast.error('Tanggal, Bulan, dan Tahun harus konsisten. Bulan dan Tahun akan disesuaikan dengan Tanggal.')
+        setFormData(prev => ({
+          ...prev,
+          target_month: dateMonth,
+          target_year: dateYear,
+        }))
+        return
+      }
+    }
+    
     const result = editingId
       ? await updateDailyTarget(editingId, {
-          target_date: formData.target_date,
+          target_type: formData.target_type,
+          target_date: formData.target_date || null,
+          target_month: formData.target_month,
+          target_year: formData.target_year,
           target_visits: formData.target_visits,
           target_revenue: formData.target_revenue,
           tipe_donatur: formData.tipe_donatur,
@@ -162,7 +187,10 @@ export function CRUDDailyTarget({
           clinic_id: formData.clinic_id ? parseInt(formData.clinic_id) : null,
           master_poly_id: formData.master_poly_id ? parseInt(formData.master_poly_id) : null,
           source_id: parseInt(formData.source_id),
-          target_date: formData.target_date,
+          target_type: formData.target_type,
+          target_date: formData.target_date || null,
+          target_month: formData.target_month,
+          target_year: formData.target_year,
           target_visits: formData.target_visits,
           target_revenue: formData.target_revenue,
           tipe_donatur: formData.tipe_donatur,
@@ -176,7 +204,10 @@ export function CRUDDailyTarget({
         clinic_id: '',
         master_poly_id: '',
         source_id: '',
+        target_type: 'daily',
         target_date: new Date().toISOString().split('T')[0],
+        target_month: new Date().getMonth() + 1,
+        target_year: new Date().getFullYear(),
         target_visits: 0,
         target_revenue: 0,
         base_rate: 0,
@@ -193,21 +224,16 @@ export function CRUDDailyTarget({
     setEditingId(target.id)
     
     // Format tanggal ke YYYY-MM-DD untuk input type="date"
-    // Pastikan format tanggal sesuai dengan yang ditampilkan di tabel
-    let formattedDate = target.target_date
+    let formattedDate = target.target_date || new Date().toISOString().split('T')[0]
     
     if (target.target_date) {
-      // Jika sudah dalam format YYYY-MM-DD (string), gunakan langsung
       if (typeof target.target_date === 'string') {
-        // Cek apakah format YYYY-MM-DD
         const dateMatch = target.target_date.match(/^(\d{4})-(\d{2})-(\d{2})/)
         if (dateMatch) {
           formattedDate = target.target_date
         } else {
-          // Parse tanggal dengan benar, gunakan local date untuk menghindari timezone issue
           const date = new Date(target.target_date)
           if (!isNaN(date.getTime())) {
-            // Gunakan local date components untuk menghindari timezone shift
             const year = date.getFullYear()
             const month = String(date.getMonth() + 1).padStart(2, '0')
             const day = String(date.getDate()).padStart(2, '0')
@@ -215,7 +241,6 @@ export function CRUDDailyTarget({
           }
         }
       } else if (target.target_date instanceof Date) {
-        // Jika sudah Date object, format langsung
         const year = target.target_date.getFullYear()
         const month = String(target.target_date.getMonth() + 1).padStart(2, '0')
         const day = String(target.target_date.getDate()).padStart(2, '0')
@@ -227,7 +252,10 @@ export function CRUDDailyTarget({
       clinic_id: target.clinic_id?.toString() || '',
       master_poly_id: target.master_poly_id?.toString() || '',
       source_id: target.source_id?.toString() || '',
+      target_type: (target.target_type as 'daily' | 'cumulative') || 'daily',
       target_date: formattedDate,
+      target_month: target.target_month || new Date().getMonth() + 1,
+      target_year: target.target_year || new Date().getFullYear(),
       target_visits: target.target_visits || 0,
       target_revenue: Number(target.target_revenue) || 0,
       base_rate: Number(target.base_rate) || 0,
@@ -526,7 +554,11 @@ export function CRUDDailyTarget({
                 setFormData({
                   clinic_id: '',
                   master_poly_id: '',
+                  source_id: '',
+                  target_type: 'daily',
                   target_date: new Date().toISOString().split('T')[0],
+                  target_month: new Date().getMonth() + 1,
+                  target_year: new Date().getFullYear(),
                   target_visits: 0,
                   target_revenue: 0,
                   base_rate: 0,
@@ -541,15 +573,14 @@ export function CRUDDailyTarget({
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <div className="space-y-2">
-                  <Label>Klinik *</Label>
+                  <Label>Klinik</Label>
                   <Select
-                    required
-                    value={formData.clinic_id}
+                    value={formData.clinic_id || undefined}
                     onValueChange={(value) => setFormData(prev => ({ ...prev, clinic_id: value }))}
                     disabled={!!editingId}
                   >
                     <SelectTrigger>
-                      <SelectValue placeholder="Pilih Klinik" />
+                      <SelectValue placeholder="Pilih Klinik (Opsional)" />
                     </SelectTrigger>
                     <SelectContent>
                       {clinics.map((clinic) => (
@@ -561,15 +592,14 @@ export function CRUDDailyTarget({
                   </Select>
                 </div>
                 <div className="space-y-2">
-                  <Label>Poli *</Label>
+                  <Label>Poli</Label>
                   <Select
-                    required
-                    value={formData.master_poly_id}
+                    value={formData.master_poly_id || undefined}
                     onValueChange={(value) => setFormData(prev => ({ ...prev, master_poly_id: value }))}
                     disabled={!!editingId}
                   >
                     <SelectTrigger>
-                      <SelectValue placeholder="Pilih Poli" />
+                      <SelectValue placeholder="Pilih Poli (Opsional)" />
                     </SelectTrigger>
                     <SelectContent>
                       {polies.map((poly) => (
@@ -601,12 +631,84 @@ export function CRUDDailyTarget({
                   </Select>
                 </div>
                 <div className="space-y-2">
-                  <Label>Tanggal Target *</Label>
+                  <Label>Tipe Target *</Label>
+                  <Select
+                    required
+                    value={formData.target_type}
+                    onValueChange={(value: 'daily' | 'cumulative') => {
+                      setFormData(prev => ({
+                        ...prev,
+                        target_type: value,
+                        // Jika ubah ke cumulative, hapus target_date
+                        // Jika ubah ke daily, tetap pertahankan target_date jika ada
+                        target_date: value === 'cumulative' ? '' : prev.target_date,
+                      }))
+                    }}
+                    disabled={!!editingId}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Pilih Tipe Target" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="daily">Harian (Per Tanggal)</SelectItem>
+                      <SelectItem value="cumulative">Kumulatif (Per Bulan)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Tanggal Target</Label>
                   <Input
                     type="date"
-                    required
                     value={formData.target_date}
-                    onChange={(e) => setFormData(prev => ({ ...prev, target_date: e.target.value }))}
+                    onChange={(e) => {
+                      const dateValue = e.target.value
+                      if (dateValue) {
+                        const date = new Date(dateValue)
+                        const month = date.getMonth() + 1
+                        const year = date.getFullYear()
+                        setFormData(prev => ({
+                          ...prev,
+                          target_date: dateValue,
+                          target_month: month,
+                          target_year: year,
+                        }))
+                      } else {
+                        setFormData(prev => ({ ...prev, target_date: dateValue }))
+                      }
+                    }}
+                    disabled={!!editingId}
+                  />
+                  <p className="text-xs text-slate-500">Opsional. Jika diisi, bulan dan tahun akan otomatis disesuaikan</p>
+                </div>
+                <div className="space-y-2">
+                  <Label>Bulan *</Label>
+                  <Select
+                    required
+                    value={formData.target_month.toString()}
+                    onValueChange={(value) => setFormData(prev => ({ ...prev, target_month: parseInt(value) }))}
+                    disabled={!!editingId}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Pilih Bulan" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {Array.from({ length: 12 }, (_, i) => i + 1).map((month) => (
+                        <SelectItem key={month} value={month.toString()}>
+                          {new Date(2000, month - 1).toLocaleString('id-ID', { month: 'long' })}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Tahun *</Label>
+                  <Input
+                    type="number"
+                    required
+                    min="2000"
+                    max="2100"
+                    value={formData.target_year}
+                    onChange={(e) => setFormData(prev => ({ ...prev, target_year: parseInt(e.target.value) || new Date().getFullYear() }))}
                     disabled={!!editingId}
                   />
                 </div>
@@ -727,7 +829,8 @@ export function CRUDDailyTarget({
                     <th className="text-left py-3 px-4 text-xs font-semibold text-slate-600">Klinik</th>
                     <th className="text-left py-3 px-4 text-xs font-semibold text-slate-600">Poli</th>
                     <th className="text-left py-3 px-4 text-xs font-semibold text-slate-600">Source</th>
-                    <th className="text-left py-3 px-4 text-xs font-semibold text-slate-600">Tanggal</th>
+                    <th className="text-left py-3 px-4 text-xs font-semibold text-slate-600">Tipe</th>
+                    <th className="text-left py-3 px-4 text-xs font-semibold text-slate-600">Tanggal/Bulan/Tahun</th>
                     <th className="text-right py-3 px-4 text-xs font-semibold text-slate-600">Tarif</th>
                     <th className="text-right py-3 px-4 text-xs font-semibold text-slate-600">Target Kunjungan</th>
                     <th className="text-right py-3 px-4 text-xs font-semibold text-slate-600">Target Pendapatan</th>
@@ -737,18 +840,26 @@ export function CRUDDailyTarget({
                 <tbody>
                   {targets.length === 0 && !loading ? (
                     <tr>
-                      <td colSpan={8} className="text-center py-8 text-slate-500">Tidak ada data</td>
+                      <td colSpan={9} className="text-center py-8 text-slate-500">Tidak ada data</td>
                     </tr>
                   ) : (
                     targets.map((target, index) => {
                       const rowNumber = (page - 1) * limit + index + 1
+                      const dateDisplay = target.target_type === 'daily' 
+                        ? formatDate(target.target_date)
+                        : `${new Date(2000, (target.target_month || 1) - 1).toLocaleString('id-ID', { month: 'long' })} ${target.target_year || ''}`
                       return (
                         <tr key={target.id} className="border-b border-slate-100 hover:bg-slate-50 transition-colors">
                           <td className="py-3 px-4 text-sm text-center text-slate-500">{rowNumber}</td>
-                          <td className="py-3 px-4 text-sm font-medium text-slate-800">{target.clinic_name}</td>
-                          <td className="py-3 px-4 text-sm text-slate-600">{target.poly_name}</td>
+                          <td className="py-3 px-4 text-sm font-medium text-slate-800">{target.clinic_name || '-'}</td>
+                          <td className="py-3 px-4 text-sm text-slate-600">{target.poly_name || '-'}</td>
                           <td className="py-3 px-4 text-sm text-slate-600">{target.source_name}</td>
-                          <td className="py-3 px-4 text-sm text-slate-600">{formatDate(target.target_date)}</td>
+                          <td className="py-3 px-4 text-sm text-slate-600">
+                            <Badge variant={target.target_type === 'daily' ? 'default' : 'secondary'}>
+                              {target.target_type === 'daily' ? 'Harian' : 'Kumulatif'}
+                            </Badge>
+                          </td>
+                          <td className="py-3 px-4 text-sm text-slate-600">{dateDisplay}</td>
                         <td className="py-3 px-4 text-sm text-right font-medium text-slate-800">{formatCurrency(target.base_rate || 0)}</td>
                         <td className="py-3 px-4 text-sm text-right font-medium text-slate-800">{target.target_visits || 0}</td>
                         <td className="py-3 px-4 text-sm text-right font-medium text-slate-800">{formatCurrency(target.target_revenue)}</td>

@@ -50,10 +50,8 @@ export function CRUDPoli({
   }
 
   useEffect(() => {
-    // Hanya fetch jika initialData tidak ada atau page/limit berubah
-    if (!initialData || page !== initialData.page || limit !== initialData.limit) {
-      loadPolies()
-    }
+    // Always fetch when page or limit changes
+    loadPolies()
   }, [page, limit])
 
   const handleSubmit = async (e: React.FormEvent) => {

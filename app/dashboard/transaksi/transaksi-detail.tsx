@@ -103,30 +103,72 @@ export function TransaksiDetail({ data, onClose }: { data: any; onClose: () => v
                 <span className="text-slate-600">Registrasi</span>
                 <span className="font-medium">{formatCurrency(data.bill_regist)}</span>
               </div>
+              {(data.bill_regist_discount > 0) && (
+                <div className="flex justify-between ml-4">
+                  <span className="text-slate-500 text-sm">Diskon Registrasi</span>
+                  <span className="font-medium text-red-600 text-sm">-{formatCurrency(data.bill_regist_discount)}</span>
+                </div>
+              )}
               <div className="flex justify-between">
                 <span className="text-slate-600">Tindakan</span>
                 <span className="font-medium">{formatCurrency(data.bill_action)}</span>
               </div>
+              {(data.bill_action_discount > 0) && (
+                <div className="flex justify-between ml-4">
+                  <span className="text-slate-500 text-sm">Diskon Tindakan</span>
+                  <span className="font-medium text-red-600 text-sm">-{formatCurrency(data.bill_action_discount)}</span>
+                </div>
+              )}
               <div className="flex justify-between">
                 <span className="text-slate-600">Laboratorium</span>
                 <span className="font-medium">{formatCurrency(data.bill_lab)}</span>
               </div>
+              {(data.bill_lab_discount > 0) && (
+                <div className="flex justify-between ml-4">
+                  <span className="text-slate-500 text-sm">Diskon Laboratorium</span>
+                  <span className="font-medium text-red-600 text-sm">-{formatCurrency(data.bill_lab_discount)}</span>
+                </div>
+              )}
               <div className="flex justify-between">
                 <span className="text-slate-600">Obat</span>
                 <span className="font-medium">{formatCurrency(data.bill_drug)}</span>
               </div>
+              {(data.bill_drug_discount > 0) && (
+                <div className="flex justify-between ml-4">
+                  <span className="text-slate-500 text-sm">Diskon Obat</span>
+                  <span className="font-medium text-red-600 text-sm">-{formatCurrency(data.bill_drug_discount)}</span>
+                </div>
+              )}
               <div className="flex justify-between">
                 <span className="text-slate-600">Alkes</span>
                 <span className="font-medium">{formatCurrency(data.bill_alkes)}</span>
               </div>
+              {(data.bill_alkes_discount > 0) && (
+                <div className="flex justify-between ml-4">
+                  <span className="text-slate-500 text-sm">Diskon Alkes</span>
+                  <span className="font-medium text-red-600 text-sm">-{formatCurrency(data.bill_alkes_discount)}</span>
+                </div>
+              )}
               <div className="flex justify-between">
                 <span className="text-slate-600">MCU</span>
                 <span className="font-medium">{formatCurrency(data.bill_mcu)}</span>
               </div>
+              {(data.bill_mcu_discount > 0) && (
+                <div className="flex justify-between ml-4">
+                  <span className="text-slate-500 text-sm">Diskon MCU</span>
+                  <span className="font-medium text-red-600 text-sm">-{formatCurrency(data.bill_mcu_discount)}</span>
+                </div>
+              )}
               <div className="flex justify-between">
                 <span className="text-slate-600">Radiologi</span>
                 <span className="font-medium">{formatCurrency(data.bill_radio)}</span>
               </div>
+              {(data.bill_radio_discount > 0) && (
+                <div className="flex justify-between ml-4">
+                  <span className="text-slate-500 text-sm">Diskon Radiologi</span>
+                  <span className="font-medium text-red-600 text-sm">-{formatCurrency(data.bill_radio_discount)}</span>
+                </div>
+              )}
               <div className="flex justify-between pt-2 border-t font-semibold text-lg">
                 <span>Total Tagihan</span>
                 <span>{formatCurrency(data.bill_total)}</span>
@@ -187,12 +229,6 @@ export function TransaksiDetail({ data, onClose }: { data: any; onClose: () => v
                 <span className="text-slate-600">Tindakan</span>
                 <span className="font-medium">{formatCurrency(data.paid_action)}</span>
               </div>
-              {data.paid_discount > 0 && data.paid_action_after_discount !== undefined && (
-                <div className="flex justify-between">
-                  <span className="text-slate-600">Tindakan (Setelah Diskon)</span>
-                  <span className="font-medium text-teal-600">{formatCurrency(data.paid_action_after_discount)}</span>
-                </div>
-              )}
               <div className="flex justify-between">
                 <span className="text-slate-600">Laboratorium</span>
                 <span className="font-medium">{formatCurrency(data.paid_lab)}</span>

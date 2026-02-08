@@ -222,20 +222,28 @@ export async function createDailyTarget(data: {
   master_poly_id?: number | null
   source_id: number
   target_type: 'daily' | 'cumulative'
-  target_date?: string | null  // Untuk mode daily
-  target_month?: number | null  // Untuk mode cumulative (1-12)
-  target_year?: number | null   // Untuk mode cumulative
+  target_date?: string | null  // Opsional, jika diisi akan sync dengan bulan/tahun
+  target_month?: number | null  // Wajib (1-12)
+  target_year?: number | null   // Wajib
   target_visits: number
   target_revenue: number
   tipe_donatur?: 'retail' | 'corporate' | 'community'
 }) {
   try {
-    // Validasi berdasarkan target_type
-    if (data.target_type === 'daily' && !data.target_date) {
-      return { success: false, error: 'target_date wajib diisi untuk target harian' }
+    // Validasi: target_month dan target_year wajib diisi
+    if (!data.target_month || data.target_month < 1 || data.target_month > 12 || !data.target_year) {
+      return { success: false, error: 'target_month (1-12) dan target_year wajib diisi' }
     }
-    if (data.target_type === 'cumulative' && (!data.target_month || data.target_month < 1 || data.target_month > 12 || !data.target_year)) {
-      return { success: false, error: 'target_month (1-12) dan target_year wajib diisi untuk target kumulatif' }
+    
+    // Jika target_date diisi, validasi konsistensi dengan bulan dan tahun
+    if (data.target_date) {
+      const date = new Date(data.target_date)
+      const dateMonth = date.getMonth() + 1
+      const dateYear = date.getFullYear()
+      
+      if (dateMonth !== data.target_month || dateYear !== data.target_year) {
+        return { success: false, error: 'target_date, target_month, dan target_year harus konsisten' }
+      }
     }
 
     const result = await sql`
@@ -256,9 +264,9 @@ export async function createDailyTarget(data: {
         ${data.master_poly_id ?? null},
         ${data.source_id},
         ${data.target_type},
-        ${data.target_type === 'daily' ? data.target_date : null},
-        ${data.target_type === 'cumulative' ? data.target_month : null},
-        ${data.target_type === 'cumulative' ? data.target_year : null},
+        ${data.target_date || null},
+        ${data.target_month},
+        ${data.target_year},
         ${data.target_visits},
         ${data.target_revenue},
         ${data.tipe_donatur || null}
@@ -284,18 +292,25 @@ export async function updateDailyTarget(id: number, data: {
   tipe_donatur?: 'retail' | 'corporate' | 'community' | ''
 }) {
   try {
-    // Validasi berdasarkan target_type
-    if (data.target_type === 'daily' && data.target_date === undefined) {
-      // Cek apakah sudah ada di DB dan mode-nya daily
-      const existing = await sql`SELECT target_type FROM clinic_daily_targets WHERE id = ${id}`
-      const existingTarget = Array.isArray(existing) ? existing[0] : existing
-      if (existingTarget?.target_type !== 'daily' && !data.target_date) {
-        return { success: false, error: 'target_date wajib diisi untuk target harian' }
-      }
+    // Validasi: jika target_month atau target_year diupdate, pastikan valid
+    if (data.target_month !== undefined && (data.target_month < 1 || data.target_month > 12)) {
+      return { success: false, error: 'target_month harus antara 1-12' }
     }
-    if (data.target_type === 'cumulative' && (data.target_month !== undefined || data.target_year !== undefined)) {
-      if (data.target_month !== undefined && (data.target_month < 1 || data.target_month > 12)) {
-        return { success: false, error: 'target_month harus antara 1-12' }
+    
+    // Validasi: jika target_date diisi, pastikan konsisten dengan bulan dan tahun
+    if (data.target_date !== undefined && data.target_date !== null) {
+      const date = new Date(data.target_date)
+      const dateMonth = date.getMonth() + 1
+      const dateYear = date.getFullYear()
+      
+      // Ambil nilai bulan dan tahun yang akan digunakan (dari data atau existing)
+      const existing = await sql`SELECT target_month, target_year FROM clinic_daily_targets WHERE id = ${id}`
+      const existingTarget = Array.isArray(existing) ? existing[0] : existing
+      const finalMonth = data.target_month !== undefined ? data.target_month : existingTarget?.target_month
+      const finalYear = data.target_year !== undefined ? data.target_year : existingTarget?.target_year
+      
+      if (finalMonth && finalYear && (dateMonth !== finalMonth || dateYear !== finalYear)) {
+        return { success: false, error: 'target_date, target_month, dan target_year harus konsisten' }
       }
     }
 
@@ -304,16 +319,13 @@ export async function updateDailyTarget(id: number, data: {
       await sql`UPDATE clinic_daily_targets SET target_type = ${data.target_type}, updated_at = NOW() WHERE id = ${id}`
     }
     if (data.target_date !== undefined) {
-      const dateValue = data.target_type === 'daily' ? data.target_date : null
-      await sql`UPDATE clinic_daily_targets SET target_date = ${dateValue}, updated_at = NOW() WHERE id = ${id}`
+      await sql`UPDATE clinic_daily_targets SET target_date = ${data.target_date || null}, updated_at = NOW() WHERE id = ${id}`
     }
     if (data.target_month !== undefined) {
-      const monthValue = data.target_type === 'cumulative' ? data.target_month : null
-      await sql`UPDATE clinic_daily_targets SET target_month = ${monthValue}, updated_at = NOW() WHERE id = ${id}`
+      await sql`UPDATE clinic_daily_targets SET target_month = ${data.target_month}, updated_at = NOW() WHERE id = ${id}`
     }
     if (data.target_year !== undefined) {
-      const yearValue = data.target_type === 'cumulative' ? data.target_year : null
-      await sql`UPDATE clinic_daily_targets SET target_year = ${yearValue}, updated_at = NOW() WHERE id = ${id}`
+      await sql`UPDATE clinic_daily_targets SET target_year = ${data.target_year}, updated_at = NOW() WHERE id = ${id}`
     }
     if (data.target_visits !== undefined) {
       await sql`UPDATE clinic_daily_targets SET target_visits = ${data.target_visits}, updated_at = NOW() WHERE id = ${id}`

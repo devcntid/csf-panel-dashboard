@@ -64,10 +64,8 @@ export function CRUDKlinik({
   }
 
   useEffect(() => {
-    // Hanya fetch jika initialData tidak ada atau page/limit berubah
-    if (!initialData || page !== initialData.page || limit !== initialData.limit) {
-      loadClinics()
-    }
+    // Always fetch when page or limit changes
+    loadClinics()
   }, [page, limit])
 
   const handleSubmit = async (e: React.FormEvent) => {

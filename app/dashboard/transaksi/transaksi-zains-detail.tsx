@@ -71,7 +71,9 @@ export function TransaksiZainsDetail({
                     <th className="text-center py-3 px-4 text-xs font-semibold text-slate-600 w-16">No</th>
                     <th className="text-left py-3 px-4 text-xs font-semibold text-slate-600">ID Transaksi</th>
                     <th className="text-left py-3 px-4 text-xs font-semibold text-slate-600">ID Program</th>
+                    <th className="text-left py-3 px-4 text-xs font-semibold text-slate-600">Nama Program</th>
                     <th className="text-left py-3 px-4 text-xs font-semibold text-slate-600">ID Kantor</th>
+                    <th className="text-left py-3 px-4 text-xs font-semibold text-slate-600">Nama Klinik</th>
                     <th className="text-left py-3 px-4 text-xs font-semibold text-slate-600">Tanggal Transaksi</th>
                     <th className="text-left py-3 px-4 text-xs font-semibold text-slate-600">ID Donatur</th>
                     <th className="text-left py-3 px-4 text-xs font-semibold text-slate-600">Nama Pasien</th>
@@ -90,7 +92,9 @@ export function TransaksiZainsDetail({
                       <td className="py-3 px-4 text-sm text-center text-slate-500">{index + 1}</td>
                       <td className="py-3 px-4 text-sm text-slate-600">{item.id_transaksi || '-'}</td>
                       <td className="py-3 px-4 text-sm text-slate-600">{item.id_program || '-'}</td>
+                      <td className="py-3 px-4 text-sm font-medium text-slate-700">{item.program_name || '-'}</td>
                       <td className="py-3 px-4 text-sm text-slate-600">{item.id_kantor || '-'}</td>
+                      <td className="py-3 px-4 text-sm font-medium text-slate-700">{item.clinic_name || '-'}</td>
                       <td className="py-3 px-4 text-sm text-slate-600">
                         {item.tgl_transaksi ? formatDate(item.tgl_transaksi) : '-'}
                       </td>
@@ -113,6 +117,17 @@ export function TransaksiZainsDetail({
                     </tr>
                   ))}
                 </tbody>
+                <tfoot className="border-t-2 border-slate-300 bg-slate-50">
+                  <tr>
+                    <td colSpan={10} className="py-3 px-4 text-sm font-semibold text-slate-700 text-right">
+                      Grand Total:
+                    </td>
+                    <td className="py-3 px-4 text-sm text-right font-bold text-teal-600">
+                      {formatCurrency(zainsData.reduce((sum, item) => sum + (item.nominal_transaksi || 0), 0))}
+                    </td>
+                    <td colSpan={2}></td>
+                  </tr>
+                </tfoot>
               </table>
             </div>
           )}
