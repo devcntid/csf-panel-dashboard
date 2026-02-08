@@ -1735,7 +1735,7 @@ export const getTransactionStats = cache(async (
         COUNT(*) as total_transactions,
         COUNT(CASE WHEN zains_synced = true THEN 1 END) as synced_count,
         COUNT(CASE WHEN zains_synced = false THEN 1 END) as pending_count,
-        COALESCE(SUM(bill_total), 0) as total_revenue
+        COALESCE(SUM(paid_total), 0) as total_revenue
       FROM transactions t
       WHERE ${whereSql}
       `,

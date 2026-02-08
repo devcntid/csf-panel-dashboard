@@ -200,6 +200,19 @@ export default function DashboardPage() {
       }
     : null
 
+  // Komposisi poli
+  const polyData = data
+    ? {
+        labels: data.polyComposition.map((p) => p.label),
+        datasets: [
+          {
+            data: data.polyComposition.map((p) => p.percent),
+            backgroundColor: ['#0d9488', '#14b8a6', '#2dd4bf', '#5eead4', '#99f6e4', '#64748b'],
+          },
+        ],
+      }
+    : null
+
   // Gauge - pastikan tidak terpotong dengan viewBox yang cukup
   const gaugePercent = data ? Math.min(data.targetPercent, 100) : 0
   const gaugeValue = data?.targetPercent ?? 0
@@ -450,14 +463,14 @@ export default function DashboardPage() {
             </div>
 
             {/* Charts Row 2 */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              {/* Bar Chart - Performa Klinik Cabang (tanpa dropdown) */}
+            <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+              {/* Bar Chart - Performa Klinik Cabang (ukuran disesuaikan) */}
               <Card className="lg:col-span-2">
                 <CardHeader>
                   <CardTitle className="text-base">Performa Klinik Cabang</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="h-[300px]">
+                  <div className="h-[250px]">
                     {branchData && branchData.labels.length > 0 ? (
                       <Bar data={branchData} options={chartOptions} />
                     ) : (
@@ -475,18 +488,22 @@ export default function DashboardPage() {
                   <CardTitle className="text-base">Komposisi Pasien</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="h-[200px] flex items-center justify-center">
+                  <div className="h-[180px] flex items-center justify-center">
                     {patientData && patientData.labels.length > 0 ? (
                       <Pie
                         data={patientData}
-                        options={{ responsive: true, maintainAspectRatio: false }}
+                        options={{
+                          responsive: true,
+                          maintainAspectRatio: false,
+                          plugins: { legend: { display: false } },
+                        }}
                       />
                     ) : (
                       <div className="text-slate-400 text-sm">Tidak ada data</div>
                     )}
                   </div>
                   {data && data.patientComposition.length > 0 && (
-                    <div className="mt-6 space-y-2">
+                    <div className="mt-4 space-y-2">
                       {data.patientComposition.map((p, i) => (
                         <div key={i} className="flex items-center justify-between text-sm">
                           <div className="flex items-center gap-2">
@@ -498,6 +515,48 @@ export default function DashboardPage() {
                               }}
                             />
                             <span className="text-slate-600">{p.label}</span>
+                          </div>
+                          <span className="font-semibold">{p.percent.toFixed(1)}%</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Pie Chart - Komposisi Poli */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Komposisi Poli</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="h-[180px] flex items-center justify-center">
+                    {polyData && polyData.labels.length > 0 ? (
+                      <Pie
+                        data={polyData}
+                        options={{
+                          responsive: true,
+                          maintainAspectRatio: false,
+                          plugins: { legend: { display: false } },
+                        }}
+                      />
+                    ) : (
+                      <div className="text-slate-400 text-sm">Tidak ada data</div>
+                    )}
+                  </div>
+                  {data && data.polyComposition.length > 0 && (
+                    <div className="mt-4 space-y-2">
+                      {data.polyComposition.map((p, i) => (
+                        <div key={i} className="flex items-center justify-between text-sm">
+                          <div className="flex items-center gap-2">
+                            <div
+                              className="w-3 h-3 rounded-full"
+                              style={{
+                                backgroundColor:
+                                  ['#0d9488', '#14b8a6', '#2dd4bf', '#5eead4', '#99f6e4', '#64748b'][i % 6],
+                              }}
+                            />
+                            <span className="text-slate-600 truncate max-w-[100px]" title={p.label}>{p.label}</span>
                           </div>
                           <span className="font-semibold">{p.percent.toFixed(1)}%</span>
                         </div>
