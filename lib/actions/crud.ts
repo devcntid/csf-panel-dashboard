@@ -705,11 +705,33 @@ export async function createUser(data: {
   clinic_id?: number
 }) {
   try {
-    const result = await sql`
-      INSERT INTO users (email, full_name, role, clinic_id)
-      VALUES (${data.email}, ${data.full_name || null}, ${data.role}, ${data.clinic_id || null})
-      RETURNING *
-    `
+    let result: any
+    try {
+      result = await sql`
+        INSERT INTO users (email, full_name, role, clinic_id)
+        VALUES (${data.email}, ${data.full_name || null}, ${data.role}, ${data.clinic_id || null})
+        RETURNING *
+      `
+    } catch (insertError: any) {
+      // Duplicate key on users.id (sequence out of sync) - e.g. setelah restore/import data
+      const isPkeyConflict = insertError?.code === '23505' &&
+        (insertError?.constraint === 'users_pkey' || (insertError?.table === 'users' && insertError?.detail?.includes('(id)')))
+      if (isPkeyConflict) {
+        await sql`
+          SELECT setval(
+            pg_get_serial_sequence('users', 'id'),
+            COALESCE((SELECT MAX(id) FROM users), 1)
+          )
+        `
+        result = await sql`
+          INSERT INTO users (email, full_name, role, clinic_id)
+          VALUES (${data.email}, ${data.full_name || null}, ${data.role}, ${data.clinic_id || null})
+          RETURNING *
+        `
+      } else {
+        throw insertError
+      }
+    }
     const user = Array.isArray(result) ? result[0] : result
     revalidatePath('/dashboard/konfigurasi')
     return { success: true, data: user }
@@ -946,6 +968,9 @@ export async function createPolyMapping(data: {
     const result = await sql`
       INSERT INTO clinic_poly_mappings (clinic_id, raw_poly_name, master_poly_id, is_revenue_center)
       VALUES (${data.clinic_id}, ${data.raw_poly_name}, ${data.master_poly_id || null}, ${data.is_revenue_center ?? true})
+      ON CONFLICT (clinic_id, raw_poly_name) DO UPDATE SET
+        master_poly_id = EXCLUDED.master_poly_id,
+        is_revenue_center = EXCLUDED.is_revenue_center
       RETURNING *
     `
     const mapping = Array.isArray(result) ? result[0] : result
