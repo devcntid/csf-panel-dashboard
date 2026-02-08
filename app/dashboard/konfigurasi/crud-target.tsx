@@ -86,15 +86,11 @@ export function CRUDTarget({
   }
 
   useEffect(() => {
-    // Hanya fetch jika ada filter atau page/limit berubah
-    const hasFilters = filters.clinic_id || filters.poly_id || filters.year
-    if (hasFilters || !initialData || page !== initialData.page || limit !== initialData.limit) {
-      loadData()
-    } else {
-      // Set initial data jika tidak ada filter
-      if (initialPolies) setPolies(initialPolies)
-      if (initialClinics) setClinics(initialClinics)
-    }
+    // Always fetch when page, limit, or filters change
+    loadData()
+    // Set initial data for dropdowns if available
+    if (initialPolies) setPolies(initialPolies)
+    if (initialClinics) setClinics(initialClinics)
   }, [page, limit, filters.clinic_id, filters.poly_id, filters.year])
 
   const handleSubmit = async (e: React.FormEvent) => {

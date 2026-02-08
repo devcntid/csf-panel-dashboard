@@ -208,18 +208,6 @@ export default function DashboardLayout({
             </ul>
           </nav>
 
-          {/* Sync Status */}
-          <div className={`p-4 border-t border-teal-600 transition-opacity duration-300 ${sidebarCollapsed ? 'lg:opacity-0 lg:hidden' : 'lg:opacity-100'}`}>
-            <div className="bg-teal-600 rounded-lg p-3">
-              <div className="flex items-center gap-2 mb-2">
-                <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
-                <span className="text-xs font-semibold">Bot Scraper Active</span>
-              </div>
-              <p className="text-teal-200 text-xs">Last sync: 2 menit lalu</p>
-              <p className="text-teal-200 text-xs">Next sync: 3 menit</p>
-            </div>
-          </div>
-
           {/* Logout Button */}
           <div className={`p-4 border-t border-teal-600 transition-opacity duration-300 ${sidebarCollapsed ? 'lg:opacity-0 lg:hidden' : 'lg:opacity-100'}`}>
             <Button

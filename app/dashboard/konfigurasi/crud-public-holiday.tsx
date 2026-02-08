@@ -66,15 +66,8 @@ export function CRUDPublicHoliday({
   }
 
   useEffect(() => {
-    const hasFilters = filters.year
-    if (hasFilters || !initialData || page !== initialData.page || limit !== initialData.limit) {
-      loadData()
-    } else {
-      if (initialData) {
-        setHolidays(initialData.holidays)
-        setTotal(initialData.total)
-      }
-    }
+    // Always fetch when page, limit, or filters change
+    loadData()
   }, [page, limit, filters.year])
 
   const handleSubmit = async (e: React.FormEvent) => {

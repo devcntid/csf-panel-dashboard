@@ -74,8 +74,8 @@ export async function GET(
         'Tanggal',
         'No. eRM',
         'Nama Pasien',
-        'Ruangan / Poli',
         'Asuransi',
+        'Ruangan / Poli',
         'Metode Pembayaran',
         'Voucher',
         'Jumlah Tagihan ( Rp. ) - Karcis',
@@ -128,8 +128,8 @@ export async function GET(
         formatDate(twoDaysAgo),
         'RM001',
         'Contoh Pasien 1',
-        samplePolies[0] || 'Poli Umum',
         sampleInsurances[0] || 'BPJS',
+        samplePolies[0] || 'Poli Umum',
         'TUNAI',
         '-',
         50000,
@@ -175,14 +175,14 @@ export async function GET(
         0,
         0,
       ],
-      // Sample data baris 2
+      // Sample data baris 2 (dengan contoh diskon)
       [
         clinicIdNum,
         formatDate(yesterday),
         'RM002',
         'Contoh Pasien 2',
-        samplePolies[1] || samplePolies[0] || 'Poli Gigi',
         sampleInsurances[1] || sampleInsurances[0] || 'UMUM',
+        samplePolies[1] || samplePolies[0] || 'Poli Gigi',
         'QRIS',
         '-',
         75000,
@@ -193,13 +193,13 @@ export async function GET(
         0,
         0,
         575000,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
+        5000,   // Diskon Karcis
+        10000,  // Diskon Tindakan
+        0,      // Diskon Laboratorium
+        0,      // Diskon Obat
+        0,      // Diskon Alkes
+        0,      // Diskon MCU
+        0,      // Diskon Radiologi
         50000,
         200000,
         0,
@@ -228,14 +228,14 @@ export async function GET(
         0,
         0,
       ],
-      // Sample data baris 3
+      // Sample data baris 3 (dengan contoh diskon lebih lengkap)
       [
         clinicIdNum,
         formatDate(today),
         'RM003',
         'Contoh Pasien 3',
-        samplePolies[2] || samplePolies[0] || 'Poli KIA',
         sampleInsurances[0] || 'BPJS',
+        samplePolies[2] || samplePolies[0] || 'Poli KIA',
         'TUNAI',
         '-',
         100000,
@@ -246,13 +246,13 @@ export async function GET(
         0,
         0,
         1150000,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
+        10000,  // Diskon Karcis
+        20000,  // Diskon Tindakan
+        15000,  // Diskon Laboratorium
+        10000,  // Diskon Obat
+        5000,   // Diskon Alkes
+        0,      // Diskon MCU
+        0,      // Diskon Radiologi
         100000,
         400000,
         200000,
@@ -293,8 +293,8 @@ export async function GET(
       { wch: 20 }, // Tanggal (format "31 January 2026" lebih panjang)
       { wch: 12 }, // No. eRM
       { wch: 20 }, // Nama Pasien
-      { wch: 20 }, // Ruangan / Poli
       { wch: 15 }, // Asuransi
+      { wch: 20 }, // Ruangan / Poli
       { wch: 18 }, // Metode Pembayaran
       { wch: 12 }, // Voucher
       { wch: 15 }, // Bill Regist

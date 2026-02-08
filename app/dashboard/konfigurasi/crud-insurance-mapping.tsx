@@ -70,17 +70,8 @@ export function CRUDInsuranceMapping({
   }
 
   useEffect(() => {
-    // Hanya fetch jika ada filter atau page/limit berubah
-    const hasFilters = filters.clinic_id || filters.master_insurance_id || filters.search
-    if (hasFilters || !initialData || page !== initialData.page || limit !== initialData.limit) {
-      loadMappings()
-    } else {
-      // Set initial data jika tidak ada filter
-      if (initialData) {
-        setMappings(initialData.mappings)
-        setTotal(initialData.total)
-      }
-    }
+    // Always fetch when page, limit, or filters change
+    loadMappings()
   }, [page, limit, filters.clinic_id, filters.master_insurance_id, filters.search])
 
   const handleAddMapping = () => {

@@ -1002,7 +1002,7 @@ export const getDailyTargetsPaginated = cache(async (
           JOIN master_polies mp ON mp.id = cdt.master_poly_id
           LEFT JOIN clinic_target_configs ctc ON ctc.clinic_id = cdt.clinic_id
             AND ctc.master_poly_id = cdt.master_poly_id
-            AND ctc.target_year = EXTRACT(YEAR FROM cdt.target_date)
+            AND ctc.target_year = COALESCE(EXTRACT(YEAR FROM cdt.target_date), cdt.target_year)
             AND ctc.is_active = true
           WHERE cdt.clinic_id = ${clinicId} 
             AND cdt.master_poly_id = ${polyId}
@@ -1040,7 +1040,7 @@ export const getDailyTargetsPaginated = cache(async (
           JOIN master_polies mp ON mp.id = cdt.master_poly_id
           LEFT JOIN clinic_target_configs ctc ON ctc.clinic_id = cdt.clinic_id
             AND ctc.master_poly_id = cdt.master_poly_id
-            AND ctc.target_year = EXTRACT(YEAR FROM cdt.target_date)
+            AND ctc.target_year = COALESCE(EXTRACT(YEAR FROM cdt.target_date), cdt.target_year)
             AND ctc.is_active = true
           WHERE cdt.clinic_id = ${clinicId} 
             AND cdt.target_date >= ${startDate} 
@@ -1076,7 +1076,7 @@ export const getDailyTargetsPaginated = cache(async (
           JOIN master_polies mp ON mp.id = cdt.master_poly_id
           LEFT JOIN clinic_target_configs ctc ON ctc.clinic_id = cdt.clinic_id
             AND ctc.master_poly_id = cdt.master_poly_id
-            AND ctc.target_year = EXTRACT(YEAR FROM cdt.target_date)
+            AND ctc.target_year = COALESCE(EXTRACT(YEAR FROM cdt.target_date), cdt.target_year)
             AND ctc.is_active = true
           WHERE cdt.clinic_id = ${clinicId}
           ORDER BY cdt.id ASC
@@ -1108,7 +1108,7 @@ export const getDailyTargetsPaginated = cache(async (
           JOIN master_polies mp ON mp.id = cdt.master_poly_id
           LEFT JOIN clinic_target_configs ctc ON ctc.clinic_id = cdt.clinic_id
             AND ctc.master_poly_id = cdt.master_poly_id
-            AND ctc.target_year = EXTRACT(YEAR FROM cdt.target_date)
+            AND ctc.target_year = COALESCE(EXTRACT(YEAR FROM cdt.target_date), cdt.target_year)
             AND ctc.is_active = true
           ORDER BY cdt.id ASC
           LIMIT ${limit} OFFSET ${offset}

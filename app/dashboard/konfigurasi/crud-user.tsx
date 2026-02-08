@@ -71,10 +71,8 @@ export function CRUDUser({
   }
 
   useEffect(() => {
-    // Hanya fetch jika initialData tidak ada atau page/limit berubah
-    if (!initialData || page !== initialData.page || limit !== initialData.limit) {
-      loadUsers()
-    }
+    // Always fetch when page or limit changes
+    loadUsers()
     if (!initialClinics || initialClinics.length === 0) {
       loadClinics()
     }

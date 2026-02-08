@@ -314,29 +314,35 @@ export async function POST(request: NextRequest) {
         const patientId = insertedPatient ? (insertedPatient as any).id : null
         const patientVisitCount = insertedPatient ? (insertedPatient as any).visit_count : 0
 
-        // Cari poly_id dari clinic_poly_mappings berdasarkan raw_poly_name
+        // Cari poly_id dari clinic_poly_mappings: clinic_id + raw string polyclinic
+        // Gunakan TRIM + case-insensitive agar match dengan raw_poly_name di mapping
         let polyId: number | null = null
-        if (polyclinic) {
-          const [polyMapping] = await sql`
+        const polyclinicNorm = (polyclinic || '').trim()
+        if (polyclinicNorm) {
+          const polyResults = await sql`
             SELECT master_poly_id 
             FROM clinic_poly_mappings
             WHERE clinic_id = ${clinicId} 
-              AND raw_poly_name = ${polyclinic}
+              AND LOWER(TRIM(raw_poly_name)) = LOWER(${polyclinicNorm})
             LIMIT 1
           `
+          const polyMapping = Array.isArray(polyResults) ? polyResults[0] : polyResults
           polyId = polyMapping ? (polyMapping as any).master_poly_id : null
         }
 
-        // Cari insurance_type_id dari clinic_insurance_mappings berdasarkan raw_insurance_name
+        // Cari insurance_type_id dari clinic_insurance_mappings: clinic_id + raw string insurance_type
+        // Gunakan TRIM + case-insensitive agar match dengan raw_insurance_name di mapping
         let insuranceTypeId: number | null = null
-        if (insuranceType) {
-          const [insuranceMapping] = await sql`
+        const insuranceTypeNorm = (insuranceType || '').trim()
+        if (insuranceTypeNorm) {
+          const insuranceResults = await sql`
             SELECT master_insurance_id 
             FROM clinic_insurance_mappings
             WHERE clinic_id = ${clinicId} 
-              AND raw_insurance_name = ${insuranceType}
+              AND LOWER(TRIM(raw_insurance_name)) = LOWER(${insuranceTypeNorm})
             LIMIT 1
           `
+          const insuranceMapping = Array.isArray(insuranceResults) ? insuranceResults[0] : insuranceResults
           insuranceTypeId = insuranceMapping ? (insuranceMapping as any).master_insurance_id : null
         }
 
@@ -375,6 +381,8 @@ export async function POST(request: NextRequest) {
             voucher_code = EXCLUDED.voucher_code,
             raw_json_data = EXCLUDED.raw_json_data,
             input_type = 'upload',
+            poly_id = EXCLUDED.poly_id,
+            insurance_type_id = EXCLUDED.insurance_type_id,
             bill_regist_discount = EXCLUDED.bill_regist_discount,
             bill_action_discount = EXCLUDED.bill_action_discount,
             bill_lab_discount = EXCLUDED.bill_lab_discount,
@@ -405,17 +413,41 @@ export async function POST(request: NextRequest) {
         // Break data ke transactions_to_zains berdasarkan master_target_categories
         // Hanya ambil field "Jumlah Pembayaran" yang ada nilainya (tidak 0)
         // Mapping sesuai dengan nama di master_target_categories
-        // Setiap kategori dikurangi diskonnya masing-masing jika ada (dengan Math.max untuk memastikan tidak negatif)
-        const paidFields = [
-          { key: 'Jumlah Pembayaran ( Rp. ) - Karcis', category: 'Karcis', value: billRegistDiscount > 0 ? Math.max(0, paidRegist - billRegistDiscount) : paidRegist },
-          { key: 'Jumlah Pembayaran ( Rp. ) - Tindakan', category: 'Tindakan', value: billActionDiscount > 0 ? Math.max(0, paidAction - billActionDiscount) : paidAction },
-          { key: 'Jumlah Pembayaran ( Rp. ) - Laboratorium', category: 'Laboratorium', value: billLabDiscount > 0 ? Math.max(0, paidLab - billLabDiscount) : paidLab },
-          { key: 'Jumlah Pembayaran ( Rp. ) - Obat', category: 'Obat-obatan', value: billDrugDiscount > 0 ? Math.max(0, paidDrug - billDrugDiscount) : paidDrug },
-          { key: 'Jumlah Pembayaran ( Rp. ) - Alkes', category: 'Alat Kesehatan', value: billAlkesDiscount > 0 ? Math.max(0, paidAlkes - billAlkesDiscount) : paidAlkes },
-          { key: 'Jumlah Pembayaran ( Rp. ) - MCU', category: 'MCU', value: billMcuDiscount > 0 ? Math.max(0, paidMcu - billMcuDiscount) : paidMcu },
-          { key: 'Jumlah Pembayaran ( Rp. ) - Radiologi', category: 'Radiologi', value: billRadioDiscount > 0 ? Math.max(0, paidRadio - billRadioDiscount) : paidRadio },
-          { key: 'Jumlah Pembayaran ( Rp. ) - Pembulatan', category: 'Pembulatan', value: paidRounding },
-        ]
+        //
+        // KHUSUS UPLOAD EXCEL: Jika bill_*_discount tidak terisi tapi paid_discount ada,
+        // maka diskon hanya mengurangi nominal Tindakan di transactions_to_zains.
+        const allBillDiscountsEmpty =
+          billRegistDiscount === 0 &&
+          billActionDiscount === 0 &&
+          billLabDiscount === 0 &&
+          billDrugDiscount === 0 &&
+          billAlkesDiscount === 0 &&
+          billMcuDiscount === 0 &&
+          billRadioDiscount === 0
+
+        const usePaidDiscountForTindakanOnly = allBillDiscountsEmpty && paidDiscount > 0
+
+        const paidFields = usePaidDiscountForTindakanOnly
+          ? [
+              { key: 'Jumlah Pembayaran ( Rp. ) - Karcis', category: 'Karcis', value: paidRegist },
+              { key: 'Jumlah Pembayaran ( Rp. ) - Tindakan', category: 'Tindakan', value: Math.max(0, paidAction - paidDiscount) },
+              { key: 'Jumlah Pembayaran ( Rp. ) - Laboratorium', category: 'Laboratorium', value: paidLab },
+              { key: 'Jumlah Pembayaran ( Rp. ) - Obat', category: 'Obat-obatan', value: paidDrug },
+              { key: 'Jumlah Pembayaran ( Rp. ) - Alkes', category: 'Alat Kesehatan', value: paidAlkes },
+              { key: 'Jumlah Pembayaran ( Rp. ) - MCU', category: 'MCU', value: paidMcu },
+              { key: 'Jumlah Pembayaran ( Rp. ) - Radiologi', category: 'Radiologi', value: paidRadio },
+              { key: 'Jumlah Pembayaran ( Rp. ) - Pembulatan', category: 'Pembulatan', value: paidRounding },
+            ]
+          : [
+              { key: 'Jumlah Pembayaran ( Rp. ) - Karcis', category: 'Karcis', value: Math.max(0, paidRegist - billRegistDiscount) },
+              { key: 'Jumlah Pembayaran ( Rp. ) - Tindakan', category: 'Tindakan', value: Math.max(0, paidAction - billActionDiscount) },
+              { key: 'Jumlah Pembayaran ( Rp. ) - Laboratorium', category: 'Laboratorium', value: Math.max(0, paidLab - billLabDiscount) },
+              { key: 'Jumlah Pembayaran ( Rp. ) - Obat', category: 'Obat-obatan', value: Math.max(0, paidDrug - billDrugDiscount) },
+              { key: 'Jumlah Pembayaran ( Rp. ) - Alkes', category: 'Alat Kesehatan', value: Math.max(0, paidAlkes - billAlkesDiscount) },
+              { key: 'Jumlah Pembayaran ( Rp. ) - MCU', category: 'MCU', value: Math.max(0, paidMcu - billMcuDiscount) },
+              { key: 'Jumlah Pembayaran ( Rp. ) - Radiologi', category: 'Radiologi', value: Math.max(0, paidRadio - billRadioDiscount) },
+              { key: 'Jumlah Pembayaran ( Rp. ) - Pembulatan', category: 'Pembulatan', value: paidRounding },
+            ]
 
         // Cari id_donatur dari patient jika ada
         const [patientData] = await sql`

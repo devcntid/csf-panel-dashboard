@@ -143,14 +143,19 @@ async function seed() {
     // B. Master Polies (dengan proteksi duplicate)
     console.log('📝 Seeding master_polies...');
     await sql`
-      INSERT INTO master_polies (name, code) 
+      INSERT INTO master_polies (name, code, description) 
       VALUES 
-        ('Poli Umum', 'GP'), 
-        ('Poli Gigi', 'DENTAL'), 
-        ('Poli KIA/Kebidanan', 'KIA'), 
-        ('Laboratorium', 'LAB'), 
-        ('Radiologi', 'RAD'), 
-        ('Apotek', 'PHARM')
+        ('Poli Umum', 'GP', 'Layanan Medis Umum, Spesialis, & Gawat Darurat'),
+        ('Poli Gigi', 'DENTAL', 'Kesehatan Gigi & Mulut'),
+        ('Poli KIA', 'KIA', 'Kesehatan Ibu, Anak, KB, & Kandungan'),
+        ('Laboratorium', 'LAB', 'Pemeriksaan Penunjang Laboratorium'),
+        ('Poli Fisioterapi', 'PHYSIO', 'Rehabilitasi Medik & Fisioterapi'),
+        ('Poli Kebugaran', 'WELL', 'Wellness, Akupuntur & Olahraga'),
+        ('Poli Aestetik', 'ESTETIK', 'Kecantikan & Estetika'),
+        ('Khitan', 'CIRCUM', 'Layanan Sirkumsisi'),
+        ('Vaksin', 'VAX', 'Layanan Imunisasi & Vaksinasi'),
+        ('Persalinan', 'DELIV', 'Layanan Persalinan & VK'),
+        ('Kelas / Senam Hamil', 'CLASS', 'Edukasi & Senam Hamil')
       ON CONFLICT (name) DO NOTHING
     `;
     console.log('✅ Master polies seeded');
@@ -158,12 +163,12 @@ async function seed() {
     // B0. Master Insurance Types (dengan proteksi duplicate)
     console.log('📝 Seeding master_insurance_types...');
     await sql`
-      INSERT INTO master_insurance_types (name, code) 
+      INSERT INTO master_insurance_types (name, code, description) 
       VALUES 
-        ('BPJS', 'BPJS'), 
-        ('UMUM', 'UMUM'), 
-        ('ASURANSI', 'ASURANSI'), 
-        ('KIS', 'KIS')
+        ('UMUM / PRIBADI', 'GENERAL', 'Pembayaran Mandiri/Tunai'),
+        ('BPJS KESEHATAN', 'BPJS', 'BPJS Kesehatan dan KIS'),
+        ('ASURANSI SWASTA', 'INSURANCE', 'Asuransi Swasta & Corporate (Admedika, Garda, dll)'),
+        ('SOSIAL / MITRA', 'CHARITY', 'Program Member, Zakat, & Bantuan Sosial')
       ON CONFLICT (name) DO NOTHING
     `;
     console.log('✅ Master insurance types seeded');
@@ -210,38 +215,261 @@ async function seed() {
       SELECT id, name FROM master_polies ORDER BY id
     `;
     
-    // Mapping polies untuk setiap klinik
-    // Pastikan selalu ada tepat 60 baris mapping (6 klinik × 10 raw_poly_name)
-    const rawMappings = [
-      'Poli Umum',
-      'POLI UMUM',
-      'Poli Gigi',
-      'POLI GIGI',
-      'Poli KIA',
-      'POLI KIA',
-      'Laboratorium',
-      'LABORATORIUM',
-      'Apotek',
-      'FARMASI',
+    // Mapping polies untuk setiap klinik berdasarkan script SQL
+    const polyMappings = [
+      // KLINIK 1: SURABAYA
+      { clinic_name: 'Klinik Cita Sehat Surabaya', raw_name: 'Poli Umum', master_name: 'Poli Umum' },
+      { clinic_name: 'Klinik Cita Sehat Surabaya', raw_name: 'POLI UMUM', master_name: 'Poli Umum' },
+      { clinic_name: 'Klinik Cita Sehat Surabaya', raw_name: 'POLI UMUM 2', master_name: 'Poli Umum' },
+      { clinic_name: 'Klinik Cita Sehat Surabaya', raw_name: 'POLI UMUM 3', master_name: 'Poli Umum' },
+      { clinic_name: 'Klinik Cita Sehat Surabaya', raw_name: 'POLI UMUM 4', master_name: 'Poli Umum' },
+      { clinic_name: 'Klinik Cita Sehat Surabaya', raw_name: 'Gawat Darurat', master_name: 'Poli Umum' },
+      { clinic_name: 'Klinik Cita Sehat Surabaya', raw_name: 'HOME VISIT', master_name: 'Poli Umum' },
+      { clinic_name: 'Klinik Cita Sehat Surabaya', raw_name: 'MCU', master_name: 'Poli Umum' },
+      { clinic_name: 'Klinik Cita Sehat Surabaya', raw_name: 'Inap Umum', master_name: 'Poli Umum' },
+      { clinic_name: 'Klinik Cita Sehat Surabaya', raw_name: 'Gudang Farmasi', master_name: 'Poli Umum' },
+      { clinic_name: 'Klinik Cita Sehat Surabaya', raw_name: 'Konseling', master_name: 'Poli Umum' },
+      { clinic_name: 'Klinik Cita Sehat Surabaya', raw_name: 'POLI KHITAN', master_name: 'Poli Umum' },
+      { clinic_name: 'Klinik Cita Sehat Surabaya', raw_name: 'POLI TB', master_name: 'Poli Umum' },
+      { clinic_name: 'Klinik Cita Sehat Surabaya', raw_name: 'Poli Gigi', master_name: 'Poli Gigi' },
+      { clinic_name: 'Klinik Cita Sehat Surabaya', raw_name: 'POLI GIGI', master_name: 'Poli Gigi' },
+      { clinic_name: 'Klinik Cita Sehat Surabaya', raw_name: 'POLI GIGI 2', master_name: 'Poli Gigi' },
+      { clinic_name: 'Klinik Cita Sehat Surabaya', raw_name: 'Poli KIA', master_name: 'Poli KIA' },
+      { clinic_name: 'Klinik Cita Sehat Surabaya', raw_name: 'POLI KIA', master_name: 'Poli KIA' },
+      { clinic_name: 'Klinik Cita Sehat Surabaya', raw_name: 'POLI KIA 2', master_name: 'Poli KIA' },
+      { clinic_name: 'Klinik Cita Sehat Surabaya', raw_name: 'POLI KB', master_name: 'Poli KIA' },
+      { clinic_name: 'Klinik Cita Sehat Surabaya', raw_name: 'Poli KB 2', master_name: 'Poli KIA' },
+      { clinic_name: 'Klinik Cita Sehat Surabaya', raw_name: 'POLI KANDUNGAN', master_name: 'Poli KIA' },
+      { clinic_name: 'Klinik Cita Sehat Surabaya', raw_name: 'IMUNISASI (DPT)', master_name: 'Poli KIA' },
+      { clinic_name: 'Klinik Cita Sehat Surabaya', raw_name: 'IMUNISASI (Hep. B)', master_name: 'Poli KIA' },
+      { clinic_name: 'Klinik Cita Sehat Surabaya', raw_name: 'IMUNISASI (Polio)', master_name: 'Poli KIA' },
+      { clinic_name: 'Klinik Cita Sehat Surabaya', raw_name: 'IMUNISASI (BCG)', master_name: 'Poli KIA' },
+      { clinic_name: 'Klinik Cita Sehat Surabaya', raw_name: 'IMUNISASI (Campak)', master_name: 'Poli KIA' },
+      { clinic_name: 'Klinik Cita Sehat Surabaya', raw_name: 'Laboratorium', master_name: 'Laboratorium' },
+      { clinic_name: 'Klinik Cita Sehat Surabaya', raw_name: 'LABORATORIUM', master_name: 'Laboratorium' },
+      { clinic_name: 'Klinik Cita Sehat Surabaya', raw_name: 'Apotek', master_name: 'Poli Umum' },
+      { clinic_name: 'Klinik Cita Sehat Surabaya', raw_name: 'FARMASI', master_name: 'Poli Umum' },
+
+      // KLINIK 2: SEMARANG
+      { clinic_name: 'Klinik Cita Sehat Semarang', raw_name: 'Poli Umum', master_name: 'Poli Umum' },
+      { clinic_name: 'Klinik Cita Sehat Semarang', raw_name: 'POLI UMUM', master_name: 'Poli Umum' },
+      { clinic_name: 'Klinik Cita Sehat Semarang', raw_name: 'POLI UMUM 3', master_name: 'Poli Umum' },
+      { clinic_name: 'Klinik Cita Sehat Semarang', raw_name: 'POLI UMUM 4', master_name: 'Poli Umum' },
+      { clinic_name: 'Klinik Cita Sehat Semarang', raw_name: 'POLI UMUM 5', master_name: 'Poli Umum' },
+      { clinic_name: 'Klinik Cita Sehat Semarang', raw_name: 'Gawat Darurat', master_name: 'Poli Umum' },
+      { clinic_name: 'Klinik Cita Sehat Semarang', raw_name: 'HOME VISIT', master_name: 'Poli Umum' },
+      { clinic_name: 'Klinik Cita Sehat Semarang', raw_name: 'MCU', master_name: 'Poli Umum' },
+      { clinic_name: 'Klinik Cita Sehat Semarang', raw_name: 'MEDICAL CHECK UP', master_name: 'Poli Umum' },
+      { clinic_name: 'Klinik Cita Sehat Semarang', raw_name: 'Konseling', master_name: 'Poli Umum' },
+      { clinic_name: 'Klinik Cita Sehat Semarang', raw_name: 'POLI JIWA', master_name: 'Poli Umum' },
+      { clinic_name: 'Klinik Cita Sehat Semarang', raw_name: 'POLI NAPZA', master_name: 'Poli Umum' },
+      { clinic_name: 'Klinik Cita Sehat Semarang', raw_name: 'POLI SYARAF', master_name: 'Poli Umum' },
+      { clinic_name: 'Klinik Cita Sehat Semarang', raw_name: 'POLI JANTUNG', master_name: 'Poli Umum' },
+      { clinic_name: 'Klinik Cita Sehat Semarang', raw_name: 'POLI PENYAKIT DALAM', master_name: 'Poli Umum' },
+      { clinic_name: 'Klinik Cita Sehat Semarang', raw_name: 'POLI BEDAH', master_name: 'Poli Umum' },
+      { clinic_name: 'Klinik Cita Sehat Semarang', raw_name: 'POLI WOUNDCARE', master_name: 'Poli Umum' },
+      { clinic_name: 'Klinik Cita Sehat Semarang', raw_name: 'POLI MATA', master_name: 'Poli Umum' },
+      { clinic_name: 'Klinik Cita Sehat Semarang', raw_name: 'POLI REFRAKSIONIS', master_name: 'Poli Umum' },
+      { clinic_name: 'Klinik Cita Sehat Semarang', raw_name: 'POLI THT', master_name: 'Poli Umum' },
+      { clinic_name: 'Klinik Cita Sehat Semarang', raw_name: 'POLI KULIT KELAMIN', master_name: 'Poli Umum' },
+      { clinic_name: 'Klinik Cita Sehat Semarang', raw_name: 'POLI PARU', master_name: 'Poli Umum' },
+      { clinic_name: 'Klinik Cita Sehat Semarang', raw_name: 'POLI TB', master_name: 'Poli Umum' },
+      { clinic_name: 'Klinik Cita Sehat Semarang', raw_name: 'POLI LANSIA', master_name: 'Poli Umum' },
+      { clinic_name: 'Klinik Cita Sehat Semarang', raw_name: 'POLI GIZI', master_name: 'Poli Umum' },
+      { clinic_name: 'Klinik Cita Sehat Semarang', raw_name: 'POLI NUTRISIONIS', master_name: 'Poli Umum' },
+      { clinic_name: 'Klinik Cita Sehat Semarang', raw_name: 'POLI KHITAN', master_name: 'Poli Umum' },
+      { clinic_name: 'Klinik Cita Sehat Semarang', raw_name: 'Inap Umum', master_name: 'Poli Umum' },
+      { clinic_name: 'Klinik Cita Sehat Semarang', raw_name: 'Gudang Farmasi', master_name: 'Poli Umum' },
+      { clinic_name: 'Klinik Cita Sehat Semarang', raw_name: 'Fisioterapi', master_name: 'Poli Umum' },
+      { clinic_name: 'Klinik Cita Sehat Semarang', raw_name: 'POLI FISIOTERAPI', master_name: 'Poli Umum' },
+      { clinic_name: 'Klinik Cita Sehat Semarang', raw_name: 'POLI KEDOKTERAN FISIK DAN REHABILITASI MEDIK', master_name: 'Poli Umum' },
+      { clinic_name: 'Klinik Cita Sehat Semarang', raw_name: 'POLI KEDOKTERAN OLAHRAGA', master_name: 'Poli Umum' },
+      { clinic_name: 'Klinik Cita Sehat Semarang', raw_name: 'POLI OLAHRAGA DAN KEBUGARAN', master_name: 'Poli Umum' },
+      { clinic_name: 'Klinik Cita Sehat Semarang', raw_name: 'POLI AKUPUNTUR', master_name: 'Poli Umum' },
+      { clinic_name: 'Klinik Cita Sehat Semarang', raw_name: 'Poli Gigi', master_name: 'Poli Gigi' },
+      { clinic_name: 'Klinik Cita Sehat Semarang', raw_name: 'POLI GIGI', master_name: 'Poli Gigi' },
+      { clinic_name: 'Klinik Cita Sehat Semarang', raw_name: 'POLI BEDAH MULUT', master_name: 'Poli Gigi' },
+      { clinic_name: 'Klinik Cita Sehat Semarang', raw_name: 'POLI PROSTODONSIA', master_name: 'Poli Gigi' },
+      { clinic_name: 'Klinik Cita Sehat Semarang', raw_name: 'POLI KONSERVASI GIGI', master_name: 'Poli Gigi' },
+      { clinic_name: 'Klinik Cita Sehat Semarang', raw_name: 'Poli KIA', master_name: 'Poli KIA' },
+      { clinic_name: 'Klinik Cita Sehat Semarang', raw_name: 'POLI KIA', master_name: 'Poli KIA' },
+      { clinic_name: 'Klinik Cita Sehat Semarang', raw_name: 'POLI KB', master_name: 'Poli KIA' },
+      { clinic_name: 'Klinik Cita Sehat Semarang', raw_name: 'POLI KANDUNGAN', master_name: 'Poli KIA' },
+      { clinic_name: 'Klinik Cita Sehat Semarang', raw_name: 'POLI RB', master_name: 'Poli KIA' },
+      { clinic_name: 'Klinik Cita Sehat Semarang', raw_name: 'POLI ANAK', master_name: 'Poli KIA' },
+      { clinic_name: 'Klinik Cita Sehat Semarang', raw_name: 'POLI LAKTASI', master_name: 'Poli KIA' },
+      { clinic_name: 'Klinik Cita Sehat Semarang', raw_name: 'IMUNISASI (DPT)', master_name: 'Poli KIA' },
+      { clinic_name: 'Klinik Cita Sehat Semarang', raw_name: 'IMUNISASI (Hep. B)', master_name: 'Poli KIA' },
+      { clinic_name: 'Klinik Cita Sehat Semarang', raw_name: 'IMUNISASI (Polio)', master_name: 'Poli KIA' },
+      { clinic_name: 'Klinik Cita Sehat Semarang', raw_name: 'IMUNISASI (BCG)', master_name: 'Poli KIA' },
+      { clinic_name: 'Klinik Cita Sehat Semarang', raw_name: 'IMUNISASI (Campak)', master_name: 'Poli KIA' },
+      { clinic_name: 'Klinik Cita Sehat Semarang', raw_name: 'Laboratorium', master_name: 'Laboratorium' },
+      { clinic_name: 'Klinik Cita Sehat Semarang', raw_name: 'LABORATORIUM', master_name: 'Laboratorium' },
+      { clinic_name: 'Klinik Cita Sehat Semarang', raw_name: 'POLI PATOLOGI', master_name: 'Laboratorium' },
+      { clinic_name: 'Klinik Cita Sehat Semarang', raw_name: 'POLI AESTETIK', master_name: 'Poli Aestetik' },
+
+      // KLINIK 3: JAKARTA
+      { clinic_name: 'Klinik Cita Sehat Jakarta', raw_name: 'Poli Umum', master_name: 'Poli Umum' },
+      { clinic_name: 'Klinik Cita Sehat Jakarta', raw_name: 'POLI UMUM', master_name: 'Poli Umum' },
+      { clinic_name: 'Klinik Cita Sehat Jakarta', raw_name: 'POLI UMUM 2', master_name: 'Poli Umum' },
+      { clinic_name: 'Klinik Cita Sehat Jakarta', raw_name: 'POLI UMUM 3', master_name: 'Poli Umum' },
+      { clinic_name: 'Klinik Cita Sehat Jakarta', raw_name: 'POLI UMUM 4', master_name: 'Poli Umum' },
+      { clinic_name: 'Klinik Cita Sehat Jakarta', raw_name: 'POLI UMUM 5', master_name: 'Poli Umum' },
+      { clinic_name: 'Klinik Cita Sehat Jakarta', raw_name: 'Gawat Darurat', master_name: 'Poli Umum' },
+      { clinic_name: 'Klinik Cita Sehat Jakarta', raw_name: 'HOME VISIT', master_name: 'Poli Umum' },
+      { clinic_name: 'Klinik Cita Sehat Jakarta', raw_name: 'Konseling', master_name: 'Poli Umum' },
+      { clinic_name: 'Klinik Cita Sehat Jakarta', raw_name: 'MCU', master_name: 'Poli Umum' },
+      { clinic_name: 'Klinik Cita Sehat Jakarta', raw_name: 'MEDICAL CHECK UP', master_name: 'Poli Umum' },
+      { clinic_name: 'Klinik Cita Sehat Jakarta', raw_name: 'Inap Umum', master_name: 'Poli Umum' },
+      { clinic_name: 'Klinik Cita Sehat Jakarta', raw_name: 'Gudang Farmasi', master_name: 'Poli Umum' },
+      { clinic_name: 'Klinik Cita Sehat Jakarta', raw_name: 'POLI PENYAKIT DALAM', master_name: 'Poli Umum' },
+      { clinic_name: 'Klinik Cita Sehat Jakarta', raw_name: 'POLI SYARAF', master_name: 'Poli Umum' },
+      { clinic_name: 'Klinik Cita Sehat Jakarta', raw_name: 'POLI JANTUNG', master_name: 'Poli Umum' },
+      { clinic_name: 'Klinik Cita Sehat Jakarta', raw_name: 'POLI MATA', master_name: 'Poli Umum' },
+      { clinic_name: 'Klinik Cita Sehat Jakarta', raw_name: 'POLI THT', master_name: 'Poli Umum' },
+      { clinic_name: 'Klinik Cita Sehat Jakarta', raw_name: 'POLI BEDAH', master_name: 'Poli Umum' },
+      { clinic_name: 'Klinik Cita Sehat Jakarta', raw_name: 'POLI KULIT KELAMIN', master_name: 'Poli Umum' },
+      { clinic_name: 'Klinik Cita Sehat Jakarta', raw_name: 'POLI JIWA', master_name: 'Poli Umum' },
+      { clinic_name: 'Klinik Cita Sehat Jakarta', raw_name: 'POLI NAPZA', master_name: 'Poli Umum' },
+      { clinic_name: 'Klinik Cita Sehat Jakarta', raw_name: 'POLI LANSIA', master_name: 'Poli Umum' },
+      { clinic_name: 'Klinik Cita Sehat Jakarta', raw_name: 'POLI PARU', master_name: 'Poli Umum' },
+      { clinic_name: 'Klinik Cita Sehat Jakarta', raw_name: 'POLI TB', master_name: 'Poli Umum' },
+      { clinic_name: 'Klinik Cita Sehat Jakarta', raw_name: 'POLI GIZI', master_name: 'Poli Umum' },
+      { clinic_name: 'Klinik Cita Sehat Jakarta', raw_name: 'POLI NUTRISIONIS', master_name: 'Poli Umum' },
+      { clinic_name: 'Klinik Cita Sehat Jakarta', raw_name: 'POLI FISIOTERAPI', master_name: 'Poli Umum' },
+      { clinic_name: 'Klinik Cita Sehat Jakarta', raw_name: 'POLI AKUPUNTUR', master_name: 'Poli Umum' },
+      { clinic_name: 'Klinik Cita Sehat Jakarta', raw_name: 'POLI RADIOLOGI', master_name: 'Poli Umum' },
+      { clinic_name: 'Klinik Cita Sehat Jakarta', raw_name: 'POLI RADIOGRAFER', master_name: 'Poli Umum' },
+      { clinic_name: 'Klinik Cita Sehat Jakarta', raw_name: 'Poli Gigi', master_name: 'Poli Gigi' },
+      { clinic_name: 'Klinik Cita Sehat Jakarta', raw_name: 'POLI GIGI', master_name: 'Poli Gigi' },
+      { clinic_name: 'Klinik Cita Sehat Jakarta', raw_name: 'POLI BEDAH MULUT', master_name: 'Poli Gigi' },
+      { clinic_name: 'Klinik Cita Sehat Jakarta', raw_name: 'POLI PROSTODONSIA', master_name: 'Poli Gigi' },
+      { clinic_name: 'Klinik Cita Sehat Jakarta', raw_name: 'POLI KONSERVASI GIGI', master_name: 'Poli Gigi' },
+      { clinic_name: 'Klinik Cita Sehat Jakarta', raw_name: 'Poli KIA', master_name: 'Poli KIA' },
+      { clinic_name: 'Klinik Cita Sehat Jakarta', raw_name: 'POLI KIA', master_name: 'Poli KIA' },
+      { clinic_name: 'Klinik Cita Sehat Jakarta', raw_name: 'POLI KB', master_name: 'Poli KIA' },
+      { clinic_name: 'Klinik Cita Sehat Jakarta', raw_name: 'POLI KANDUNGAN', master_name: 'Poli KIA' },
+      { clinic_name: 'Klinik Cita Sehat Jakarta', raw_name: 'POLI ANAK', master_name: 'Poli KIA' },
+      { clinic_name: 'Klinik Cita Sehat Jakarta', raw_name: 'POLI LAKTASI', master_name: 'Poli KIA' },
+      { clinic_name: 'Klinik Cita Sehat Jakarta', raw_name: 'POLI RB', master_name: 'Poli KIA' },
+      { clinic_name: 'Klinik Cita Sehat Jakarta', raw_name: 'IMUNISASI (DPT)', master_name: 'Poli KIA' },
+      { clinic_name: 'Klinik Cita Sehat Jakarta', raw_name: 'IMUNISASI (Hep. B)', master_name: 'Poli KIA' },
+      { clinic_name: 'Klinik Cita Sehat Jakarta', raw_name: 'IMUNISASI (Polio)', master_name: 'Poli KIA' },
+      { clinic_name: 'Klinik Cita Sehat Jakarta', raw_name: 'IMUNISASI (BCG)', master_name: 'Poli KIA' },
+      { clinic_name: 'Klinik Cita Sehat Jakarta', raw_name: 'IMUNISASI (Campak)', master_name: 'Poli KIA' },
+      { clinic_name: 'Klinik Cita Sehat Jakarta', raw_name: 'POLI KHITAN', master_name: 'Khitan' },
+      { clinic_name: 'Klinik Cita Sehat Jakarta', raw_name: 'Laboratorium', master_name: 'Laboratorium' },
+      { clinic_name: 'Klinik Cita Sehat Jakarta', raw_name: 'LABORATORIUM', master_name: 'Laboratorium' },
+      { clinic_name: 'Klinik Cita Sehat Jakarta', raw_name: 'POLI PATOLOGI', master_name: 'Laboratorium' },
+
+      // KLINIK 4: MEDAN
+      { clinic_name: 'Klinik Cita Sehat Medan', raw_name: 'Poli Umum', master_name: 'Poli Umum' },
+      { clinic_name: 'Klinik Cita Sehat Medan', raw_name: 'POLI UMUM', master_name: 'Poli Umum' },
+      { clinic_name: 'Klinik Cita Sehat Medan', raw_name: 'POLI UMUM 2', master_name: 'Poli Umum' },
+      { clinic_name: 'Klinik Cita Sehat Medan', raw_name: 'POLI UMUM 3', master_name: 'Poli Umum' },
+      { clinic_name: 'Klinik Cita Sehat Medan', raw_name: 'POLI UMUM 4', master_name: 'Poli Umum' },
+      { clinic_name: 'Klinik Cita Sehat Medan', raw_name: 'POLI UMUM 5', master_name: 'Poli Umum' },
+      { clinic_name: 'Klinik Cita Sehat Medan', raw_name: 'Gawat Darurat', master_name: 'Poli Umum' },
+      { clinic_name: 'Klinik Cita Sehat Medan', raw_name: 'HOME VISIT', master_name: 'Poli Umum' },
+      { clinic_name: 'Klinik Cita Sehat Medan', raw_name: 'MCU', master_name: 'Poli Umum' },
+      { clinic_name: 'Klinik Cita Sehat Medan', raw_name: 'MEDICAL CHECK UP', master_name: 'Poli Umum' },
+      { clinic_name: 'Klinik Cita Sehat Medan', raw_name: 'Konseling', master_name: 'Poli Umum' },
+      { clinic_name: 'Klinik Cita Sehat Medan', raw_name: 'Inap Umum', master_name: 'Poli Umum' },
+      { clinic_name: 'Klinik Cita Sehat Medan', raw_name: 'Gudang Farmasi', master_name: 'Poli Umum' },
+      { clinic_name: 'Klinik Cita Sehat Medan', raw_name: 'POLI PENYAKIT DALAM', master_name: 'Poli Umum' },
+      { clinic_name: 'Klinik Cita Sehat Medan', raw_name: 'POLI JANTUNG', master_name: 'Poli Umum' },
+      { clinic_name: 'Klinik Cita Sehat Medan', raw_name: 'POLI SYARAF', master_name: 'Poli Umum' },
+      { clinic_name: 'Klinik Cita Sehat Medan', raw_name: 'POLI MATA', master_name: 'Poli Umum' },
+      { clinic_name: 'Klinik Cita Sehat Medan', raw_name: 'POLI THT', master_name: 'Poli Umum' },
+      { clinic_name: 'Klinik Cita Sehat Medan', raw_name: 'POLI BEDAH', master_name: 'Poli Umum' },
+      { clinic_name: 'Klinik Cita Sehat Medan', raw_name: 'POLI KULIT KELAMIN', master_name: 'Poli Umum' },
+      { clinic_name: 'Klinik Cita Sehat Medan', raw_name: 'POLI JIWA', master_name: 'Poli Umum' },
+      { clinic_name: 'Klinik Cita Sehat Medan', raw_name: 'POLI NAPZA', master_name: 'Poli Umum' },
+      { clinic_name: 'Klinik Cita Sehat Medan', raw_name: 'POLI LANSIA', master_name: 'Poli Umum' },
+      { clinic_name: 'Klinik Cita Sehat Medan', raw_name: 'POLI PARU', master_name: 'Poli Umum' },
+      { clinic_name: 'Klinik Cita Sehat Medan', raw_name: 'POLI TB', master_name: 'Poli Umum' },
+      { clinic_name: 'Klinik Cita Sehat Medan', raw_name: 'POLI GIZI', master_name: 'Poli Umum' },
+      { clinic_name: 'Klinik Cita Sehat Medan', raw_name: 'POLI NUTRISIONIS', master_name: 'Poli Umum' },
+      { clinic_name: 'Klinik Cita Sehat Medan', raw_name: 'POLI RADIOLOGI', master_name: 'Poli Umum' },
+      { clinic_name: 'Klinik Cita Sehat Medan', raw_name: 'POLI RADIOGRAFER', master_name: 'Poli Umum' },
+      { clinic_name: 'Klinik Cita Sehat Medan', raw_name: 'Laboratorium', master_name: 'Poli Umum' },
+      { clinic_name: 'Klinik Cita Sehat Medan', raw_name: 'LABORATORIUM', master_name: 'Poli Umum' },
+      { clinic_name: 'Klinik Cita Sehat Medan', raw_name: 'Poli Gigi', master_name: 'Poli Gigi' },
+      { clinic_name: 'Klinik Cita Sehat Medan', raw_name: 'POLI GIGI', master_name: 'Poli Gigi' },
+      { clinic_name: 'Klinik Cita Sehat Medan', raw_name: 'POLI BEDAH MULUT', master_name: 'Poli Gigi' },
+      { clinic_name: 'Klinik Cita Sehat Medan', raw_name: 'POLI PROSTODONSIA', master_name: 'Poli Gigi' },
+      { clinic_name: 'Klinik Cita Sehat Medan', raw_name: 'POLI KONSERVASI GIGI', master_name: 'Poli Gigi' },
+      { clinic_name: 'Klinik Cita Sehat Medan', raw_name: 'Poli KIA', master_name: 'Poli KIA' },
+      { clinic_name: 'Klinik Cita Sehat Medan', raw_name: 'POLI KIA', master_name: 'Poli KIA' },
+      { clinic_name: 'Klinik Cita Sehat Medan', raw_name: 'POLI KB', master_name: 'Poli KIA' },
+      { clinic_name: 'Klinik Cita Sehat Medan', raw_name: 'POLI KANDUNGAN', master_name: 'Poli KIA' },
+      { clinic_name: 'Klinik Cita Sehat Medan', raw_name: 'POLI ANAK', master_name: 'Poli KIA' },
+      { clinic_name: 'Klinik Cita Sehat Medan', raw_name: 'POLI LAKTASI', master_name: 'Poli KIA' },
+      { clinic_name: 'Klinik Cita Sehat Medan', raw_name: 'POLI RB', master_name: 'Poli KIA' },
+      { clinic_name: 'Klinik Cita Sehat Medan', raw_name: 'IMUNISASI (DPT)', master_name: 'Poli KIA' },
+      { clinic_name: 'Klinik Cita Sehat Medan', raw_name: 'IMUNISASI (Hep. B)', master_name: 'Poli KIA' },
+      { clinic_name: 'Klinik Cita Sehat Medan', raw_name: 'IMUNISASI (Polio)', master_name: 'Poli KIA' },
+      { clinic_name: 'Klinik Cita Sehat Medan', raw_name: 'IMUNISASI (BCG)', master_name: 'Poli KIA' },
+      { clinic_name: 'Klinik Cita Sehat Medan', raw_name: 'IMUNISASI (Campak)', master_name: 'Poli KIA' },
+      { clinic_name: 'Klinik Cita Sehat Medan', raw_name: 'POLI KHITAN', master_name: 'Khitan' },
+      { clinic_name: 'Klinik Cita Sehat Medan', raw_name: 'POLI FISIOTERAPI', master_name: 'Poli Fisioterapi' },
+      { clinic_name: 'Klinik Cita Sehat Medan', raw_name: 'FISIOTERAPI', master_name: 'Poli Fisioterapi' },
+      { clinic_name: 'Klinik Cita Sehat Medan', raw_name: 'POLI KEDOKTERAN FISIK DAN REHABILITASI MEDIK', master_name: 'Poli Fisioterapi' },
+      { clinic_name: 'Klinik Cita Sehat Medan', raw_name: 'POLI AKUPUNTUR', master_name: 'Poli Fisioterapi' },
+
+      // KLINIK 5: PEKANBARU
+      { clinic_name: 'Klinik Cita Sehat Pekanbaru', raw_name: 'Poli Umum', master_name: 'Poli Umum' },
+      { clinic_name: 'Klinik Cita Sehat Pekanbaru', raw_name: 'POLI UMUM', master_name: 'Poli Umum' },
+      { clinic_name: 'Klinik Cita Sehat Pekanbaru', raw_name: 'Konseling', master_name: 'Poli Umum' },
+      { clinic_name: 'Klinik Cita Sehat Pekanbaru', raw_name: 'POLI KHITAN', master_name: 'Poli Umum' },
+      { clinic_name: 'Klinik Cita Sehat Pekanbaru', raw_name: 'Gudang Farmasi', master_name: 'Poli Umum' },
+      { clinic_name: 'Klinik Cita Sehat Pekanbaru', raw_name: 'Laboratorium', master_name: 'Poli Umum' },
+      { clinic_name: 'Klinik Cita Sehat Pekanbaru', raw_name: 'LABORATORIUM', master_name: 'Poli Umum' },
+      { clinic_name: 'Klinik Cita Sehat Pekanbaru', raw_name: 'Poli Gigi', master_name: 'Poli Gigi' },
+      { clinic_name: 'Klinik Cita Sehat Pekanbaru', raw_name: 'POLI GIGI', master_name: 'Poli Gigi' },
+      { clinic_name: 'Klinik Cita Sehat Pekanbaru', raw_name: 'Poli KIA', master_name: 'Poli KIA' },
+      { clinic_name: 'Klinik Cita Sehat Pekanbaru', raw_name: 'POLI KIA', master_name: 'Poli KIA' },
+      { clinic_name: 'Klinik Cita Sehat Pekanbaru', raw_name: 'POLI KB', master_name: 'Poli KIA' },
+      { clinic_name: 'Klinik Cita Sehat Pekanbaru', raw_name: 'IMUNISASI (DPT)', master_name: 'Vaksin' },
+      { clinic_name: 'Klinik Cita Sehat Pekanbaru', raw_name: 'IMUNISASI (Hep. B)', master_name: 'Vaksin' },
+      { clinic_name: 'Klinik Cita Sehat Pekanbaru', raw_name: 'IMUNISASI (Polio)', master_name: 'Vaksin' },
+      { clinic_name: 'Klinik Cita Sehat Pekanbaru', raw_name: 'IMUNISASI (BCG)', master_name: 'Vaksin' },
+      { clinic_name: 'Klinik Cita Sehat Pekanbaru', raw_name: 'IMUNISASI (Campak)', master_name: 'Vaksin' },
+
+      // KLINIK 6: YOGYAKARTA
+      { clinic_name: 'Klinik Cita Sehat Yogyakarta', raw_name: 'Poli Umum', master_name: 'Poli Umum' },
+      { clinic_name: 'Klinik Cita Sehat Yogyakarta', raw_name: 'POLI UMUM', master_name: 'Poli Umum' },
+      { clinic_name: 'Klinik Cita Sehat Yogyakarta', raw_name: 'GAWAT DARURAT', master_name: 'Poli Umum' },
+      { clinic_name: 'Klinik Cita Sehat Yogyakarta', raw_name: 'KONSELING', master_name: 'Poli Umum' },
+      { clinic_name: 'Klinik Cita Sehat Yogyakarta', raw_name: 'Gudang Farmasi', master_name: 'Poli Umum' },
+      { clinic_name: 'Klinik Cita Sehat Yogyakarta', raw_name: 'POLI KHITAN', master_name: 'Poli Umum' },
+      { clinic_name: 'Klinik Cita Sehat Yogyakarta', raw_name: 'Poli Gigi', master_name: 'Poli Gigi' },
+      { clinic_name: 'Klinik Cita Sehat Yogyakarta', raw_name: 'POLI GIGI', master_name: 'Poli Gigi' },
+      { clinic_name: 'Klinik Cita Sehat Yogyakarta', raw_name: 'Poli KIA', master_name: 'Poli KIA' },
+      { clinic_name: 'Klinik Cita Sehat Yogyakarta', raw_name: 'POLI KIA', master_name: 'Poli KIA' },
+      { clinic_name: 'Klinik Cita Sehat Yogyakarta', raw_name: 'POLI KB', master_name: 'Poli KIA' },
+      { clinic_name: 'Klinik Cita Sehat Yogyakarta', raw_name: 'IMUNISASI (DPT)', master_name: 'Poli KIA' },
+      { clinic_name: 'Klinik Cita Sehat Yogyakarta', raw_name: 'IMUNISASI (Polio)', master_name: 'Poli KIA' },
+      { clinic_name: 'Klinik Cita Sehat Yogyakarta', raw_name: 'Laboratorium', master_name: 'Laboratorium' },
+      { clinic_name: 'Klinik Cita Sehat Yogyakarta', raw_name: 'LABORATORIUM', master_name: 'Laboratorium' },
+      { clinic_name: 'Klinik Cita Sehat Yogyakarta', raw_name: 'FISIOTERAPI', master_name: 'Poli Fisioterapi' },
+      { clinic_name: 'Klinik Cita Sehat Yogyakarta', raw_name: 'POLI FISIOTERAPI', master_name: 'Poli Fisioterapi' },
+      { clinic_name: 'Klinik Cita Sehat Yogyakarta', raw_name: 'KEBUGARAN', master_name: 'Poli Kebugaran' },
+      { clinic_name: 'Klinik Cita Sehat Yogyakarta', raw_name: 'POLI OLAHRAGA DAN KEBUGARAN', master_name: 'Poli Kebugaran' },
+      { clinic_name: 'Klinik Cita Sehat Yogyakarta', raw_name: 'AKUPUNTUR', master_name: 'Poli Kebugaran' },
     ];
 
-    for (const clinic of allClinics) {
-      for (const rawName of rawMappings) {
-        const masterName =
-          rawName.toUpperCase().includes('UMUM') ? 'Poli Umum' :
-          rawName.toUpperCase().includes('GIGI') ? 'Poli Gigi' :
-          rawName.toUpperCase().includes('KIA') ? 'Poli KIA/Kebidanan' :
-          rawName.toUpperCase().includes('LABORATORIUM') ? 'Laboratorium' :
-          'Apotek';
-
-        const masterPoly = allPolies.find((p: any) => p.name === masterName);
-        if (masterPoly) {
-          await sql`
-            INSERT INTO clinic_poly_mappings (clinic_id, raw_poly_name, master_poly_id, is_revenue_center) 
-            VALUES (${clinic.id}, ${rawName}, ${masterPoly.id}, true)
-            ON CONFLICT (clinic_id, raw_poly_name) DO NOTHING
-          `;
-        }
+    for (const mapping of polyMappings) {
+      const clinic = allClinics.find((c: any) => c.name === mapping.clinic_name);
+      const masterPoly = allPolies.find((p: any) => p.name === mapping.master_name);
+      
+      if (clinic && masterPoly) {
+        await sql`
+          INSERT INTO clinic_poly_mappings (clinic_id, raw_poly_name, master_poly_id, is_revenue_center) 
+          VALUES (${clinic.id}, ${mapping.raw_name}, ${masterPoly.id}, true)
+          ON CONFLICT (clinic_id, raw_poly_name) 
+          DO UPDATE SET master_poly_id = EXCLUDED.master_poly_id
+        `;
       }
     }
     console.log('✅ Clinic poly mappings seeded');
@@ -257,37 +485,105 @@ async function seed() {
       SELECT id, name FROM master_insurance_types ORDER BY id
     `;
     
-    // Mapping insurance types untuk setiap klinik
-    const rawInsuranceMappings = [
-      'BPJS',
-      'bpjs',
-      'BPJS Kesehatan',
-      'UMUM',
-      'umum',
-      'TUNAI',
-      'Asuransi',
-      'ASURANSI',
-      'KIS',
-      'kis',
+    // Mapping insurance types untuk setiap klinik berdasarkan script SQL
+    const insuranceMappings = [
+      // KLINIK 1: SURABAYA
+      { clinic_name: 'Klinik Cita Sehat Surabaya', raw_name: 'Umum', master_name: 'UMUM / PRIBADI' },
+      { clinic_name: 'Klinik Cita Sehat Surabaya', raw_name: 'Non muslim', master_name: 'UMUM / PRIBADI' },
+      { clinic_name: 'Klinik Cita Sehat Surabaya', raw_name: 'BPJS', master_name: 'BPJS KESEHATAN' },
+      { clinic_name: 'Klinik Cita Sehat Surabaya', raw_name: 'bpjs', master_name: 'BPJS KESEHATAN' },
+      { clinic_name: 'Klinik Cita Sehat Surabaya', raw_name: 'BPJS Kesehatan', master_name: 'BPJS KESEHATAN' },
+      { clinic_name: 'Klinik Cita Sehat Surabaya', raw_name: 'Garda medika', master_name: 'ASURANSI SWASTA' },
+      { clinic_name: 'Klinik Cita Sehat Surabaya', raw_name: 'Admedika', master_name: 'ASURANSI SWASTA' },
+      { clinic_name: 'Klinik Cita Sehat Surabaya', raw_name: 'BNI Life', master_name: 'ASURANSI SWASTA' },
+      { clinic_name: 'Klinik Cita Sehat Surabaya', raw_name: 'Member - Fakir', master_name: 'SOSIAL / MITRA' },
+      { clinic_name: 'Klinik Cita Sehat Surabaya', raw_name: 'Member - Miskin', master_name: 'SOSIAL / MITRA' },
+      { clinic_name: 'Klinik Cita Sehat Surabaya', raw_name: 'Member - Amil', master_name: 'SOSIAL / MITRA' },
+      { clinic_name: 'Klinik Cita Sehat Surabaya', raw_name: 'Member - Hamba sahaya', master_name: 'SOSIAL / MITRA' },
+      { clinic_name: 'Klinik Cita Sehat Surabaya', raw_name: 'Member - Gharimin', master_name: 'SOSIAL / MITRA' },
+      { clinic_name: 'Klinik Cita Sehat Surabaya', raw_name: 'Member - Fii sabilillah', master_name: 'SOSIAL / MITRA' },
+      { clinic_name: 'Klinik Cita Sehat Surabaya', raw_name: 'Member - Ibnu sabil', master_name: 'SOSIAL / MITRA' },
+      { clinic_name: 'Klinik Cita Sehat Surabaya', raw_name: 'Member - Muallaf', master_name: 'SOSIAL / MITRA' },
+      { clinic_name: 'Klinik Cita Sehat Surabaya', raw_name: 'Sahabat Klinik', master_name: 'SOSIAL / MITRA' },
+
+      // KLINIK 2: SEMARANG
+      { clinic_name: 'Klinik Cita Sehat Semarang', raw_name: 'Umum', master_name: 'UMUM / PRIBADI' },
+      { clinic_name: 'Klinik Cita Sehat Semarang', raw_name: 'Non muslim', master_name: 'UMUM / PRIBADI' },
+      { clinic_name: 'Klinik Cita Sehat Semarang', raw_name: 'BPJS', master_name: 'BPJS KESEHATAN' },
+      { clinic_name: 'Klinik Cita Sehat Semarang', raw_name: 'GARDA MEDIKA', master_name: 'ASURANSI SWASTA' },
+      { clinic_name: 'Klinik Cita Sehat Semarang', raw_name: 'Member - Fakir', master_name: 'SOSIAL / MITRA' },
+      { clinic_name: 'Klinik Cita Sehat Semarang', raw_name: 'Member - Miskin', master_name: 'SOSIAL / MITRA' },
+      { clinic_name: 'Klinik Cita Sehat Semarang', raw_name: 'Member - Amil', master_name: 'SOSIAL / MITRA' },
+      { clinic_name: 'Klinik Cita Sehat Semarang', raw_name: 'Member - Hamba sahaya', master_name: 'SOSIAL / MITRA' },
+      { clinic_name: 'Klinik Cita Sehat Semarang', raw_name: 'Member - Gharimin', master_name: 'SOSIAL / MITRA' },
+      { clinic_name: 'Klinik Cita Sehat Semarang', raw_name: 'Member - Fii sabilillah', master_name: 'SOSIAL / MITRA' },
+      { clinic_name: 'Klinik Cita Sehat Semarang', raw_name: 'Member - Ibnu sabil', master_name: 'SOSIAL / MITRA' },
+      { clinic_name: 'Klinik Cita Sehat Semarang', raw_name: 'member - mualaf', master_name: 'SOSIAL / MITRA' },
+      { clinic_name: 'Klinik Cita Sehat Semarang', raw_name: 'Sahabat Klinik', master_name: 'SOSIAL / MITRA' },
+
+      // KLINIK 3: JAKARTA
+      { clinic_name: 'Klinik Cita Sehat Jakarta', raw_name: 'Umum', master_name: 'UMUM / PRIBADI' },
+      { clinic_name: 'Klinik Cita Sehat Jakarta', raw_name: 'Non muslim', master_name: 'UMUM / PRIBADI' },
+      { clinic_name: 'Klinik Cita Sehat Jakarta', raw_name: 'BPJS', master_name: 'BPJS KESEHATAN' },
+      { clinic_name: 'Klinik Cita Sehat Jakarta', raw_name: 'Member - Fakir', master_name: 'SOSIAL / MITRA' },
+      { clinic_name: 'Klinik Cita Sehat Jakarta', raw_name: 'Member - Miskin', master_name: 'SOSIAL / MITRA' },
+      { clinic_name: 'Klinik Cita Sehat Jakarta', raw_name: 'Member - Amil', master_name: 'SOSIAL / MITRA' },
+      { clinic_name: 'Klinik Cita Sehat Jakarta', raw_name: 'Member - Hamba sahaya', master_name: 'SOSIAL / MITRA' },
+      { clinic_name: 'Klinik Cita Sehat Jakarta', raw_name: 'Member - Gharimin', master_name: 'SOSIAL / MITRA' },
+      { clinic_name: 'Klinik Cita Sehat Jakarta', raw_name: 'Member - Fii sabilillah', master_name: 'SOSIAL / MITRA' },
+      { clinic_name: 'Klinik Cita Sehat Jakarta', raw_name: 'Member - Ibnu sabil', master_name: 'SOSIAL / MITRA' },
+      { clinic_name: 'Klinik Cita Sehat Jakarta', raw_name: 'Member - Muallaf', master_name: 'SOSIAL / MITRA' },
+      { clinic_name: 'Klinik Cita Sehat Jakarta', raw_name: 'Sahabat Klinik', master_name: 'SOSIAL / MITRA' },
+
+      // KLINIK 4: MEDAN
+      { clinic_name: 'Klinik Cita Sehat Medan', raw_name: 'Umum', master_name: 'UMUM / PRIBADI' },
+      { clinic_name: 'Klinik Cita Sehat Medan', raw_name: 'Non muslim', master_name: 'UMUM / PRIBADI' },
+      { clinic_name: 'Klinik Cita Sehat Medan', raw_name: 'BPJS', master_name: 'BPJS KESEHATAN' },
+      { clinic_name: 'Klinik Cita Sehat Medan', raw_name: 'Member - Fakir', master_name: 'SOSIAL / MITRA' },
+      { clinic_name: 'Klinik Cita Sehat Medan', raw_name: 'Member - Miskin', master_name: 'SOSIAL / MITRA' },
+      { clinic_name: 'Klinik Cita Sehat Medan', raw_name: 'Member - Amil', master_name: 'SOSIAL / MITRA' },
+      { clinic_name: 'Klinik Cita Sehat Medan', raw_name: 'Member - Hamba sahaya', master_name: 'SOSIAL / MITRA' },
+      { clinic_name: 'Klinik Cita Sehat Medan', raw_name: 'Member - Gharimin', master_name: 'SOSIAL / MITRA' },
+      { clinic_name: 'Klinik Cita Sehat Medan', raw_name: 'Member - Fii sabilillah', master_name: 'SOSIAL / MITRA' },
+      { clinic_name: 'Klinik Cita Sehat Medan', raw_name: 'Member - Ibnu sabil', master_name: 'SOSIAL / MITRA' },
+      { clinic_name: 'Klinik Cita Sehat Medan', raw_name: 'Member - Muallaf', master_name: 'SOSIAL / MITRA' },
+      { clinic_name: 'Klinik Cita Sehat Medan', raw_name: 'Sahabat Klinik', master_name: 'SOSIAL / MITRA' },
+
+      // KLINIK 5: PEKANBARU
+      { clinic_name: 'Klinik Cita Sehat Pekanbaru', raw_name: 'Umum', master_name: 'UMUM / PRIBADI' },
+      { clinic_name: 'Klinik Cita Sehat Pekanbaru', raw_name: 'BPJS', master_name: 'BPJS KESEHATAN' },
+      { clinic_name: 'Klinik Cita Sehat Pekanbaru', raw_name: 'Member - Fakir', master_name: 'SOSIAL / MITRA' },
+      { clinic_name: 'Klinik Cita Sehat Pekanbaru', raw_name: 'Member - Miskin', master_name: 'SOSIAL / MITRA' },
+      { clinic_name: 'Klinik Cita Sehat Pekanbaru', raw_name: 'Member - Amil', master_name: 'SOSIAL / MITRA' },
+      { clinic_name: 'Klinik Cita Sehat Pekanbaru', raw_name: 'Member - Hamba sahaya', master_name: 'SOSIAL / MITRA' },
+      { clinic_name: 'Klinik Cita Sehat Pekanbaru', raw_name: 'Member - Gharimin', master_name: 'SOSIAL / MITRA' },
+      { clinic_name: 'Klinik Cita Sehat Pekanbaru', raw_name: 'Member - Fii sabilillah', master_name: 'SOSIAL / MITRA' },
+      { clinic_name: 'Klinik Cita Sehat Pekanbaru', raw_name: 'Member - Ibnu sabil', master_name: 'SOSIAL / MITRA' },
+      { clinic_name: 'Klinik Cita Sehat Pekanbaru', raw_name: 'Member - Muallaf', master_name: 'SOSIAL / MITRA' },
+      { clinic_name: 'Klinik Cita Sehat Pekanbaru', raw_name: 'Sahabat Klinik', master_name: 'SOSIAL / MITRA' },
+
+      // KLINIK 6: YOGYAKARTA
+      { clinic_name: 'Klinik Cita Sehat Yogyakarta', raw_name: 'Umum', master_name: 'UMUM / PRIBADI' },
+      { clinic_name: 'Klinik Cita Sehat Yogyakarta', raw_name: 'BPJS Kesehatan', master_name: 'BPJS KESEHATAN' },
+      { clinic_name: 'Klinik Cita Sehat Yogyakarta', raw_name: 'Pemerintah Daerah Kota', master_name: 'BPJS KESEHATAN' },
+      { clinic_name: 'Klinik Cita Sehat Yogyakarta', raw_name: 'Member bpjs', master_name: 'BPJS KESEHATAN' },
+      { clinic_name: 'Klinik Cita Sehat Yogyakarta', raw_name: 'garda medika', master_name: 'ASURANSI SWASTA' },
+      { clinic_name: 'Klinik Cita Sehat Yogyakarta', raw_name: 'admedika', master_name: 'ASURANSI SWASTA' },
+      { clinic_name: 'Klinik Cita Sehat Yogyakarta', raw_name: 'BRI LIFE', master_name: 'ASURANSI SWASTA' },
+      { clinic_name: 'Klinik Cita Sehat Yogyakarta', raw_name: 'Member rumah zakat', master_name: 'SOSIAL / MITRA' },
     ];
 
-    for (const clinic of allClinicsForInsurance) {
-      for (const rawName of rawInsuranceMappings) {
-        const masterName =
-          rawName.toUpperCase().includes('BPJS') ? 'BPJS' :
-          rawName.toUpperCase().includes('UMUM') || rawName.toUpperCase().includes('TUNAI') ? 'UMUM' :
-          rawName.toUpperCase().includes('ASURANSI') ? 'ASURANSI' :
-          rawName.toUpperCase().includes('KIS') ? 'KIS' :
-          'UMUM';
-
-        const masterInsurance = allInsuranceTypes.find((i: any) => i.name === masterName);
-        if (masterInsurance) {
-          await sql`
-            INSERT INTO clinic_insurance_mappings (clinic_id, raw_insurance_name, master_insurance_id) 
-            VALUES (${clinic.id}, ${rawName}, ${masterInsurance.id})
-            ON CONFLICT (clinic_id, raw_insurance_name) DO NOTHING
-          `;
-        }
+    for (const mapping of insuranceMappings) {
+      const clinic = allClinicsForInsurance.find((c: any) => c.name === mapping.clinic_name);
+      const masterInsurance = allInsuranceTypes.find((i: any) => i.name === mapping.master_name);
+      
+      if (clinic && masterInsurance) {
+        await sql`
+          INSERT INTO clinic_insurance_mappings (clinic_id, raw_insurance_name, master_insurance_id) 
+          VALUES (${clinic.id}, ${mapping.raw_name}, ${masterInsurance.id})
+          ON CONFLICT (clinic_id, raw_insurance_name) 
+          DO UPDATE SET master_insurance_id = EXCLUDED.master_insurance_id
+        `;
       }
     }
     console.log('✅ Clinic insurance mappings seeded');
@@ -481,17 +777,15 @@ async function seed() {
     
     // Get all polies untuk config
     const polyUmum = await sql`SELECT id FROM master_polies WHERE name = 'Poli Umum' LIMIT 1`;
-    const polyApotek = await sql`SELECT id FROM master_polies WHERE name = 'Apotek' LIMIT 1`;
-    const polyKIA = await sql`SELECT id FROM master_polies WHERE name = 'Poli KIA/Kebidanan' LIMIT 1`;
+    const polyKIA = await sql`SELECT id FROM master_polies WHERE name = 'Poli KIA' LIMIT 1`;
     const polyLab = await sql`SELECT id FROM master_polies WHERE name = 'Laboratorium' LIMIT 1`;
 
     // Seed target configs untuk beberapa klinik
     const targetConfigsData = [
       { clinic_name: 'Klinik Cita Sehat Surabaya', poly_name: 'Poli Umum', year: 2026, base_rate: 50000 },
       { clinic_name: 'Klinik Cita Sehat Surabaya', poly_name: 'Poli Umum', year: 2025, base_rate: 45000 },
-      { clinic_name: 'Klinik Cita Sehat Surabaya', poly_name: 'Apotek', year: 2026, base_rate: 5000000 },
       { clinic_name: 'Klinik Cita Sehat Semarang', poly_name: 'Poli Umum', year: 2026, base_rate: 55000 },
-      { clinic_name: 'Klinik Cita Sehat Semarang', poly_name: 'Poli KIA/Kebidanan', year: 2026, base_rate: 60000 },
+      { clinic_name: 'Klinik Cita Sehat Semarang', poly_name: 'Poli KIA', year: 2026, base_rate: 60000 },
       { clinic_name: 'Klinik Cita Sehat Jakarta', poly_name: 'Poli Umum', year: 2026, base_rate: 52000 },
       { clinic_name: 'Klinik Cita Sehat Jakarta', poly_name: 'Laboratorium', year: 2026, base_rate: 75000 },
     ];
@@ -543,8 +837,8 @@ async function seed() {
       { clinic_name: 'Klinik Cita Sehat Jakarta',  poly_name: 'Laboratorium', source_name: 'Fundraising Digital', date: '2026-01-20', visits: 5, revenue: 400000, tipe_donatur: 'digital' },
 
       // Klinik Semarang
-      { clinic_name: 'Klinik Cita Sehat Semarang', poly_name: 'Poli Umum',        source_name: 'SE Klinik',   date: '2026-01-20', visits: 25, revenue: 1375000, tipe_donatur: 'retail' },
-      { clinic_name: 'Klinik Cita Sehat Semarang', poly_name: 'Poli KIA/Kebidanan', source_name: 'SE Klinik', date: '2026-01-20', visits: 15, revenue: 900000,  tipe_donatur: 'retail' },
+      { clinic_name: 'Klinik Cita Sehat Semarang', poly_name: 'Poli Umum', source_name: 'SE Klinik', date: '2026-01-20', visits: 25, revenue: 1375000, tipe_donatur: 'retail' },
+      { clinic_name: 'Klinik Cita Sehat Semarang', poly_name: 'Poli KIA', source_name: 'SE Klinik', date: '2026-01-20', visits: 15, revenue: 900000,  tipe_donatur: 'retail' },
     ];
     
     for (const target of dailyTargetsData) {
@@ -554,13 +848,20 @@ async function seed() {
       
       if (clinic.length > 0 && poly.length > 0 && sourceId) {
         try {
+          // Parse tanggal untuk mendapatkan bulan dan tahun
+          const dateObj = new Date(target.date);
+          const targetMonth = dateObj.getMonth() + 1; // 1-12
+          const targetYear = dateObj.getFullYear();
+          
           await sql`
             INSERT INTO clinic_daily_targets (
               clinic_id, 
               master_poly_id, 
               source_id, 
               target_type,
-              target_date, 
+              target_date,
+              target_month,
+              target_year,
               target_visits, 
               target_revenue, 
               tipe_donatur
@@ -570,11 +871,16 @@ async function seed() {
               ${poly[0].id}, 
               ${sourceId}, 
               'daily',
-              ${target.date}, 
+              ${target.date},
+              ${targetMonth},
+              ${targetYear},
               ${target.visits}, 
               ${target.revenue}, 
               ${target.tipe_donatur}
             )
+            ON CONFLICT (clinic_id, master_poly_id, target_date, source_id) 
+            WHERE target_type = 'daily' AND target_date IS NOT NULL
+            DO NOTHING
           `;
         } catch (error: any) {
           // Skip jika sudah ada (unique constraint dari partial index)

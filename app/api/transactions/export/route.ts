@@ -158,6 +158,10 @@ export async function GET(request: NextRequest) {
             formattedDate = String(trx.trx_date)
           }
         }
+        // Hitung paid action setelah diskon dari paid_action - bill_action_discount (sesuai struktur terbaru)
+        const paidAction = trx.paid_action || 0
+        const billActionDiscount = trx.bill_action_discount || 0
+        const paidActionAfterDiscount = Math.max(0, paidAction - billActionDiscount)
         
         return [
           index + 1,
@@ -171,8 +175,8 @@ export async function GET(request: NextRequest) {
           trx.insurance_type || '',
           trx.bill_total || 0,
           trx.paid_total || 0,
-          trx.paid_action || 0,
-          trx.paid_action_after_discount || trx.paid_action || 0,
+          paidAction,
+          paidActionAfterDiscount,
           trx.paid_discount || 0,
           trx.receivable_total || 0,
           trx.insurance_type || '-',
