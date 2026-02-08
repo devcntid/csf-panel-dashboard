@@ -23,6 +23,7 @@ export type DashboardData = {
   revenueTrendLabels: { bulanIniLabel: string; bulanLaluLabel: string }
   revenueByClinic: { clinicName: string; revenue: number }[]
   patientComposition: { label: string; count: number; percent: number }[]
+  polyComposition: { label: string; count: number; percent: number }[]
 }
 
 function getYearToDateRange(): { dateFrom: string; dateTo: string } {
@@ -264,6 +265,30 @@ export async function getDashboardData(
       return { label, count, percent }
     })
 
+    // 7. Komposisi poli by master_polies
+    const polyRows = await sql`
+      SELECT 
+        COALESCE(mp.name, t.polyclinic, 'Lainnya') as label,
+        COUNT(t.id)::int as cnt
+      FROM transactions t
+      LEFT JOIN master_polies mp ON mp.id = t.poly_id
+      WHERE t.trx_date >= ${dateFrom} AND t.trx_date <= ${dateTo}
+        AND (${clinicId}::bigint IS NULL OR t.clinic_id = ${clinicId})
+      GROUP BY COALESCE(mp.name, t.polyclinic, 'Lainnya')
+      ORDER BY cnt DESC
+    `
+
+    const totalForPoly = (polyRows as any[]).reduce(
+      (sum: number, r: any) => sum + Number(r.cnt || 0),
+      0
+    )
+
+    const polyComposition = (polyRows as any[]).map((r: any) => {
+      const count = Number(r.cnt || 0)
+      const percent = totalForPoly > 0 ? (count / totalForPoly) * 100 : 0
+      return { label: r.label || 'Lainnya', count, percent }
+    })
+
     return {
       totalRevenue,
       totalPatients,
@@ -279,6 +304,7 @@ export async function getDashboardData(
       revenueTrendLabels: { bulanIniLabel, bulanLaluLabel },
       revenueByClinic,
       patientComposition,
+      polyComposition,
     }
   } catch (error) {
     console.error('Error fetching dashboard data:', error)
@@ -297,6 +323,7 @@ export async function getDashboardData(
       revenueTrendLabels: { bulanIniLabel: '', bulanLaluLabel: '' },
       revenueByClinic: [],
       patientComposition: [],
+      polyComposition: [],
     }
   }
 }
