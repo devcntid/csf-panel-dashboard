@@ -30,7 +30,7 @@ export function TransaksiSearch({
   const [isPending, startTransition] = useTransition()
   const [isScraping, setIsScraping] = useState(false)
   const [isExporting, setIsExporting] = useState(false)
-  // Default tanggal ke hari ini
+  // Default tanggal awal ke tanggal 1 bulan ini, tanggal akhir ke hari ini
   const getTodayDate = () => {
     const today = new Date()
     const year = today.getFullYear()
@@ -38,10 +38,16 @@ export function TransaksiSearch({
     const day = String(today.getDate()).padStart(2, '0')
     return `${year}-${month}-${day}`
   }
+  const getFirstDateOfMonth = () => {
+    const today = new Date()
+    const year = today.getFullYear()
+    const month = String(today.getMonth() + 1).padStart(2, '0')
+    return `${year}-${month}-01`
+  }
 
   const search = searchParams.get('search') || ''
   const [searchInput, setSearchInput] = useState(search)
-  const [dateFrom, setDateFrom] = useState(searchParams.get('dateFrom') || getTodayDate())
+  const [dateFrom, setDateFrom] = useState(searchParams.get('dateFrom') || getFirstDateOfMonth())
   const [dateTo, setDateTo] = useState(searchParams.get('dateTo') || getTodayDate())
   const [selectedClinic, setSelectedClinic] = useState(searchParams.get('clinic') || '')
   const [selectedPoly, setSelectedPoly] = useState(searchParams.get('poly') || '')
@@ -53,7 +59,7 @@ export function TransaksiSearch({
     const dateToParam = searchParams.get('dateTo')
     
     setSearchInput(searchParam)
-    setDateFrom(dateFromParam || getTodayDate())
+    setDateFrom(dateFromParam || getFirstDateOfMonth())
     setDateTo(dateToParam || getTodayDate())
     setSelectedClinic(searchParams.get('clinic') || '')
     setSelectedPoly(searchParams.get('poly') || '')
@@ -84,8 +90,8 @@ export function TransaksiSearch({
         params.delete('search')
       }
       
-      // Apply date filters (default ke hari ini jika kosong)
-      const finalDateFrom = dateFrom || getTodayDate()
+      // Apply date filters (default: tanggal awal = 1 bulan ini, tanggal akhir = hari ini)
+      const finalDateFrom = dateFrom || getFirstDateOfMonth()
       const finalDateTo = dateTo || getTodayDate()
       params.set('dateFrom', finalDateFrom)
       params.set('dateTo', finalDateTo)

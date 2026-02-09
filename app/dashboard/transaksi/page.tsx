@@ -10,7 +10,7 @@ export default async function TransaksiPage({
 }) {
   const params = await searchParams
   
-  // Default tanggal ke hari ini jika belum ada
+  // Default tanggal awal ke tanggal 1 bulan ini, tanggal akhir ke hari ini
   const getTodayDate = () => {
     const today = new Date()
     const year = today.getFullYear()
@@ -18,13 +18,19 @@ export default async function TransaksiPage({
     const day = String(today.getDate()).padStart(2, '0')
     return `${year}-${month}-${day}`
   }
-  
+  const getFirstDateOfMonth = () => {
+    const today = new Date()
+    const year = today.getFullYear()
+    const month = String(today.getMonth() + 1).padStart(2, '0')
+    return `${year}-${month}-01`
+  }
+
   const search = params.search || ''
   const page = parseInt(params.page || '1')
   const clinicId = params.clinic ? parseInt(params.clinic) : undefined
   const polyId = params.poly ? parseInt(params.poly) : undefined
   const insuranceTypeId = params.insurance ? parseInt(params.insurance) : undefined
-  const dateFrom = params.dateFrom || getTodayDate()
+  const dateFrom = params.dateFrom || getFirstDateOfMonth()
   const dateTo = params.dateTo || getTodayDate()
   
   const [transactionsData, stats, clinics, polies, insuranceTypes] = await Promise.all([

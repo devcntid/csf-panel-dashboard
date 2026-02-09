@@ -1735,7 +1735,9 @@ export const getTransactionStats = cache(async (
         COUNT(*) as total_transactions,
         COUNT(CASE WHEN zains_synced = true THEN 1 END) as synced_count,
         COUNT(CASE WHEN zains_synced = false THEN 1 END) as pending_count,
-        COALESCE(SUM(paid_total), 0) as total_revenue
+        COALESCE(SUM(paid_total), 0) as total_revenue,
+        COALESCE(SUM(covered_total), 0) as total_jaminan,
+        COALESCE(SUM(bill_total), 0) as total_tagihan
       FROM transactions t
       WHERE ${whereSql}
       `,
@@ -1749,6 +1751,8 @@ export const getTransactionStats = cache(async (
       syncedCount: Number((stats as any)?.synced_count || 0),
       pendingCount: Number((stats as any)?.pending_count || 0),
       totalRevenue: Number((stats as any)?.total_revenue || 0),
+      totalJaminan: Number((stats as any)?.total_jaminan || 0),
+      totalTagihan: Number((stats as any)?.total_tagihan || 0),
     }
   } catch (error) {
     console.error('Error fetching transaction stats:', error)
@@ -1757,6 +1761,8 @@ export const getTransactionStats = cache(async (
       syncedCount: 0,
       pendingCount: 0,
       totalRevenue: 0,
+      totalJaminan: 0,
+      totalTagihan: 0,
     }
   }
 })
