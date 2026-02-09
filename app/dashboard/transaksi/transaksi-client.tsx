@@ -112,7 +112,7 @@ export function TransaksiClient({
       />
 
       {/* Stats Cards - Summary */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6 mt-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 mb-6 mt-6">
         <Card>
           <CardContent className="p-4">
             <p className="text-slate-500 text-sm">Total Transaksi</p>
@@ -129,6 +129,18 @@ export function TransaksiClient({
           <CardContent className="p-4">
             <p className="text-slate-500 text-sm">Belum Sync</p>
             <p className="text-2xl font-bold text-amber-600 mt-1">{stats.pendingCount.toLocaleString('id-ID')}</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <p className="text-slate-500 text-sm">Total Tagihan</p>
+            <p className="text-2xl font-bold text-blue-600 mt-1">{formatCurrency(stats.totalTagihan ?? 0)}</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <p className="text-slate-500 text-sm">Total Jaminan</p>
+            <p className="text-2xl font-bold text-indigo-600 mt-1">{formatCurrency(stats.totalJaminan ?? 0)}</p>
           </CardContent>
         </Card>
         <Card>
