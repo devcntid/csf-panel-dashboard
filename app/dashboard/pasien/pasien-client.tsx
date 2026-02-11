@@ -26,13 +26,11 @@ export function PasienClient({
   const search = searchParams.get('search') || ''
   const [searchInput, setSearchInput] = useState(search)
   const [selectedClinic, setSelectedClinic] = useState(searchParams.get('clinic') || '')
-  const [selectedPerPage, setSelectedPerPage] = useState(searchParams.get('perPage') || '10')
 
   useEffect(() => {
     const searchParam = searchParams.get('search') || ''
     setSearchInput(searchParam)
     setSelectedClinic(searchParams.get('clinic') || '')
-    setSelectedPerPage(searchParams.get('perPage') || '10')
   }, [searchParams])
 
   const handleSearch = () => {
@@ -53,13 +51,6 @@ export function PasienClient({
         params.delete('clinic')
       }
       
-      // Apply perPage
-      if (selectedPerPage) {
-        params.set('perPage', selectedPerPage)
-      } else {
-        params.delete('perPage')
-      }
-      
       params.set('page', '1')
       router.push(`/dashboard/pasien?${params.toString()}`)
     })
@@ -76,35 +67,19 @@ export function PasienClient({
     // Hanya update state lokal, tidak langsung update URL
   }
 
-  const handlePerPageChange = (value: string) => {
-    setSelectedPerPage(value)
-    startTransition(() => {
-      const params = new URLSearchParams(searchParams.toString())
-      if (value) {
-        params.set('perPage', value)
-      } else {
-        params.delete('perPage')
-      }
-      params.set('page', '1')
-      router.push(`/dashboard/pasien?${params.toString()}`)
-    })
-  }
-
   const handleResetFilter = () => {
     setSearchInput('')
     setSelectedClinic('')
-    setSelectedPerPage('10')
     startTransition(() => {
       const params = new URLSearchParams(searchParams.toString())
       params.delete('search')
       params.delete('clinic')
-       params.delete('perPage')
       params.set('page', '1')
       router.push(`/dashboard/pasien?${params.toString()}`)
     })
   }
 
-  const hasFilter = searchInput || (selectedClinic && selectedClinic !== 'all') || selectedPerPage !== '10'
+  const hasFilter = searchInput || (selectedClinic && selectedClinic !== 'all')
 
   return (
     <Card className="mb-6">
@@ -150,23 +125,6 @@ export function PasienClient({
                     {clinic.name}
                   </SelectItem>
                 ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-2">
-            <Label>Per Halaman</Label>
-            <Select
-              value={selectedPerPage}
-              onValueChange={handlePerPageChange}
-              disabled={isPending}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="10" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="10">10</SelectItem>
-                <SelectItem value="25">25</SelectItem>
-                <SelectItem value="50">50</SelectItem>
               </SelectContent>
             </Select>
           </div>
