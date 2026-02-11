@@ -6,6 +6,7 @@ import { getPatients, getPatientStats } from '@/lib/actions/patients'
 import { getAllClinics } from '@/lib/actions/config'
 import { formatDate } from '@/lib/db'
 import { PasienClient } from './pasien-client'
+import { PatientPagination } from './patient-pagination'
 import { Suspense } from 'react'
 
 // Komponen terpisah untuk stats - bisa di-stream
@@ -180,90 +181,7 @@ async function PatientList({ search, page, clinicId, perPage }: { search: string
           </table>
         </div>
 
-        {/* Pagination */}
-        <div className="flex items-center justify-between mt-4 pt-4 border-t">
-          <p className="text-sm text-slate-600">
-            Menampilkan {(page - 1) * perPage + 1}-{Math.min(page * perPage, total)} dari {total.toLocaleString('id-ID')} pasien
-          </p>
-          {total > 0 && (
-            <div className="flex gap-2">
-              {(() => {
-                const totalPages = Math.ceil(total / perPage)
-                const pages: number[] = []
-
-                if (totalPages <= 5) {
-                  for (let i = 1; i <= totalPages; i++) {
-                    pages.push(i)
-                  }
-                } else {
-                  if (page <= 3) {
-                    for (let i = 1; i <= 5; i++) {
-                      pages.push(i)
-                    }
-                  } else if (page >= totalPages - 2) {
-                    for (let i = totalPages - 4; i <= totalPages; i++) {
-                      pages.push(i)
-                    }
-                  } else {
-                    for (let i = page - 2; i <= page + 2; i++) {
-                      pages.push(i)
-                    }
-                  }
-                }
-
-                const buildHref = (targetPage: number) => {
-                  const params = new URLSearchParams()
-                  if (search) params.set('search', search)
-                  if (clinicId) params.set('clinic', clinicId.toString())
-                  if (perPage) params.set('perPage', perPage.toString())
-                  params.set('page', targetPage.toString())
-                  return `/dashboard/pasien?${params.toString()}`
-                }
-
-                return (
-                  <>
-                    <Button
-                      asChild
-                      variant="outline"
-                      size="sm"
-                      disabled={page === 1}
-                      className="h-8 px-3"
-                    >
-                      <a href={buildHref(1)}>First</a>
-                    </Button>
-                    <Button
-                      asChild
-                      variant="outline"
-                      size="sm"
-                      disabled={page === 1}
-                    >
-                      <a href={buildHref(Math.max(1, page - 1))}>Previous</a>
-                    </Button>
-                    {pages.map((p) => (
-                      <Button
-                        key={p}
-                        asChild
-                        variant="outline"
-                        size="sm"
-                        className={p === page ? 'bg-teal-600 text-white hover:bg-teal-700' : ''}
-                      >
-                        <a href={buildHref(p)}>{p}</a>
-                      </Button>
-                    ))}
-                    <Button
-                      asChild
-                      variant="outline"
-                      size="sm"
-                      disabled={page >= totalPages}
-                    >
-                      <a href={buildHref(Math.min(totalPages, page + 1))}>Next</a>
-                    </Button>
-                  </>
-                )
-              })()}
-            </div>
-          )}
-        </div>
+        <PatientPagination page={page} total={total} perPage={perPage} />
       </CardContent>
     </Card>
   )
