@@ -188,49 +188,140 @@ export const getPatientById = cache(async (id: string | number) => {
   }
 })
 
-export const getPatientStats = cache(async () => {
+// Stats ringkas untuk halaman Data Pasien:
+// - totalPatients: total pasien sesuai filter
+// - withoutZains: pasien yang TIDAK punya satu pun transaksi yang dibreak ke transactions_to_zains
+// - zainsQueue: pasien yang punya transaksi Zains tapi belum punya id_donatur_zains (antrian sync)
+export const getPatientStats = cache(async (search?: string, clinicId?: number) => {
   try {
-    const statsRaw = await sql`
-      SELECT 
-        COUNT(DISTINCT p.id) as total_patients,
-        COUNT(DISTINCT CASE WHEN p.visit_count >= 10 THEN p.id END) as loyal_count,
-        COUNT(DISTINCT CASE WHEN p.visit_count >= 3 AND p.visit_count < 10 THEN p.id END) as active_count,
-        COUNT(DISTINCT CASE WHEN p.visit_count < 3 AND p.visit_count > 1 THEN p.id END) as at_risk_count,
-        COUNT(DISTINCT CASE WHEN p.visit_count = 1 THEN p.id END) as new_count,
-        COALESCE(AVG(p.visit_count), 0) as avg_visit_count,
-        COUNT(DISTINCT CASE WHEN p.last_visit_at < CURRENT_DATE - INTERVAL '30 days' THEN p.id END) as churn_risk
-      FROM patients p
-    `
+    const searchPattern = search && search.trim() ? `%${search.trim()}%` : null
+
+    let statsRaw: any
+
+    if (searchPattern && clinicId) {
+      statsRaw = await sql`
+        SELECT 
+          COUNT(DISTINCT p.id) as total_patients,
+          COUNT(DISTINCT CASE 
+            WHEN NOT EXISTS (
+              SELECT 1
+              FROM transactions t
+              JOIN transactions_to_zains tz ON tz.transaction_id = t.id
+              WHERE t.patient_id = p.id
+            ) 
+            THEN p.id END
+          ) as without_zains,
+          COUNT(DISTINCT CASE 
+            WHEN (p.id_donatur_zains IS NULL OR p.id_donatur_zains = '')
+             AND EXISTS (
+               SELECT 1
+               FROM transactions t2
+               JOIN transactions_to_zains tz2 ON tz2.transaction_id = t2.id
+               WHERE t2.patient_id = p.id
+             )
+            THEN p.id END
+          ) as zains_queue
+        FROM patients p
+        WHERE p.clinic_id = ${clinicId}
+          AND (
+            p.full_name ILIKE ${searchPattern} OR
+            p.erm_no ILIKE ${searchPattern}
+          )
+      `
+    } else if (clinicId) {
+      statsRaw = await sql`
+        SELECT 
+          COUNT(DISTINCT p.id) as total_patients,
+          COUNT(DISTINCT CASE 
+            WHEN NOT EXISTS (
+              SELECT 1
+              FROM transactions t
+              JOIN transactions_to_zains tz ON tz.transaction_id = t.id
+              WHERE t.patient_id = p.id
+            ) 
+            THEN p.id END
+          ) as without_zains,
+          COUNT(DISTINCT CASE 
+            WHEN (p.id_donatur_zains IS NULL OR p.id_donatur_zains = '')
+             AND EXISTS (
+               SELECT 1
+               FROM transactions t2
+               JOIN transactions_to_zains tz2 ON tz2.transaction_id = t2.id
+               WHERE t2.patient_id = p.id
+             )
+            THEN p.id END
+          ) as zains_queue
+        FROM patients p
+        WHERE p.clinic_id = ${clinicId}
+      `
+    } else if (searchPattern) {
+      statsRaw = await sql`
+        SELECT 
+          COUNT(DISTINCT p.id) as total_patients,
+          COUNT(DISTINCT CASE 
+            WHEN NOT EXISTS (
+              SELECT 1
+              FROM transactions t
+              JOIN transactions_to_zains tz ON tz.transaction_id = t.id
+              WHERE t.patient_id = p.id
+            ) 
+            THEN p.id END
+          ) as without_zains,
+          COUNT(DISTINCT CASE 
+            WHEN (p.id_donatur_zains IS NULL OR p.id_donatur_zains = '')
+             AND EXISTS (
+               SELECT 1
+               FROM transactions t2
+               JOIN transactions_to_zains tz2 ON tz2.transaction_id = t2.id
+               WHERE t2.patient_id = p.id
+             )
+            THEN p.id END
+          ) as zains_queue
+        FROM patients p
+        WHERE 
+          p.full_name ILIKE ${searchPattern} OR
+          p.erm_no ILIKE ${searchPattern}
+      `
+    } else {
+      statsRaw = await sql`
+        SELECT 
+          COUNT(DISTINCT p.id) as total_patients,
+          COUNT(DISTINCT CASE 
+            WHEN NOT EXISTS (
+              SELECT 1
+              FROM transactions t
+              JOIN transactions_to_zains tz ON tz.transaction_id = t.id
+              WHERE t.patient_id = p.id
+            ) 
+            THEN p.id END
+          ) as without_zains,
+          COUNT(DISTINCT CASE 
+            WHEN (p.id_donatur_zains IS NULL OR p.id_donatur_zains = '')
+             AND EXISTS (
+               SELECT 1
+               FROM transactions t2
+               JOIN transactions_to_zains tz2 ON tz2.transaction_id = t2.id
+               WHERE t2.patient_id = p.id
+             )
+            THEN p.id END
+          ) as zains_queue
+        FROM patients p
+      `
+    }
+
     const stats = Array.isArray(statsRaw) ? statsRaw[0] : statsRaw
-    
-    const total = Number((stats as any)?.total_patients || 0)
-    const retentionRate = total > 0 
-      ? ((Number((stats as any)?.loyal_count || 0) + Number((stats as any)?.active_count || 0)) / total * 100).toFixed(1)
-      : '0'
-    
+
     return {
-      totalPatients: total,
-      loyalCount: Number((stats as any)?.loyal_count || 0),
-      activeCount: Number((stats as any)?.active_count || 0),
-      atRiskCount: Number((stats as any)?.at_risk_count || 0),
-      newCount: Number((stats as any)?.new_count || 0),
-      avgVisitCount: Number((stats as any)?.avg_visit_count || 0).toFixed(1),
-      retentionRate,
-      churnRisk: Number((stats as any)?.churn_risk || 0),
-      churnRiskPercentage: total > 0 ? ((Number((stats as any)?.churn_risk || 0) / total) * 100).toFixed(1) : '0',
+      totalPatients: Number((stats as any)?.total_patients || 0),
+      withoutZains: Number((stats as any)?.without_zains || 0),
+      zainsQueue: Number((stats as any)?.zains_queue || 0),
     }
   } catch (error) {
     console.error('Error fetching patient stats:', error)
     return {
       totalPatients: 0,
-      loyalCount: 0,
-      activeCount: 0,
-      atRiskCount: 0,
-      newCount: 0,
-      avgVisitCount: '0',
-      retentionRate: '0',
-      churnRisk: 0,
-      churnRiskPercentage: '0',
+      withoutZains: 0,
+      zainsQueue: 0,
     }
   }
 })

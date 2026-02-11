@@ -7,6 +7,14 @@
     {
       "path": "/api/cron/refresh-materialized-view",
       "schedule": "0 2 * * *"
+    },
+    {
+      "path": "/api/sync-patients-to-zains",
+      "schedule": "0 12 * * *"
+    },
+    {
+      "path": "/api/sync-transactions-to-zains",
+      "schedule": "0 13 * * *"
     }
   ]
 }

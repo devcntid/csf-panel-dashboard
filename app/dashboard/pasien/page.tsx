@@ -1,7 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Users, TrendingUp, AlertTriangle } from 'lucide-react'
+import { Users } from 'lucide-react'
 import { getPatients, getPatientStats } from '@/lib/actions/patients'
 import { getAllClinics } from '@/lib/actions/config'
 import { formatDate } from '@/lib/db'
@@ -9,18 +9,18 @@ import { PasienClient } from './pasien-client'
 import { Suspense } from 'react'
 
 // Komponen terpisah untuk stats - bisa di-stream
-async function PatientStats() {
-  const stats = await getPatientStats()
-  
+async function PatientStats({ search, clinicId }: { search: string; clinicId?: number }) {
+  const stats = await getPatientStats(search, clinicId)
+
   return (
-    <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
       <Card>
         <CardContent className="p-5">
           <div className="flex items-start justify-between">
             <div>
-              <p className="text-slate-500 text-sm font-medium">Total Pasien Unik</p>
+              <p className="text-slate-500 text-sm font-medium">Total Pasien</p>
               <p className="text-2xl font-bold text-slate-800 mt-1">{stats.totalPatients.toLocaleString('id-ID')}</p>
-              <p className="text-green-500 text-xs mt-1">Retention: {stats.retentionRate}%</p>
+              <p className="text-slate-500 text-xs mt-1">Semua pasien sesuai filter</p>
             </div>
             <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
               <Users className="w-6 h-6 text-blue-600" />
@@ -33,42 +33,31 @@ async function PatientStats() {
         <CardContent className="p-5">
           <div className="flex items-start justify-between">
             <div>
-              <p className="text-slate-500 text-sm font-medium">Retention Rate</p>
-              <p className="text-2xl font-bold text-slate-800 mt-1">{stats.retentionRate}%</p>
-              <p className="text-green-500 text-xs mt-1">Loyal: {stats.loyalCount.toLocaleString('id-ID')}</p>
+              <p className="text-slate-500 text-sm font-medium">Tanpa Zains</p>
+              <p className="text-2xl font-bold text-slate-800 mt-1">
+                {stats.withoutZains.toLocaleString('id-ID')}
+              </p>
+              <p className="text-slate-500 text-xs mt-1">Pasien tanpa transaksi ke Zains</p>
+            </div>
+            <div className="w-12 h-12 bg-slate-100 rounded-xl flex items-center justify-center">
+              <Users className="w-6 h-6 text-slate-600" />
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardContent className="p-5">
+          <div className="flex items-start justify-between">
+            <div>
+              <p className="text-slate-500 text-sm font-medium">Antrian Zains</p>
+              <p className="text-2xl font-bold text-slate-800 mt-1">
+                {stats.zainsQueue.toLocaleString('id-ID')}
+              </p>
+              <p className="text-slate-500 text-xs mt-1">Punya transaksi Zains, belum tersinkron</p>
             </div>
             <div className="w-12 h-12 bg-teal-100 rounded-xl flex items-center justify-center">
-              <TrendingUp className="w-6 h-6 text-teal-600" />
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardContent className="p-5">
-          <div className="flex items-start justify-between">
-            <div>
-              <p className="text-slate-500 text-sm font-medium">Churn Risk</p>
-              <p className="text-2xl font-bold text-slate-800 mt-1">{stats.churnRiskPercentage}%</p>
-              <p className="text-amber-500 text-xs mt-1">{stats.churnRisk.toLocaleString('id-ID')} pasien</p>
-            </div>
-            <div className="w-12 h-12 bg-amber-100 rounded-xl flex items-center justify-center">
-              <AlertTriangle className="w-6 h-6 text-amber-600" />
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardContent className="p-5">
-          <div className="flex items-start justify-between">
-            <div>
-              <p className="text-slate-500 text-sm font-medium">Avg. Visit Count</p>
-              <p className="text-2xl font-bold text-slate-800 mt-1">{stats.avgVisitCount}</p>
-              <p className="text-slate-500 text-xs mt-1">per pasien</p>
-            </div>
-            <div className="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center">
-              <Users className="w-6 h-6 text-purple-600" />
+              <Users className="w-6 h-6 text-teal-600" />
             </div>
           </div>
         </CardContent>
@@ -78,8 +67,8 @@ async function PatientStats() {
 }
 
 // Komponen terpisah untuk patient list - bisa di-stream
-async function PatientList({ search, page, clinicId }: { search: string; page: number; clinicId?: number }) {
-  const { patients, total } = await getPatients(search, page, 10, clinicId)
+async function PatientList({ search, page, clinicId, perPage }: { search: string; page: number; clinicId?: number; perPage: number }) {
+  const { patients, total } = await getPatients(search, page, perPage, clinicId)
   
   return (
     <Card>
@@ -136,7 +125,7 @@ async function PatientList({ search, page, clinicId }: { search: string; page: n
             </thead>
             <tbody>
               {patients.map((patient: any, index: number) => {
-                const rowNumber = (page - 1) * 10 + index + 1
+                const rowNumber = (page - 1) * perPage + index + 1
                 return (
                   <tr
                     key={patient.id}
@@ -194,126 +183,102 @@ async function PatientList({ search, page, clinicId }: { search: string; page: n
         {/* Pagination */}
         <div className="flex items-center justify-between mt-4 pt-4 border-t">
           <p className="text-sm text-slate-600">
-            Showing {(page - 1) * 10 + 1}-{Math.min(page * 10, total)} of {total.toLocaleString('id-ID')} patients
+            Menampilkan {(page - 1) * perPage + 1}-{Math.min(page * perPage, total)} dari {total.toLocaleString('id-ID')} pasien
           </p>
-          <div className="flex gap-2">
-            <Button variant="outline" size="sm" disabled={page === 1}>
-              Previous
-            </Button>
-            {Array.from({ length: Math.min(5, Math.ceil(total / 10)) }, (_, i) => i + 1).map((p) => (
-              <Button
-                key={p}
-                variant="outline"
-                size="sm"
-                className={p === page ? 'bg-teal-600 text-white' : ''}
-              >
-                {p}
-              </Button>
-            ))}
-            <Button variant="outline" size="sm" disabled={page * 10 >= total}>
-              Next
-            </Button>
-          </div>
+          {total > 0 && (
+            <div className="flex gap-2">
+              {(() => {
+                const totalPages = Math.ceil(total / perPage)
+                const pages: number[] = []
+
+                if (totalPages <= 5) {
+                  for (let i = 1; i <= totalPages; i++) {
+                    pages.push(i)
+                  }
+                } else {
+                  if (page <= 3) {
+                    for (let i = 1; i <= 5; i++) {
+                      pages.push(i)
+                    }
+                  } else if (page >= totalPages - 2) {
+                    for (let i = totalPages - 4; i <= totalPages; i++) {
+                      pages.push(i)
+                    }
+                  } else {
+                    for (let i = page - 2; i <= page + 2; i++) {
+                      pages.push(i)
+                    }
+                  }
+                }
+
+                const buildHref = (targetPage: number) => {
+                  const params = new URLSearchParams()
+                  if (search) params.set('search', search)
+                  if (clinicId) params.set('clinic', clinicId.toString())
+                  if (perPage) params.set('perPage', perPage.toString())
+                  params.set('page', targetPage.toString())
+                  return `/dashboard/pasien?${params.toString()}`
+                }
+
+                return (
+                  <>
+                    <Button
+                      asChild
+                      variant="outline"
+                      size="sm"
+                      disabled={page === 1}
+                      className="h-8 px-3"
+                    >
+                      <a href={buildHref(1)}>First</a>
+                    </Button>
+                    <Button
+                      asChild
+                      variant="outline"
+                      size="sm"
+                      disabled={page === 1}
+                    >
+                      <a href={buildHref(Math.max(1, page - 1))}>Previous</a>
+                    </Button>
+                    {pages.map((p) => (
+                      <Button
+                        key={p}
+                        asChild
+                        variant="outline"
+                        size="sm"
+                        className={p === page ? 'bg-teal-600 text-white hover:bg-teal-700' : ''}
+                      >
+                        <a href={buildHref(p)}>{p}</a>
+                      </Button>
+                    ))}
+                    <Button
+                      asChild
+                      variant="outline"
+                      size="sm"
+                      disabled={page >= totalPages}
+                    >
+                      <a href={buildHref(Math.min(totalPages, page + 1))}>Next</a>
+                    </Button>
+                  </>
+                )
+              })()}
+            </div>
+          )}
         </div>
       </CardContent>
     </Card>
   )
 }
 
-// Komponen terpisah untuk retention analysis
-async function RetentionAnalysis() {
-  const stats = await getPatientStats()
-  const { patients } = await getPatients('', 1, 10)
-  
-  return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
-      <Card>
-        <CardHeader>
-          <CardTitle>Segmentasi Pasien</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            <div className="flex items-center justify-between pb-3 border-b">
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 bg-green-500 rounded-full"></div>
-                <span className="text-slate-700">Loyal (10+ visits)</span>
-              </div>
-              <span className="font-bold text-slate-800">
-                {stats.loyalCount.toLocaleString('id-ID')} ({stats.totalPatients > 0 ? ((stats.loyalCount / stats.totalPatients) * 100).toFixed(1) : 0}%)
-              </span>
-            </div>
-            <div className="flex items-center justify-between pb-3 border-b">
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
-                <span className="text-slate-700">Active (3-9 visits)</span>
-              </div>
-              <span className="font-bold text-slate-800">
-                {stats.activeCount.toLocaleString('id-ID')} ({stats.totalPatients > 0 ? ((stats.activeCount / stats.totalPatients) * 100).toFixed(1) : 0}%)
-              </span>
-            </div>
-            <div className="flex items-center justify-between pb-3 border-b">
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 bg-amber-500 rounded-full"></div>
-                <span className="text-slate-700">At Risk (&lt;3 visits)</span>
-              </div>
-              <span className="font-bold text-slate-800">
-                {stats.atRiskCount.toLocaleString('id-ID')} ({stats.totalPatients > 0 ? ((stats.atRiskCount / stats.totalPatients) * 100).toFixed(1) : 0}%)
-              </span>
-            </div>
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 bg-slate-500 rounded-full"></div>
-                <span className="text-slate-700">New (1 visit)</span>
-              </div>
-              <span className="font-bold text-slate-800">
-                {stats.newCount.toLocaleString('id-ID')} ({stats.totalPatients > 0 ? ((stats.newCount / stats.totalPatients) * 100).toFixed(1) : 0}%)
-              </span>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Top Loyal Patients</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            {patients
-              .sort((a: any, b: any) => (b.visit_count || 0) - (a.visit_count || 0))
-              .slice(0, 5)
-              .map((patient: any, index: number) => (
-                <div key={patient.id} className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 bg-teal-100 rounded-full flex items-center justify-center text-teal-600 font-bold text-sm">
-                      {index + 1}
-                    </div>
-                    <div>
-                      <p className="font-medium text-slate-800">{patient.full_name || '-'}</p>
-                      <p className="text-xs text-slate-500">{patient.erm_no}</p>
-                    </div>
-                  </div>
-                  <span className="font-semibold text-teal-600">
-                    {patient.visit_count || 0} visits
-                  </span>
-                </div>
-              ))}
-          </div>
-        </CardContent>
-      </Card>
-    </div>
-  )
-}
-
 export default async function PasienPage({
   searchParams,
 }: {
-  searchParams: Promise<{ search?: string; page?: string; clinic?: string }>
+  searchParams: Promise<{ search?: string; page?: string; clinic?: string; perPage?: string }>
 }) {
   const params = await searchParams
   const search = params.search || ''
   const page = parseInt(params.page || '1')
   const clinicId = params.clinic ? parseInt(params.clinic) : undefined
+  const perPage = parseInt(params.perPage || '10') || 10
 
   // Fetch clinics untuk dropdown filter
   const clinics = await getAllClinics()
@@ -334,7 +299,7 @@ export default async function PasienPage({
       <div className="p-6">
         {/* Stats Cards - Streamed separately */}
         <Suspense fallback={null}>
-          <PatientStats />
+          <PatientStats search={search} clinicId={clinicId} />
         </Suspense>
 
         {/* Search */}
@@ -342,12 +307,7 @@ export default async function PasienPage({
 
         {/* Patient Table - Streamed separately */}
         <Suspense fallback={null}>
-          <PatientList search={search} page={page} clinicId={clinicId} />
-        </Suspense>
-
-        {/* Retention Analysis - Streamed separately */}
-        <Suspense fallback={null}>
-          <RetentionAnalysis />
+          <PatientList search={search} page={page} clinicId={clinicId} perPage={perPage} />
         </Suspense>
       </div>
     </div>
