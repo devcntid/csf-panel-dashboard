@@ -5,6 +5,13 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { Eye, ExternalLink, Download } from 'lucide-react'
 import { formatCurrency, formatDate } from '@/lib/db'
 import { getTransactionById } from '@/lib/actions/transactions'
@@ -20,6 +27,7 @@ export function TransaksiClient({
   search,
   page,
   total,
+  perPage,
   clinics,
   polies,
   insuranceTypes,
@@ -29,6 +37,7 @@ export function TransaksiClient({
   search?: string
   page: number
   total: number
+  perPage: number
   clinics: any[]
   polies: any[]
   insuranceTypes: any[]
@@ -47,6 +56,15 @@ export function TransaksiClient({
     startTransition(() => {
       const params = new URLSearchParams(searchParams.toString())
       params.set('page', newPage.toString())
+      router.push(`/dashboard/transaksi?${params.toString()}`)
+    })
+  }
+
+  const handlePerPageChange = (value: string) => {
+    startTransition(() => {
+      const params = new URLSearchParams(searchParams.toString())
+      params.set('perPage', value)
+      params.set('page', '1')
       router.push(`/dashboard/transaksi?${params.toString()}`)
     })
   }
@@ -102,6 +120,8 @@ export function TransaksiClient({
     }
   }
 
+  const currentPerPage = searchParams.get('perPage') || perPage.toString()
+
   return (
     <>
       {/* Header */}
@@ -145,7 +165,7 @@ export function TransaksiClient({
         </Card>
         <Card>
           <CardContent className="p-4">
-            <p className="text-slate-500 text-sm">Total Nilai</p>
+            <p className="text-slate-500 text-sm">Total Pembayaran</p>
             <p className="text-2xl font-bold text-teal-600 mt-1">{formatCurrency(stats.totalRevenue)}</p>
           </CardContent>
         </Card>
@@ -325,76 +345,90 @@ export function TransaksiClient({
           {total > 0 && (
             <div className="flex items-center justify-between mt-4 pt-4 border-t">
               <p className="text-sm text-slate-600">
-                Menampilkan {(page - 1) * 10 + 1}-{Math.min(page * 10, total)} dari {total.toLocaleString('id-ID')} transaksi
+                Menampilkan {(page - 1) * perPage + 1}-{Math.min(page * perPage, total)} dari {total.toLocaleString('id-ID')} transaksi
               </p>
-              <div className="flex gap-2">
-                <Button 
-                  variant="outline" 
-                  size="sm" 
-                  disabled={page === 1 || isPending}
-                  onClick={() => handlePageChange(1)}
-                  className="h-8 px-3"
-                >
-                  First
-                </Button>
-                <Button 
-                  variant="outline" 
-                  size="sm" 
-                  disabled={page === 1 || isPending}
-                  onClick={() => handlePageChange(page - 1)}
-                >
-                  Previous
-                </Button>
-                {(() => {
-                  const totalPages = Math.ceil(total / 10)
-                  const pages: number[] = []
-                  
-                  if (totalPages <= 5) {
-                    // Show all pages if 5 or less
-                    for (let i = 1; i <= totalPages; i++) {
-                      pages.push(i)
-                    }
-                  } else {
-                    // Show pages around current page
-                    if (page <= 3) {
-                      // Show first 5 pages
-                      for (let i = 1; i <= 5; i++) {
-                        pages.push(i)
-                      }
-                    } else if (page >= totalPages - 2) {
-                      // Show last 5 pages
-                      for (let i = totalPages - 4; i <= totalPages; i++) {
+              <div className="flex items-center gap-4">
+                <div className="flex gap-2">
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    disabled={page === 1 || isPending}
+                    onClick={() => handlePageChange(1)}
+                    className="h-8 px-3"
+                  >
+                    First
+                  </Button>
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    disabled={page === 1 || isPending}
+                    onClick={() => handlePageChange(page - 1)}
+                  >
+                    Previous
+                  </Button>
+                  {(() => {
+                    const totalPages = Math.ceil(total / perPage)
+                    const pages: number[] = []
+                    
+                    if (totalPages <= 5) {
+                      for (let i = 1; i <= totalPages; i++) {
                         pages.push(i)
                       }
                     } else {
-                      // Show 2 pages before, current, and 2 pages after
-                      for (let i = page - 2; i <= page + 2; i++) {
-                        pages.push(i)
+                      if (page <= 3) {
+                        for (let i = 1; i <= 5; i++) {
+                          pages.push(i)
+                        }
+                      } else if (page >= totalPages - 2) {
+                        for (let i = totalPages - 4; i <= totalPages; i++) {
+                          pages.push(i)
+                        }
+                      } else {
+                        for (let i = page - 2; i <= page + 2; i++) {
+                          pages.push(i)
+                        }
                       }
                     }
-                  }
-                  
-                  return pages.map((pageNum) => (
-                    <Button
-                      key={pageNum}
-                      variant="outline"
-                      size="sm"
-                      disabled={isPending}
-                      onClick={() => handlePageChange(pageNum)}
-                      className={pageNum === page ? 'bg-teal-600 text-white hover:bg-teal-700' : ''}
-                    >
-                      {pageNum}
-                    </Button>
-                  ))
-                })()}
-                <Button 
-                  variant="outline" 
-                  size="sm" 
-                  disabled={page * 10 >= total || isPending}
-                  onClick={() => handlePageChange(page + 1)}
-                >
-                  Next
-                </Button>
+                    
+                    return pages.map((pageNum) => (
+                      <Button
+                        key={pageNum}
+                        variant="outline"
+                        size="sm"
+                        disabled={isPending}
+                        onClick={() => handlePageChange(pageNum)}
+                        className={pageNum === page ? 'bg-teal-600 text-white hover:bg-teal-700' : ''}
+                      >
+                        {pageNum}
+                      </Button>
+                    ))
+                  })()}
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    disabled={page * perPage >= total || isPending}
+                    onClick={() => handlePageChange(page + 1)}
+                  >
+                    Next
+                  </Button>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-slate-600">Per halaman</span>
+                  <Select
+                    value={currentPerPage}
+                    onValueChange={handlePerPageChange}
+                    disabled={isPending}
+                  >
+                    <SelectTrigger className="h-8 w-20">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="10">10</SelectItem>
+                      <SelectItem value="25">25</SelectItem>
+                      <SelectItem value="50">50</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
             </div>
           )}

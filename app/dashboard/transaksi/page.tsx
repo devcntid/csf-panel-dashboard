@@ -27,6 +27,7 @@ export default async function TransaksiPage({
 
   const search = params.search || ''
   const page = parseInt(params.page || '1')
+  const perPage = parseInt((params as any).perPage || '10') || 10
   const clinicId = params.clinic ? parseInt(params.clinic) : undefined
   const polyId = params.poly ? parseInt(params.poly) : undefined
   const insuranceTypeId = params.insurance ? parseInt(params.insurance) : undefined
@@ -34,7 +35,7 @@ export default async function TransaksiPage({
   const dateTo = params.dateTo || getTodayDate()
   
   const [transactionsData, stats, clinics, polies, insuranceTypes] = await Promise.all([
-    getTransactions(search, clinicId, dateFrom, dateTo, page, 10, polyId, insuranceTypeId),
+    getTransactions(search, clinicId, dateFrom, dateTo, page, perPage, polyId, insuranceTypeId),
     getTransactionStats(search, clinicId, dateFrom, dateTo, polyId, insuranceTypeId),
     getAllClinics(),
     getMasterPolies(),
@@ -54,6 +55,7 @@ export default async function TransaksiPage({
             search={search}
             page={page}
             total={total}
+            perPage={perPage}
             clinics={clinics}
             polies={polies}
             insuranceTypes={insuranceTypes}

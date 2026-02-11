@@ -217,6 +217,84 @@
 					"body": "{\n  \"success\": true,\n  \"message\": \"Insert transaksi berhasil\",\n  \"data\": {\n    \"total_processed\": 2,\n    \"inserted\": 2,\n    \"zains_inserted\": 8,\n    \"skipped\": 0\n  }\n}"
 				}
 			]
+		},
+		{
+			"name": "Sync Transactions to Zains (Batch)",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{}"
+				},
+				"url": {
+					"raw": "{{base_url}}/api/sync-transactions-to-zains",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"api",
+						"sync-transactions-to-zains"
+					]
+				},
+				"description": "Trigger proses sync batch `transactions_to_zains` ke Zains.\n- Mengambil maksimal 10 record `transactions_to_zains` yang `id_donatur` terisi, `synced = false`, `todo_zains = true`\n- Memanggil API Zains `/corez/transaksi/save` untuk masing-masing record\n- Jika sukses: mengisi `id_transaksi`, set `synced = true`, `todo_zains = false` di `transactions_to_zains`\n- Sekaligus update tabel `transactions`: `zains_synced = true`, `zains_sync_at = NOW()`\n\nEndpoint ini bersifat async/non-blocking: response langsung kembali sementara proses jalan di background."
+			},
+			"response": []
+		},
+		{
+			"name": "Sync Single Patient to Zains (Workflow)",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"patientId\": 1\n}"
+				},
+				"url": {
+					"raw": "{{base_url}}/api/workflow/sync-patient-to-zains",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"api",
+						"workflow",
+						"sync-patient-to-zains"
+					]
+				},
+				"description": "Trigger workflow untuk sync **satu** patient ke Zains secara manual (biasanya dipanggil oleh Upstash QStash).\n\nBody:\n```json\n{\n  \"patientId\": 1\n}\n```\n\nAlur:\n- Ambil data patient berdasarkan `patientId` yang belum punya `id_donatur_zains` dan punya `erm_no_for_zains`\n- Panggil API Zains `/corez/mitra/save`\n- Jika sukses atau status \"sudah terdaftar\": isi `id_donatur_zains` di `patients` dan `id_donatur` di `transactions_to_zains`\n- Setelah patient sukses di-sync, lanjut trigger `syncTransactionsBatchToZains` di background untuk push transaksi yang sudah siap.\n\nBisa digunakan untuk **testing manual** tanpa harus lewat cron/QStash."
+			},
+			"response": []
+		},
+		{
+			"name": "Cron Test - Sync Transactions Batch (GET)",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "{{base_url}}/api/sync-transactions-to-zains",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"api",
+						"sync-transactions-to-zains"
+					]
+				},
+				"description": "Endpoint GET untuk **testing cron / scheduler**.\n\nBisa dipakai oleh:\n- Cron job eksternal (mis. GitHub Actions, Railway cron, dll)\n- Health-check manual dari Postman untuk memastikan batch sync transaksi ke Zains berjalan.\n\nPerilaku sama seperti POST:\n- Proses batch `transactions_to_zains` di background\n- Response langsung kembali dengan status sukses/gagal memulai proses."
+			},
+			"response": []
 		}
 	],
 	"variable": [

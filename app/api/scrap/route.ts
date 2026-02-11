@@ -517,40 +517,10 @@ export async function POST(request: NextRequest) {
 
           const isNewTransaction = !existingTransaction
 
-          // Insert atau update patient dengan logika first_visit_at, last_visit_at
-          // visit_count akan di-increment setelah transaksi berhasil di-insert (hanya jika transaksi baru)
-          const ermNoForZains = `${clinic_id}${ermNo}`
-          const [insertedPatient] = await sql`
-            INSERT INTO patients (
-              clinic_id, 
-              erm_no, 
-              full_name, 
-              first_visit_at, 
-              last_visit_at, 
-              visit_count,
-              erm_no_for_zains
-            )
-            VALUES (
-              ${clinic_id},
-              ${ermNo},
-              ${patientName},
-              ${trxDateFormatted},
-              ${trxDateFormatted},
-              1,
-              ${ermNoForZains}
-            )
-            ON CONFLICT (clinic_id, erm_no) 
-            DO UPDATE SET
-              full_name = COALESCE(NULLIF(EXCLUDED.full_name, ''), patients.full_name),
-              first_visit_at = LEAST(patients.first_visit_at, EXCLUDED.first_visit_at),
-              last_visit_at = GREATEST(patients.last_visit_at, EXCLUDED.last_visit_at),
-              erm_no_for_zains = EXCLUDED.erm_no_for_zains,
-              updated_at = NOW()
-            RETURNING id, visit_count
-          `
-
-          const patientId = insertedPatient ? (insertedPatient as any).id : null
-          const patientVisitCount = insertedPatient ? (insertedPatient as any).visit_count : 0
+          // patientId & visitCount akan diisi NANTI,
+          // hanya jika transaksi ini benar-benar di-break ke transactions_to_zains
+          let patientId: number | null = null
+          let patientVisitCount = 0
 
           // Cari poly_id dari clinic_poly_mappings berdasarkan raw_poly_name (dari eclinic)
           let polyId: number | null = null
@@ -579,6 +549,7 @@ export async function POST(request: NextRequest) {
           }
 
           // Insert atau update transaction (dengan ON CONFLICT untuk menghindari duplikasi)
+          // patient_id sementara NULL; akan di-update setelah patient ter-insert (jika perlu dikirim ke Zains)
           const [insertedTransaction] = await sql`
             INSERT INTO transactions (
               clinic_id, patient_id, poly_id, insurance_type_id, trx_date, trx_no, erm_no, patient_name,
@@ -593,7 +564,7 @@ export async function POST(request: NextRequest) {
               raw_json_data, input_type
             )
             VALUES (
-              ${clinic_id}, ${patientId}, ${polyId}, ${insuranceTypeId}, ${formatDateToYYYYMMDD(trxDate)}, ${trxNo}, ${ermNo}, ${patientName},
+              ${clinic_id}, NULL, ${polyId}, ${insuranceTypeId}, ${formatDateToYYYYMMDD(trxDate)}, ${trxNo}, ${ermNo}, ${patientName},
               ${insuranceType}, ${polyclinic}, ${paymentMethod}, ${voucherCode === '-' ? null : voucherCode},
               ${billRegist}, ${billAction}, ${billLab}, ${billDrug}, ${billAlkes}, ${billMcu}, ${billRadio}, ${billTotal},
               ${billRegistDiscount}, ${billActionDiscount}, ${billLabDiscount}, ${billDrugDiscount}, ${billAlkesDiscount}, ${billMcuDiscount}, ${billRadioDiscount},
@@ -626,18 +597,6 @@ export async function POST(request: NextRequest) {
 
           const transactionId = (insertedTransaction as any).id
 
-          // Increment visit_count hanya jika transaksi benar-benar baru (bukan duplicate)
-          // Jika patient baru (visit_count = 1 dari insert), tidak perlu increment karena sudah di-set ke 1
-          // Jika patient sudah ada (visit_count > 1), increment visit_count untuk transaksi baru
-          if (isNewTransaction && patientId && patientVisitCount > 1) {
-            await sql`
-              UPDATE patients 
-              SET visit_count = visit_count + 1,
-                  updated_at = NOW()
-              WHERE id = ${patientId}
-            `
-          }
-
           insertedCount++
 
           // 12. Break data ke transactions_to_zains berdasarkan master_target_categories
@@ -655,7 +614,7 @@ export async function POST(request: NextRequest) {
             { key: 'Jumlah Pembayaran ( Rp. ) - Pembulatan', category: 'Pembulatan', value: paidRounding },
           ]
 
-          // Cari id_donatur dari patient jika ada
+          // Cari id_donatur dari patient jika ada (hanya dari patient yang SUDAH ada)
           const [patientData] = await sql`
             SELECT id_donatur_zains FROM patients 
             WHERE clinic_id = ${clinic_id} AND erm_no = ${ermNo}
@@ -719,10 +678,68 @@ export async function POST(request: NextRequest) {
             }
           }
 
-          // Sync patient ke Zains setelah transaction to zains berhasil (workflow integration)
-          // Hanya sync jika ada insert ke transactions_to_zains dan patient belum punya id_donatur_zains
-          if (transactionZainsInsertedCount > 0 && patientId && !idDonatur) {
-            syncPatientToZainsWorkflow(patientId)
+          // Hanya jika transaksi ini benar-benar punya record di transactions_to_zains,
+          // baru kita pastikan patient ada (insert/update) dan relasi patient_id di transactions diisi.
+          if (transactionZainsInsertedCount > 0) {
+            const ermNoForZains = `${clinic_id}${ermNo}`
+            const [insertedPatient] = await sql`
+              INSERT INTO patients (
+                clinic_id, 
+                erm_no, 
+                full_name, 
+                first_visit_at, 
+                last_visit_at, 
+                visit_count,
+                erm_no_for_zains
+              )
+              VALUES (
+                ${clinic_id},
+                ${ermNo},
+                ${patientName},
+                ${trxDateFormatted},
+                ${trxDateFormatted},
+                1,
+                ${ermNoForZains}
+              )
+              ON CONFLICT (clinic_id, erm_no) 
+              DO UPDATE SET
+                full_name = COALESCE(NULLIF(EXCLUDED.full_name, ''), patients.full_name),
+                first_visit_at = LEAST(patients.first_visit_at, EXCLUDED.first_visit_at),
+                last_visit_at = GREATEST(patients.last_visit_at, EXCLUDED.last_visit_at),
+                erm_no_for_zains = EXCLUDED.erm_no_for_zains,
+                updated_at = NOW()
+              RETURNING id, visit_count
+            `
+
+            patientId = insertedPatient ? (insertedPatient as any).id : null
+            patientVisitCount = insertedPatient ? (insertedPatient as any).visit_count : 0
+
+            // Update relasi patient_id di transactions
+            if (patientId) {
+              await sql`
+                UPDATE transactions
+                SET patient_id = ${patientId},
+                    updated_at = NOW()
+                WHERE id = ${transactionId}
+              `
+            }
+
+            // Increment visit_count hanya jika transaksi benar-benar baru (bukan duplicate)
+            // Jika patient baru (visit_count = 1 dari insert), tidak perlu increment karena sudah di-set ke 1
+            // Jika patient sudah ada (visit_count > 1), increment visit_count untuk transaksi baru
+            if (isNewTransaction && patientId && patientVisitCount > 1) {
+              await sql`
+                UPDATE patients 
+                SET visit_count = visit_count + 1,
+                    updated_at = NOW()
+                WHERE id = ${patientId}
+              `
+            }
+
+            // Sync patient ke Zains setelah transaction to zains berhasil (workflow integration, spesifik transaction ini)
+            if (patientId && !idDonatur) {
+              syncPatientToZainsWorkflow(patientId, transactionId)
+            }
           }
         } catch (error: any) {
           console.error('❌ Error processing row:', error.message, row)
