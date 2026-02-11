@@ -1,11 +1,11 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { X, Upload, FileSpreadsheet, Download } from 'lucide-react'
+import { X, Upload, FileSpreadsheet, Download, CheckCircle2, XCircle, AlertCircle } from 'lucide-react'
 import { toast } from 'sonner'
 
 export function TransaksiUpload({ 
@@ -20,6 +20,14 @@ export function TransaksiUpload({
   const [file, setFile] = useState<File | null>(null)
   const [uploading, setUploading] = useState(false)
   const [uploadResult, setUploadResult] = useState<any>(null)
+  const resultSectionRef = useRef<HTMLDivElement>(null)
+
+  // Setelah hasil upload ada, scroll ke bagian hasil agar tabel per baris terlihat
+  useEffect(() => {
+    if (uploadResult && resultSectionRef.current) {
+      resultSectionRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+    }
+  }, [uploadResult])
 
   const handleDownloadFormat = async (clinicId: number, clinicName: string) => {
     try {
@@ -67,7 +75,8 @@ export function TransaksiUpload({
     }
 
     setUploading(true)
-    toast.loading('Mengupload file...', { id: 'upload' })
+    setUploadResult(null)
+    toast.loading('Memproses file... Proses bisa beberapa saat. Jangan tutup halaman.', { id: 'upload' })
 
     try {
       const formData = new FormData()
@@ -85,16 +94,15 @@ export function TransaksiUpload({
       }
 
       setUploadResult(data)
+      const successCount = data.results?.filter((r: any) => r.status === 'success').length ?? data.insertedCount
+      const failCount = (data.results?.filter((r: any) => r.status === 'error' || r.status === 'skipped').length) ?? data.skippedCount
       toast.success(
-        `Upload berhasil! ${data.insertedCount} transaksi ditambahkan, ${data.zainsInsertedCount || 0} records ke Zains, ${data.skippedCount} baris dilewati`,
+        `Selesai: ${successCount} baris berhasil, ${failCount} baris gagal/dilewati. Lihat detail di bawah.`,
         { id: 'upload' }
       )
 
-      // Refresh page setelah 2 detik jika ada transaksi yang berhasil di-insert
       if (data.insertedCount > 0 && onSuccess) {
-        setTimeout(() => {
-          onSuccess()
-        }, 2000)
+        setTimeout(() => onSuccess(), 2000)
       }
     } catch (error: any) {
       console.error('Error uploading:', error)
@@ -185,40 +193,83 @@ export function TransaksiUpload({
               </p>
             </div>
 
-            {/* Upload Result */}
-            {uploadResult && (
-              <div className="bg-slate-50 border border-slate-200 rounded-lg p-4 space-y-2 flex-shrink-0">
-                <p className="font-semibold text-slate-800">Hasil Upload:</p>
-                <div className="grid grid-cols-4 gap-4 text-sm">
-                  <div>
-                    <span className="text-slate-600">Total Baris:</span>
-                    <span className="ml-2 font-semibold">{uploadResult.totalRows}</span>
+            {/* Tempat hasil upload: placeholder saat proses, isi setelah selesai */}
+            <div ref={resultSectionRef} className="flex-1 min-h-[140px] flex flex-col">
+              {uploading && !uploadResult && (
+                <div className="bg-slate-100 border border-slate-200 rounded-lg p-6 flex flex-col items-center justify-center gap-2 text-slate-600">
+                  <span className="animate-spin text-2xl">⏳</span>
+                  <p className="text-sm font-medium">Memproses baris...</p>
+                  <p className="text-xs">Hasil per baris (sukses/gagal) akan tampil di sini setelah selesai.</p>
+                </div>
+              )}
+              {uploadResult && (
+              <div className="bg-slate-50 border border-slate-200 rounded-lg p-4 space-y-3 flex-1 min-h-0 flex flex-col">
+                <p className="font-semibold text-slate-800">Hasil Upload</p>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm flex-shrink-0">
+                  <div className="bg-white rounded border border-slate-200 px-3 py-2">
+                    <span className="text-slate-600 block text-xs">Total Baris</span>
+                    <span className="font-semibold text-slate-800">{uploadResult.totalRows}</span>
                   </div>
-                  <div>
-                    <span className="text-green-600">Transaksi:</span>
-                    <span className="ml-2 font-semibold text-green-700">{uploadResult.insertedCount}</span>
+                  <div className="bg-green-50 rounded border border-green-200 px-3 py-2">
+                    <span className="text-green-700 block text-xs">Berhasil</span>
+                    <span className="font-semibold text-green-800">{uploadResult.insertedCount}</span>
                   </div>
-                  <div>
-                    <span className="text-blue-600">Ke Zains:</span>
-                    <span className="ml-2 font-semibold text-blue-700">{uploadResult.zainsInsertedCount || 0}</span>
+                  <div className="bg-blue-50 rounded border border-blue-200 px-3 py-2">
+                    <span className="text-blue-700 block text-xs">Ke Zains</span>
+                    <span className="font-semibold text-blue-800">{uploadResult.zainsInsertedCount ?? 0}</span>
                   </div>
-                  <div>
-                    <span className="text-amber-600">Dilewati:</span>
-                    <span className="ml-2 font-semibold text-amber-700">{uploadResult.skippedCount}</span>
+                  <div className="bg-amber-50 rounded border border-amber-200 px-3 py-2">
+                    <span className="text-amber-700 block text-xs">Gagal / Dilewati</span>
+                    <span className="font-semibold text-amber-800">{uploadResult.skippedCount}</span>
                   </div>
                 </div>
-                {uploadResult.errors && uploadResult.errors.length > 0 && (
-                  <div className="mt-3">
-                    <p className="text-sm font-semibold text-red-600 mb-1">Error:</p>
-                    <div className="max-h-32 overflow-y-auto text-xs text-red-700 space-y-1">
-                      {uploadResult.errors.map((error: string, idx: number) => (
-                        <div key={idx}>{error}</div>
-                      ))}
+                {/* Tabel status per baris */}
+                {uploadResult.results && uploadResult.results.length > 0 && (
+                  <div className="flex flex-col min-h-0 flex-1">
+                    <p className="text-sm font-medium text-slate-700 mb-2">Status per baris (baris Excel)</p>
+                    <div className="border border-slate-200 rounded-lg overflow-hidden bg-white flex-1 min-h-0 flex flex-col">
+                      <div className="overflow-auto flex-1 max-h-48 min-h-[120px]">
+                        <table className="w-full text-sm border-collapse">
+                          <thead className="bg-slate-100 sticky top-0">
+                            <tr>
+                              <th className="text-left py-2 px-3 font-semibold text-slate-700 w-24">Baris</th>
+                              <th className="text-left py-2 px-3 font-semibold text-slate-700 w-28">Status</th>
+                              <th className="text-left py-2 px-3 font-semibold text-slate-700">Keterangan</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {uploadResult.results.map((r: { row: number; status: string; message?: string }, idx: number) => (
+                              <tr key={idx} className="border-t border-slate-100">
+                                <td className="py-1.5 px-3 font-medium text-slate-800">{r.row}</td>
+                                <td className="py-1.5 px-3">
+                                  {r.status === 'success' && (
+                                    <span className="inline-flex items-center gap-1 text-green-700">
+                                      <CheckCircle2 className="w-4 h-4" /> Sukses
+                                    </span>
+                                  )}
+                                  {r.status === 'skipped' && (
+                                    <span className="inline-flex items-center gap-1 text-amber-700">
+                                      <AlertCircle className="w-4 h-4" /> Dilewati
+                                    </span>
+                                  )}
+                                  {r.status === 'error' && (
+                                    <span className="inline-flex items-center gap-1 text-red-700">
+                                      <XCircle className="w-4 h-4" /> Gagal
+                                    </span>
+                                  )}
+                                </td>
+                                <td className="py-1.5 px-3 text-slate-600">{r.message ?? '-'}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
                     </div>
                   </div>
                 )}
               </div>
-            )}
+              )}
+            </div>
 
             {/* Action Buttons - Selalu Terlihat di Bawah */}
             <div className="flex justify-end gap-3 pt-4 border-t flex-shrink-0 mt-auto">

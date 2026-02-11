@@ -165,21 +165,27 @@ export async function POST(request: NextRequest) {
     let skippedCount = 0
     let zainsInsertedCount = 0
     const errors: string[] = []
+    const results: { row: number; status: 'success' | 'skipped' | 'error'; message?: string }[] = []
 
     for (let i = 0; i < data.length; i++) {
+      const rowIndex = i + 2 // Excel baris (1-based + header)
       const row = data[i] as any
       try {
         // Validasi id_klinik (wajib) - support berbagai format
         const clinicIdStr = row['ID Klinik'] || row['id_klinik'] || row['Id Klinik'] || row['ID_Klinik']
         if (!clinicIdStr) {
-          errors.push(`Baris ${i + 2}: ID Klinik tidak ditemukan`)
+          const msg = 'ID Klinik tidak ditemukan'
+          errors.push(`Baris ${rowIndex}: ${msg}`)
+          results.push({ row: rowIndex, status: 'skipped', message: msg })
           skippedCount++
           continue
         }
 
         const clinicId = parseInt(String(clinicIdStr))
         if (isNaN(clinicId)) {
-          errors.push(`Baris ${i + 2}: id_klinik tidak valid: ${clinicIdStr}`)
+          const msg = `id_klinik tidak valid: ${clinicIdStr}`
+          errors.push(`Baris ${rowIndex}: ${msg}`)
+          results.push({ row: rowIndex, status: 'skipped', message: msg })
           skippedCount++
           continue
         }
@@ -189,7 +195,9 @@ export async function POST(request: NextRequest) {
           SELECT id, name, id_kantor_zains, id_rekening, kode_coa FROM clinics WHERE id = ${clinicId}
         `
         if (!clinic) {
-          errors.push(`Baris ${i + 2}: Klinik dengan ID ${clinicId} tidak ditemukan`)
+          const msg = `Klinik dengan ID ${clinicId} tidak ditemukan`
+          errors.push(`Baris ${rowIndex}: ${msg}`)
+          results.push({ row: rowIndex, status: 'skipped', message: msg })
           skippedCount++
           continue
         }
@@ -202,7 +210,9 @@ export async function POST(request: NextRequest) {
         // Parse tanggal
         const trxDate = parseDate(row['Tanggal'] || row['tanggal'] || '')
         if (!trxDate) {
-          errors.push(`Baris ${i + 2}: Tanggal tidak valid`)
+          const msg = 'Tanggal tidak valid'
+          errors.push(`Baris ${rowIndex}: ${msg}`)
+          results.push({ row: rowIndex, status: 'skipped', message: msg })
           skippedCount++
           continue
         }
@@ -373,6 +383,7 @@ export async function POST(request: NextRequest) {
         const transactionId = (insertedTransaction as any).id
 
         insertedCount++
+        results.push({ row: rowIndex, status: 'success' })
 
         // Break data ke transactions_to_zains berdasarkan master_target_categories
         // Hanya ambil field "Jumlah Pembayaran" yang ada nilainya (tidak 0)
@@ -544,8 +555,10 @@ export async function POST(request: NextRequest) {
           }
         }
       } catch (error: any) {
-        console.error(`Error processing row ${i + 2}:`, error)
-        errors.push(`Baris ${i + 2}: ${error.message || 'Error tidak diketahui'}`)
+        const msg = error.message || 'Error tidak diketahui'
+        console.error(`Error processing row ${rowIndex}:`, error)
+        errors.push(`Baris ${rowIndex}: ${msg}`)
+        results.push({ row: rowIndex, status: 'error', message: msg })
         skippedCount++
       }
     }
@@ -556,7 +569,8 @@ export async function POST(request: NextRequest) {
       zainsInsertedCount,
       skippedCount,
       totalRows: data.length,
-      errors: errors.slice(0, 50), // Limit errors to 50
+      errors: errors.slice(0, 50),
+      results,
     })
   } catch (error: any) {
     console.error('Error uploading transactions:', error)
