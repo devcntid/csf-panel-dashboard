@@ -509,13 +509,14 @@ export async function syncPatientToZainsWorkflow(
       return
     }
 
-    let baseUrl = process.env.NEXT_PUBLIC_APP_URL
-    if (!baseUrl && process.env.VERCEL_URL) {
-      baseUrl = `https://${process.env.VERCEL_URL}`
-    }
-    if (!baseUrl) {
-      baseUrl = 'http://localhost:3000'
-    }
+    // Gunakan BASE_URL dari env sebagai sumber kebenaran utama
+    // Contoh: BASE_URL="https://csf-dashboard.vercel.app"
+    let baseUrl =
+      process.env.BASE_URL ||
+      process.env.NEXT_PUBLIC_APP_URL ||
+      (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : '') ||
+      'http://localhost:3000'
+
     const workflowEndpoint = `${baseUrl}/api/workflow/sync-patient-to-zains`
 
     let lastError: any = null
