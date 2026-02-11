@@ -268,6 +268,9 @@ export async function POST(request: NextRequest) {
         // Format tanggal untuk patient & transaksi
         const trxDateFormatted = formatDateToYYYYMMDD(trxDate)
 
+        // ERM khusus untuk Zains (digabung clinicId + ermNo)
+        const ermNoForZains = `${clinicId}${ermNo}`
+
         // Cek apakah transaksi sudah ada
         const [existingTransaction] = await sql`
           SELECT id FROM transactions
