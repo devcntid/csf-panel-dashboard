@@ -680,68 +680,72 @@ export async function POST(request: NextRequest) {
             }
           }
 
-          // Hanya jika transaksi ini benar-benar punya record di transactions_to_zains,
-          // baru kita pastikan patient ada (insert/update) dan relasi patient_id di transactions diisi.
-          if (transactionZainsInsertedCount > 0) {
-            const ermNoForZains = `${clinic_id}${ermNo}`
-            const [insertedPatient] = await sql`
-              INSERT INTO patients (
-                clinic_id, 
-                erm_no, 
-                full_name, 
-                first_visit_at, 
-                last_visit_at, 
-                visit_count,
-                erm_no_for_zains
-              )
-              VALUES (
-                ${clinic_id},
-                ${ermNo},
-                ${patientName},
-                ${trxDateFormatted},
-                ${trxDateFormatted},
-                1,
-                ${ermNoForZains}
-              )
-              ON CONFLICT (clinic_id, erm_no) 
-              DO UPDATE SET
-                full_name = COALESCE(NULLIF(EXCLUDED.full_name, ''), patients.full_name),
-                first_visit_at = LEAST(patients.first_visit_at, EXCLUDED.first_visit_at),
-                last_visit_at = GREATEST(patients.last_visit_at, EXCLUDED.last_visit_at),
-                erm_no_for_zains = EXCLUDED.erm_no_for_zains,
-                updated_at = NOW()
-              RETURNING id, visit_count
+          // Pastikan patient selalu ada (insert/update) untuk SEMUA transaksi,
+          // baik yang masuk ke transactions_to_zains maupun yang tidak (misalnya BPJS / non-sync).
+          const hasZainsTransaction = transactionZainsInsertedCount > 0
+          const ermNoForZains = `${clinic_id}${ermNo}`
+          const defaultIdDonaturZains = hasZainsTransaction ? null : `-${clinic_id}-${ermNoForZains}`
+
+          const [insertedPatient] = await sql`
+            INSERT INTO patients (
+              clinic_id, 
+              erm_no, 
+              full_name, 
+              first_visit_at, 
+              last_visit_at, 
+              visit_count,
+              id_donatur_zains,
+              erm_no_for_zains
+            )
+            VALUES (
+              ${clinic_id},
+              ${ermNo},
+              ${patientName},
+              ${trxDateFormatted},
+              ${trxDateFormatted},
+              1,
+              ${defaultIdDonaturZains},
+              ${ermNoForZains}
+            )
+            ON CONFLICT (clinic_id, erm_no) 
+            DO UPDATE SET
+              full_name = COALESCE(NULLIF(EXCLUDED.full_name, ''), patients.full_name),
+              first_visit_at = LEAST(patients.first_visit_at, EXCLUDED.first_visit_at),
+              last_visit_at = GREATEST(patients.last_visit_at, EXCLUDED.last_visit_at),
+              erm_no_for_zains = EXCLUDED.erm_no_for_zains,
+              updated_at = NOW()
+            RETURNING id, visit_count
+          `
+
+          patientId = insertedPatient ? (insertedPatient as any).id : null
+          patientVisitCount = insertedPatient ? (insertedPatient as any).visit_count : 0
+
+          // Update relasi patient_id di transactions untuk semua transaksi
+          if (patientId) {
+            await sql`
+              UPDATE transactions
+              SET patient_id = ${patientId},
+                  updated_at = NOW()
+              WHERE id = ${transactionId}
             `
+          }
 
-            patientId = insertedPatient ? (insertedPatient as any).id : null
-            patientVisitCount = insertedPatient ? (insertedPatient as any).visit_count : 0
+          // Increment visit_count hanya jika transaksi benar-benar baru (bukan duplicate)
+          // Jika patient baru (visit_count = 1 dari insert), tidak perlu increment karena sudah di-set ke 1
+          // Jika patient sudah ada (visit_count > 1), increment visit_count untuk transaksi baru
+          if (isNewTransaction && patientId && patientVisitCount > 1) {
+            await sql`
+              UPDATE patients 
+              SET visit_count = visit_count + 1,
+                  updated_at = NOW()
+            WHERE id = ${patientId}
+            `
+          }
 
-            // Update relasi patient_id di transactions
-            if (patientId) {
-              await sql`
-                UPDATE transactions
-                SET patient_id = ${patientId},
-                    updated_at = NOW()
-                WHERE id = ${transactionId}
-              `
-            }
-
-            // Increment visit_count hanya jika transaksi benar-benar baru (bukan duplicate)
-            // Jika patient baru (visit_count = 1 dari insert), tidak perlu increment karena sudah di-set ke 1
-            // Jika patient sudah ada (visit_count > 1), increment visit_count untuk transaksi baru
-            if (isNewTransaction && patientId && patientVisitCount > 1) {
-              await sql`
-                UPDATE patients 
-                SET visit_count = visit_count + 1,
-                    updated_at = NOW()
-                WHERE id = ${patientId}
-              `
-            }
-
-            // Sync patient ke Zains setelah transaction to zains berhasil (workflow integration, spesifik transaction ini)
-            if (patientId && !idDonatur) {
-              syncPatientToZainsWorkflow(patientId, transactionId)
-            }
+          // Sync patient ke Zains hanya jika memang ada record di transactions_to_zains
+          // dan patient ini belum memiliki id_donatur_zains dari Zains.
+          if (hasZainsTransaction && patientId && !idDonatur) {
+            syncPatientToZainsWorkflow(patientId, transactionId)
           }
         } catch (error: any) {
           console.error('❌ Error processing row:', error.message, row)
