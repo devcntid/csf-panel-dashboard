@@ -5,16 +5,20 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { Eye, ExternalLink, Trash2 } from 'lucide-react'
+import { toast } from 'sonner'
+import { Pagination } from '@/components/ui/pagination'
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
-import { Eye, ExternalLink, Download } from 'lucide-react'
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import { formatCurrency, formatDate } from '@/lib/db'
-import { getTransactionById } from '@/lib/actions/transactions'
+import { getTransactionById, deleteTransaction } from '@/lib/actions/transactions'
 import { TransaksiDetail } from './transaksi-detail'
 import { TransaksiZainsDetail } from './transaksi-zains-detail'
 import { TransaksiSearch } from './transaksi-search'
@@ -51,6 +55,7 @@ export function TransaksiClient({
   const [isPending, startTransition] = useTransition()
   const [showFilter, setShowFilter] = useState(false)
   const [showUpload, setShowUpload] = useState(false)
+  const [deleteConfirm, setDeleteConfirm] = useState<{ id: number; trxNo: string } | null>(null)
 
   const handlePageChange = (newPage: number) => {
     startTransition(() => {
@@ -60,10 +65,10 @@ export function TransaksiClient({
     })
   }
 
-  const handlePerPageChange = (value: string) => {
+  const handleLimitChange = (limit: number) => {
     startTransition(() => {
       const params = new URLSearchParams(searchParams.toString())
-      params.set('perPage', value)
+      params.set('perPage', String(limit))
       params.set('page', '1')
       router.push(`/dashboard/transaksi?${params.toString()}`)
     })
@@ -96,6 +101,23 @@ export function TransaksiClient({
     setSelectedZainsNo('')
   }
 
+  const showDeleteTransactionConfirm = (trx: { id: number; trx_no?: string }) => {
+    toast.dismiss() // pastikan tidak ada toast konfirmasi dobel di kanan atas
+    setDeleteConfirm({ id: trx.id, trxNo: trx.trx_no || `TRX-${trx.id}` })
+  }
+
+  const handleConfirmDeleteTransaction = async () => {
+    if (!deleteConfirm) return
+    const result = await deleteTransaction(deleteConfirm.id)
+    setDeleteConfirm(null)
+    if (result.success) {
+      toast.success('Transaksi berhasil dihapus')
+      router.refresh()
+    } else {
+      toast.error(result.error || 'Gagal menghapus transaksi')
+    }
+  }
+
   const handleDownloadFormat = async (clinicId: number) => {
     try {
       const response = await fetch(`/api/upload-transactions/template/${clinicId}`)
@@ -119,8 +141,6 @@ export function TransaksiClient({
       console.error('Error downloading format:', error)
     }
   }
-
-  const currentPerPage = searchParams.get('perPage') || perPage.toString()
 
   return (
     <>
@@ -227,7 +247,7 @@ export function TransaksiClient({
                   <th className="text-center py-3 px-4 text-xs font-semibold text-slate-600 relative" style={{ width: '110px', minWidth: '110px', maxWidth: '110px' }}>
                     Input Type
                   </th>
-                  <th className="text-center py-3 px-4 text-xs font-semibold text-slate-600 relative" style={{ width: '180px', minWidth: '180px', maxWidth: '180px' }}>
+                  <th className="text-center py-3 px-4 text-xs font-semibold text-slate-600 relative" style={{ width: '320px', minWidth: '320px', maxWidth: '320px' }}>
                     Aksi
                   </th>
                 </tr>
@@ -310,8 +330,8 @@ export function TransaksiClient({
                           {trx.input_type === 'upload' ? 'Upload' : trx.input_type === 'scrap' ? 'Scrap' : trx.input_type || '-'}
                         </Badge>
                       </td>
-                      <td className="py-3 px-4 text-center whitespace-nowrap">
-                        <div className="flex gap-2 justify-center">
+                      <td className="py-3 px-4 text-center whitespace-nowrap" style={{ width: '320px', minWidth: '320px' }}>
+                        <div className="flex gap-2 justify-center flex-nowrap">
                           <Button 
                             size="sm" 
                             variant="ghost" 
@@ -332,6 +352,16 @@ export function TransaksiClient({
                             <ExternalLink className="w-4 h-4 mr-1" />
                             To Zains
                           </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                            onClick={() => showDeleteTransactionConfirm(trx)}
+                            disabled={isPending}
+                          >
+                            <Trash2 className="w-4 h-4 mr-1" />
+                            Hapus
+                          </Button>
                         </div>
                       </td>
                     </tr>
@@ -341,96 +371,15 @@ export function TransaksiClient({
             </table>
           </div>
 
-          {/* Pagination */}
+          {/* Pagination - komponen reusable */}
           {total > 0 && (
-            <div className="flex items-center justify-between mt-4 pt-4 border-t">
-              <p className="text-sm text-slate-600">
-                Menampilkan {(page - 1) * perPage + 1}-{Math.min(page * perPage, total)} dari {total.toLocaleString('id-ID')} transaksi
-              </p>
-              <div className="flex items-center gap-4">
-                <div className="flex gap-2">
-                  <Button 
-                    variant="outline" 
-                    size="sm" 
-                    disabled={page === 1 || isPending}
-                    onClick={() => handlePageChange(1)}
-                    className="h-8 px-3"
-                  >
-                    First
-                  </Button>
-                  <Button 
-                    variant="outline" 
-                    size="sm" 
-                    disabled={page === 1 || isPending}
-                    onClick={() => handlePageChange(page - 1)}
-                  >
-                    Previous
-                  </Button>
-                  {(() => {
-                    const totalPages = Math.ceil(total / perPage)
-                    const pages: number[] = []
-                    
-                    if (totalPages <= 5) {
-                      for (let i = 1; i <= totalPages; i++) {
-                        pages.push(i)
-                      }
-                    } else {
-                      if (page <= 3) {
-                        for (let i = 1; i <= 5; i++) {
-                          pages.push(i)
-                        }
-                      } else if (page >= totalPages - 2) {
-                        for (let i = totalPages - 4; i <= totalPages; i++) {
-                          pages.push(i)
-                        }
-                      } else {
-                        for (let i = page - 2; i <= page + 2; i++) {
-                          pages.push(i)
-                        }
-                      }
-                    }
-                    
-                    return pages.map((pageNum) => (
-                      <Button
-                        key={pageNum}
-                        variant="outline"
-                        size="sm"
-                        disabled={isPending}
-                        onClick={() => handlePageChange(pageNum)}
-                        className={pageNum === page ? 'bg-teal-600 text-white hover:bg-teal-700' : ''}
-                      >
-                        {pageNum}
-                      </Button>
-                    ))
-                  })()}
-                  <Button 
-                    variant="outline" 
-                    size="sm" 
-                    disabled={page * perPage >= total || isPending}
-                    onClick={() => handlePageChange(page + 1)}
-                  >
-                    Next
-                  </Button>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-sm text-slate-600">Per halaman</span>
-                  <Select
-                    value={currentPerPage}
-                    onValueChange={handlePerPageChange}
-                    disabled={isPending}
-                  >
-                    <SelectTrigger className="h-8 w-20">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="10">10</SelectItem>
-                      <SelectItem value="25">25</SelectItem>
-                      <SelectItem value="50">50</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-            </div>
+            <Pagination
+              page={page}
+              limit={perPage}
+              total={total}
+              onPageChange={handlePageChange}
+              onLimitChange={handleLimitChange}
+            />
           )}
         </CardContent>
       </Card>
@@ -460,6 +409,28 @@ export function TransaksiClient({
           }}
         />
       )}
+
+      {/* Konfirmasi Hapus Transaksi - modal tengah dengan backdrop blur */}
+      <AlertDialog open={!!deleteConfirm} onOpenChange={(open) => !open && setDeleteConfirm(null)}>
+        <AlertDialogContent className="sm:max-w-md">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Hapus transaksi?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Transaksi <strong>{deleteConfirm?.trxNo}</strong> dan semua data terkait di transactions_to_zains akan dihapus. Tindakan ini tidak dapat dibatalkan.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Batal</AlertDialogCancel>
+            <Button
+              variant="destructive"
+              onClick={handleConfirmDeleteTransaction}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              Ya, Hapus
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   )
 }

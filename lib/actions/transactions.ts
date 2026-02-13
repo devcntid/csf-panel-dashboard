@@ -1829,3 +1829,21 @@ export const getTransactionsToZains = cache(async (
     return []
   }
 })
+
+/**
+ * Hapus transaksi beserta cascade ke transactions_to_zains.
+ * Urutan: hapus dulu transactions_to_zains, lalu transactions.
+ */
+export async function deleteTransaction(transactionId: number): Promise<{ success: boolean; error?: string }> {
+  try {
+    await sql`DELETE FROM transactions_to_zains WHERE transaction_id = ${transactionId}`
+    await sql`DELETE FROM transactions WHERE id = ${transactionId}`
+    return { success: true }
+  } catch (error) {
+    console.error('Error deleting transaction:', error)
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Gagal menghapus transaksi',
+    }
+  }
+}

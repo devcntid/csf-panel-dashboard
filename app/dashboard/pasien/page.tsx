@@ -7,6 +7,7 @@ import { getAllClinics } from '@/lib/actions/config'
 import { formatDate } from '@/lib/db'
 import { PasienClient } from './pasien-client'
 import { PatientPagination } from './patient-pagination'
+import { PasienRowActions } from './pasien-row-actions'
 import { Suspense } from 'react'
 
 // Komponen terpisah untuk stats - bisa di-stream
@@ -163,16 +164,7 @@ async function PatientList({ search, page, clinicId, perPage }: { search: string
                     </Badge>
                   </td>
                   <td className="py-3 px-4 text-center">
-                    <Button 
-                      size="sm" 
-                      variant="ghost" 
-                      className="text-teal-600"
-                      asChild
-                    >
-                      <a href={`/dashboard/pasien/${patient.id}`}>
-                        Detail
-                      </a>
-                    </Button>
+                    <PasienRowActions patientId={patient.id} patientName={patient.full_name} />
                   </td>
                 </tr>
                 )
