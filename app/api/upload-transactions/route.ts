@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { sql } from '@/lib/db'
 import * as XLSX from 'xlsx'
+import { getZainsTransactionSyncEnabled } from '@/lib/settings'
 import { syncPatientToZainsWorkflow } from '@/lib/services/zains-sync'
 
 // Helper function untuk parse tanggal
@@ -434,6 +435,7 @@ export async function POST(request: NextRequest) {
 
         // Counter untuk transaction to zains per transaction (untuk workflow integration)
         let transactionZainsInsertedCount = 0
+        const todoZains = await getZainsTransactionSyncEnabled()
 
         // Insert ke transactions_to_zains untuk setiap field yang memiliki nilai > 0
         for (const field of paidFields) {
@@ -475,7 +477,7 @@ export async function POST(request: NextRequest) {
                     ${nominalValue},
                     ${idRekening},
                     false,
-                    true,
+                    ${todoZains},
                     ${patientName},
                     ${ermNoForZains},
                     NOW(),

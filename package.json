@@ -7,6 +7,7 @@
     "dev": "next dev",
     "lint": "eslint .",
     "migrate": "tsx scripts/migrate.ts",
+    "migrate:app-settings": "tsx scripts/add-app-settings-table.ts",
     "migrate:input-type": "tsx scripts/add-input-type-to-transactions.ts",
     "playwright:install": "npx playwright install chromium",
     "scrap": "node scripts/scrap.js",
