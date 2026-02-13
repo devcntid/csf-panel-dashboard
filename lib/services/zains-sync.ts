@@ -1,6 +1,7 @@
 'use server'
 
 import { sql } from '@/lib/db'
+import { getZainsTransactionSyncEnabled } from '@/lib/settings'
 import { Client } from '@upstash/qstash'
 
 interface ZainsSyncPayload {
@@ -556,10 +557,15 @@ export async function syncPatientToZainsWorkflow(
 
 /**
  * Response type untuk Zains /corez/transaksi/save
+ * Bentuk sukses: { status: true, data: { id_transaksi, ... } }
+ * Bentuk "transaksi sudah ada": { status: false, message: "...", id_transaksi, no_bukti, id_donatur } (top-level)
  */
 interface ZainsTransactionSaveResponse {
   status?: boolean
   message?: string
+  id_transaksi?: string
+  no_bukti?: string
+  id_donatur?: string
   data?: {
     id_transaksi?: string
     id_donatur?: number
@@ -570,12 +576,16 @@ interface ZainsTransactionSaveResponse {
 /**
  * Ambil batch transactions_to_zains yang siap di-sync ke Zains
  * Criteria:
+ * - Toggle global sync transaksi ke Zains = true
  * - id_donatur terisi
  * - synced = false
  * - todo_zains = true
  */
 export async function getPendingTransactionsToZains(limit: number = 10): Promise<any[]> {
   try {
+    const syncEnabled = await getZainsTransactionSyncEnabled()
+    if (!syncEnabled) return []
+
     const rows = await sql`
       SELECT 
         tz.id,
@@ -622,6 +632,9 @@ export async function getPendingTransactionsToZainsByTransactionId(
   transactionId: number,
 ): Promise<any[]> {
   try {
+    const syncEnabled = await getZainsTransactionSyncEnabled()
+    if (!syncEnabled) return []
+
     const rows = await sql`
       SELECT 
         tz.id,
@@ -847,7 +860,51 @@ export async function syncSingleTransactionToZains(record: any): Promise<{
     }
 
     const data: ZainsTransactionSaveResponse = await response.json()
-    const idTransaksi = data.data?.id_transaksi
+    // id_transaksi bisa di data.data (sukses) atau top-level (response "transaksi sudah ada")
+    const idTransaksi = data.data?.id_transaksi ?? data.id_transaksi
+
+    // Response "transaksi sudah ada" dari Zains: skip dan tandai record sebagai synced agar tidak di-retry
+    const isDuplicateMessage =
+      data.status === false &&
+      data.message &&
+      (String(data.message).toLowerCase().includes('sudah ada') ||
+        String(data.message).toLowerCase().includes('telah tercatat'))
+
+    if (isDuplicateMessage && idTransaksi) {
+      // Update record: tandai synced + simpan id_transaksi yang dikembalikan Zains
+      await sql`
+        UPDATE transactions_to_zains
+        SET 
+          id_transaksi = ${idTransaksi},
+          synced = true,
+          todo_zains = false,
+          updated_at = NOW()
+        WHERE id = ${record.id}
+      `
+      if (record.transaction_id) {
+        await sql`
+          UPDATE transactions
+          SET 
+            zains_synced = true,
+            zains_sync_at = NOW(),
+            updated_at = NOW()
+          WHERE id = ${record.transaction_id}
+        `
+      }
+      await logTransactionSyncResult(
+        record.clinic_id || null,
+        'success',
+        { ...data, _note: 'Transaksi sudah ada di Zains, di-skip dan ditandai synced' },
+        payload,
+      )
+      return {
+        success: true,
+        id_transaksi: idTransaksi,
+        transactionsToZainsId: record.id,
+        rawResponse: data,
+        httpStatus,
+      }
+    }
 
     if (!idTransaksi) {
       // Log response error ketika tidak ada id_transaksi di response

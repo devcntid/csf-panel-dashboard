@@ -18,6 +18,7 @@ const migrationSQL = `
 -- =============================================
 -- 1. SETUP & CLEANUP
 -- =============================================
+DROP TABLE IF EXISTS app_settings CASCADE;
 DROP TABLE IF EXISTS system_logs CASCADE;
 DROP TABLE IF EXISTS public_holidays CASCADE;
 DROP TABLE IF EXISTS clinic_daily_targets CASCADE;
@@ -447,6 +448,16 @@ CREATE TABLE public_holidays (
 
 CREATE INDEX idx_holiday_year ON public_holidays(year);
 CREATE INDEX idx_holiday_date ON public_holidays(holiday_date);
+
+-- =============================================
+-- 8a. TABLE: APP SETTINGS (Toggle & konfigurasi global)
+-- =============================================
+CREATE TABLE app_settings (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+INSERT INTO app_settings (key, value) VALUES ('zains_transaction_sync_enabled', 'true');
 
 -- =============================================
 -- 9. MATERIALIZED VIEWS (Pre-calculated Summary for Fast Dashboard)

@@ -17,6 +17,7 @@ import { CRUDSource } from './crud-source'
 import { CRUDInsuranceMapping } from './crud-insurance-mapping'
 import { CRUDInsuranceType } from './crud-insurance-type'
 import { CRUDPublicHoliday } from './crud-public-holiday'
+import { ZainsSyncSetting } from './zains-sync-setting'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 
@@ -195,6 +196,16 @@ export function KonfigurasiTabs({
             }`}
           >
             Hari Libur
+          </button>
+          <button
+            onClick={() => setActiveTab('zains-sync')}
+            className={`px-4 py-2 font-medium text-sm border-b-2 transition-colors ${
+              activeTab === 'zains-sync'
+                ? 'border-teal-600 text-teal-600'
+                : 'border-transparent text-slate-500 hover:text-slate-700'
+            }`}
+          >
+            Sync Zains
           </button>
           <button
             onClick={() => setActiveTab('logs')}
@@ -377,6 +388,8 @@ export function KonfigurasiTabs({
             </CardContent>
           </Card>
         )}
+
+        {activeTab === 'zains-sync' && <ZainsSyncSetting />}
 
         {activeTab === 'logs' && (
           <Card>
