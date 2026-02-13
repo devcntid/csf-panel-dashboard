@@ -325,3 +325,24 @@ export const getPatientStats = cache(async (search?: string, clinicId?: number) 
     }
   }
 })
+
+/**
+ * Hapus pasien beserta cascade: transactions_to_zains (transaksi pasien) lalu transactions, lalu patient.
+ */
+export async function deletePatient(patientId: number): Promise<{ success: boolean; error?: string }> {
+  try {
+    await sql`
+      DELETE FROM transactions_to_zains
+      WHERE transaction_id IN (SELECT id FROM transactions WHERE patient_id = ${patientId})
+    `
+    await sql`DELETE FROM transactions WHERE patient_id = ${patientId}`
+    await sql`DELETE FROM patients WHERE id = ${patientId}`
+    return { success: true }
+  } catch (error) {
+    console.error('Error deleting patient:', error)
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Gagal menghapus pasien',
+    }
+  }
+}
