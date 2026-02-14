@@ -6,7 +6,7 @@ import { Suspense } from 'react'
 export default async function TransaksiPage({
   searchParams,
 }: {
-  searchParams: Promise<{ search?: string; page?: string; clinic?: string; poly?: string; insurance?: string; dateFrom?: string; dateTo?: string }>
+  searchParams: Promise<{ search?: string; page?: string; perPage?: string; clinic?: string; poly?: string; insurance?: string; dateFrom?: string; dateTo?: string }>
 }) {
   const params = await searchParams
   
@@ -27,7 +27,7 @@ export default async function TransaksiPage({
 
   const search = params.search || ''
   const page = parseInt(params.page || '1')
-  const perPage = parseInt((params as any).perPage || '10') || 10
+  const perPage = parseInt(params.perPage || '10') || 10
   const clinicId = params.clinic ? parseInt(params.clinic) : undefined
   const polyId = params.poly ? parseInt(params.poly) : undefined
   const insuranceTypeId = params.insurance ? parseInt(params.insurance) : undefined
