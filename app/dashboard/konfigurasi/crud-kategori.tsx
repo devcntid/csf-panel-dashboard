@@ -250,7 +250,7 @@ export function CRUDKategoriLayanan({
               limit={limit}
               total={total}
               onPageChange={setPage}
-              onLimitChange={setLimit}
+              onLimitChange={(v) => { setLimit(v); setPage(1); }}
             />
           </CardContent>
         </Card>

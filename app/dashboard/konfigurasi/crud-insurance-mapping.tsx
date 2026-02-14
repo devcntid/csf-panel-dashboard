@@ -399,7 +399,7 @@ export function CRUDInsuranceMapping({
                   limit={limit}
                   total={total}
                   onPageChange={setPage}
-                  onLimitChange={setLimit}
+                  onLimitChange={(v) => { setLimit(v); setPage(1); }}
                 />
               </div>
             </>

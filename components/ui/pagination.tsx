@@ -80,8 +80,11 @@ export function Pagination({ page, limit, total, onPageChange, onLimitChange }: 
           <Select
             value={limit.toString()}
             onValueChange={(v) => {
-              onLimitChange(parseInt(v))
-              onPageChange(1)
+              const newLimit = parseInt(v, 10)
+              onLimitChange(newLimit)
+              // Jangan panggil onPageChange(1) di sini: parent (handleLimitChange) sudah set page=1 di URL.
+              // Memanggil keduanya menyebabkan dua router.push berurutan; push kedua pakai searchParams
+              // lama sehingga perPage yang baru tertimpa kembali ke nilai default.
             }}
           >
             <SelectTrigger className="w-20 h-8">
