@@ -221,6 +221,7 @@ export async function createDailyTarget(data: {
   clinic_id?: number | null
   master_poly_id?: number | null
   source_id: number
+  insurance_type_id?: number | null
   target_type: 'daily' | 'cumulative'
   target_date?: string | null  // Opsional, jika diisi akan sync dengan bulan/tahun
   target_month?: number | null  // Wajib (1-12)
@@ -251,6 +252,7 @@ export async function createDailyTarget(data: {
         clinic_id, 
         master_poly_id, 
         source_id,
+        insurance_type_id,
         target_type,
         target_date,
         target_month,
@@ -263,6 +265,7 @@ export async function createDailyTarget(data: {
         ${data.clinic_id ?? null},
         ${data.master_poly_id ?? null},
         ${data.source_id},
+        ${data.insurance_type_id ?? null},
         ${data.target_type},
         ${data.target_date || null},
         ${data.target_month},
@@ -290,27 +293,71 @@ export async function updateDailyTarget(id: number, data: {
   target_visits?: number
   target_revenue?: number
   tipe_donatur?: 'retail' | 'corporate' | 'community' | ''
+  insurance_type_id?: number | null
 }) {
   try {
     // Validasi: jika target_month atau target_year diupdate, pastikan valid
     if (data.target_month !== undefined && (data.target_month < 1 || data.target_month > 12)) {
       return { success: false, error: 'target_month harus antara 1-12' }
     }
+
+    // Ambil data existing untuk kebutuhan validasi lanjut (termasuk cek duplikasi)
+    const existingRaw = await sql`
+      SELECT 
+        id,
+        clinic_id,
+        master_poly_id,
+        source_id,
+        target_type,
+        target_month,
+        target_year
+      FROM clinic_daily_targets 
+      WHERE id = ${id}
+      LIMIT 1
+    `
+    const existing = Array.isArray(existingRaw) ? existingRaw[0] : existingRaw
+
+    if (!existing) {
+      return { success: false, error: 'Data target harian tidak ditemukan' }
+    }
+    
+    // Hitung nilai final yang akan dipakai setelah update
+    const finalMonth = data.target_month !== undefined ? data.target_month : existing.target_month
+    const finalYear = data.target_year !== undefined ? data.target_year : existing.target_year
+    const finalType = data.target_type !== undefined ? data.target_type : existing.target_type
     
     // Validasi: jika target_date diisi, pastikan konsisten dengan bulan dan tahun
     if (data.target_date !== undefined && data.target_date !== null) {
       const date = new Date(data.target_date)
       const dateMonth = date.getMonth() + 1
       const dateYear = date.getFullYear()
-      
-      // Ambil nilai bulan dan tahun yang akan digunakan (dari data atau existing)
-      const existing = await sql`SELECT target_month, target_year FROM clinic_daily_targets WHERE id = ${id}`
-      const existingTarget = Array.isArray(existing) ? existing[0] : existing
-      const finalMonth = data.target_month !== undefined ? data.target_month : existingTarget?.target_month
-      const finalYear = data.target_year !== undefined ? data.target_year : existingTarget?.target_year
-      
+
       if (finalMonth && finalYear && (dateMonth !== finalMonth || dateYear !== finalYear)) {
         return { success: false, error: 'target_date, target_month, dan target_year harus konsisten' }
+      }
+    }
+
+    // Cek duplikasi untuk target kumulatif:
+    // kombinasi (clinic_id, master_poly_id, source_id, target_month, target_year) harus unik
+    if (finalType === 'cumulative' && finalMonth && finalYear) {
+      const duplicateRaw = await sql`
+        SELECT id
+        FROM clinic_daily_targets
+        WHERE clinic_id = ${existing.clinic_id}
+          AND master_poly_id = ${existing.master_poly_id}
+          AND source_id = ${existing.source_id}
+          AND target_month = ${finalMonth}
+          AND target_year = ${finalYear}
+          AND id <> ${id}
+        LIMIT 1
+      `
+      const duplicate = Array.isArray(duplicateRaw) ? duplicateRaw[0] : duplicateRaw
+
+      if (duplicate) {
+        return { 
+          success: false, 
+          error: 'Target kumulatif untuk kombinasi Klinik, Poli, Source, Bulan, dan Tahun ini sudah ada. Silakan gunakan kombinasi lain atau edit data yang sudah ada.' 
+        }
       }
     }
 
@@ -335,6 +382,14 @@ export async function updateDailyTarget(id: number, data: {
     }
     if (data.tipe_donatur !== undefined) {
       await sql`UPDATE clinic_daily_targets SET tipe_donatur = ${data.tipe_donatur || null}, updated_at = NOW() WHERE id = ${id}`
+    }
+    if (data.insurance_type_id !== undefined) {
+      await sql`
+        UPDATE clinic_daily_targets
+        SET insurance_type_id = ${data.insurance_type_id ?? null},
+            updated_at = NOW()
+        WHERE id = ${id}
+      `
     }
     
     revalidatePath('/dashboard/konfigurasi')

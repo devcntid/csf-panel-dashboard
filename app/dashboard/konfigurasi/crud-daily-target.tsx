@@ -20,7 +20,7 @@ import {
   deleteDailyTarget,
   getTargetConfigByClinicPolyYear,
 } from '@/lib/actions/crud'
-import { getAllClinics, getMasterPolies, getSources } from '@/lib/actions/config'
+import { getAllClinics, getMasterPolies, getSources, getMasterInsuranceTypes } from '@/lib/actions/config'
 import { getDailyTargetsPaginated } from '@/lib/actions/pagination'
 import { formatCurrency, formatDate } from '@/lib/db'
 import { Pagination } from '@/components/ui/pagination'
@@ -43,6 +43,7 @@ export function CRUDDailyTarget({
   const [polies, setPolies] = useState<any[]>(initialPolies || [])
   const [clinics, setClinics] = useState<any[]>(initialClinics || [])
   const [sources, setSources] = useState<any[]>(initialSources || [])
+  const [insuranceTypes, setInsuranceTypes] = useState<any[]>([])
   const [isOpen, setIsOpen] = useState(false)
   const [editingId, setEditingId] = useState<number | null>(null)
   const [page, setPage] = useState(initialData?.page || 1)
@@ -63,6 +64,7 @@ export function CRUDDailyTarget({
     clinic_id: '',
     master_poly_id: '',
     source_id: '',
+    insurance_type_id: '',
     target_type: 'daily' as 'daily' | 'cumulative',
     target_date: new Date().toISOString().split('T')[0],
     target_month: new Date().getMonth() + 1,
@@ -76,7 +78,7 @@ export function CRUDDailyTarget({
   const loadData = async () => {
     setLoading(true)
     try {
-      const [targetsResult, poliesData, clinicsData, sourcesData] = await Promise.all([
+      const [targetsResult, poliesData, clinicsData, sourcesData, insuranceTypesData] = await Promise.all([
         getDailyTargetsPaginated(
           filters.clinic_id ? parseInt(filters.clinic_id) : undefined,
           filters.poly_id ? parseInt(filters.poly_id) : undefined,
@@ -88,12 +90,14 @@ export function CRUDDailyTarget({
         getMasterPolies(),
         getAllClinics(),
         getSources(),
+        getMasterInsuranceTypes(),
       ])
       setTargets(targetsResult.targets)
       setTotal(targetsResult.total)
       setPolies(poliesData)
       setClinics(clinicsData)
       setSources(sourcesData)
+      setInsuranceTypes(insuranceTypesData)
     } catch (error) {
       console.error('Error loading data:', error)
     } finally {
@@ -157,7 +161,8 @@ export function CRUDDailyTarget({
     }
     
     // Validasi: jika target_date diisi, pastikan bulan dan tahun sesuai
-    if (formData.target_date) {
+    // Berlaku hanya untuk tipe "daily". Untuk "cumulative" tanggal tidak dipakai.
+    if (formData.target_type === 'daily' && formData.target_date) {
       const date = new Date(formData.target_date)
       const dateMonth = date.getMonth() + 1
       const dateYear = date.getFullYear()
@@ -182,11 +187,15 @@ export function CRUDDailyTarget({
           target_visits: formData.target_visits,
           target_revenue: formData.target_revenue,
           tipe_donatur: formData.tipe_donatur,
+          insurance_type_id: formData.insurance_type_id
+            ? parseInt(formData.insurance_type_id)
+            : null,
         })
       : await createDailyTarget({
           clinic_id: formData.clinic_id ? parseInt(formData.clinic_id) : null,
           master_poly_id: formData.master_poly_id ? parseInt(formData.master_poly_id) : null,
           source_id: parseInt(formData.source_id),
+          insurance_type_id: formData.insurance_type_id ? parseInt(formData.insurance_type_id) : null,
           target_type: formData.target_type,
           target_date: formData.target_date || null,
           target_month: formData.target_month,
@@ -204,6 +213,7 @@ export function CRUDDailyTarget({
         clinic_id: '',
         master_poly_id: '',
         source_id: '',
+        insurance_type_id: '',
         target_type: 'daily',
         target_date: new Date().toISOString().split('T')[0],
         target_month: new Date().getMonth() + 1,
@@ -224,27 +234,32 @@ export function CRUDDailyTarget({
     setEditingId(target.id)
     
     // Format tanggal ke YYYY-MM-DD untuk input type="date"
-    let formattedDate = target.target_date || new Date().toISOString().split('T')[0]
+    // Untuk tipe cumulative, tanggal tidak relevan sehingga dikosongkan
+    let formattedDate = ''
     
-    if (target.target_date) {
-      if (typeof target.target_date === 'string') {
-        const dateMatch = target.target_date.match(/^(\d{4})-(\d{2})-(\d{2})/)
-        if (dateMatch) {
-          formattedDate = target.target_date
-        } else {
-          const date = new Date(target.target_date)
-          if (!isNaN(date.getTime())) {
-            const year = date.getFullYear()
-            const month = String(date.getMonth() + 1).padStart(2, '0')
-            const day = String(date.getDate()).padStart(2, '0')
-            formattedDate = `${year}-${month}-${day}`
+    if (target.target_type === 'daily') {
+      formattedDate = target.target_date || new Date().toISOString().split('T')[0]
+      
+      if (target.target_date) {
+        if (typeof target.target_date === 'string') {
+          const dateMatch = target.target_date.match(/^(\d{4})-(\d{2})-(\d{2})/)
+          if (dateMatch) {
+            formattedDate = target.target_date
+          } else {
+            const date = new Date(target.target_date)
+            if (!isNaN(date.getTime())) {
+              const year = date.getFullYear()
+              const month = String(date.getMonth() + 1).padStart(2, '0')
+              const day = String(date.getDate()).padStart(2, '0')
+              formattedDate = `${year}-${month}-${day}`
+            }
           }
+        } else if (target.target_date instanceof Date) {
+          const year = target.target_date.getFullYear()
+          const month = String(target.target_date.getMonth() + 1).padStart(2, '0')
+          const day = String(target.target_date.getDate()).padStart(2, '0')
+          formattedDate = `${year}-${month}-${day}`
         }
-      } else if (target.target_date instanceof Date) {
-        const year = target.target_date.getFullYear()
-        const month = String(target.target_date.getMonth() + 1).padStart(2, '0')
-        const day = String(target.target_date.getDate()).padStart(2, '0')
-        formattedDate = `${year}-${month}-${day}`
       }
     }
     
@@ -252,6 +267,7 @@ export function CRUDDailyTarget({
       clinic_id: target.clinic_id?.toString() || '',
       master_poly_id: target.master_poly_id?.toString() || '',
       source_id: target.source_id?.toString() || '',
+      insurance_type_id: target.insurance_type_id?.toString() || '',
       target_type: (target.target_type as 'daily' | 'cumulative') || 'daily',
       target_date: formattedDate,
       target_month: target.target_month || new Date().getMonth() + 1,
@@ -631,6 +647,30 @@ export function CRUDDailyTarget({
                   </Select>
                 </div>
                 <div className="space-y-2">
+                  <Label>Insurance Type</Label>
+                  <Select
+                    value={formData.insurance_type_id || '__none__'}
+                    onValueChange={(value) =>
+                      setFormData(prev => ({ ...prev, insurance_type_id: value === '__none__' ? '' : value }))
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Pilih Insurance Type (Opsional)" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none__">- Tidak spesifik -</SelectItem>
+                      {insuranceTypes.map((it) => (
+                        <SelectItem key={it.id} value={it.id.toString()}>
+                          {it.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-slate-500">
+                    Contoh: bedakan Target Poli Gigi Umum vs BPJS/Klaim
+                  </p>
+                </div>
+                <div className="space-y-2">
                   <Label>Tipe Target *</Label>
                   <Select
                     required
@@ -797,6 +837,9 @@ export function CRUDDailyTarget({
                     <h4 className="font-semibold">{target.clinic_name} - {target.poly_name}</h4>
                     <p className="text-sm text-slate-500 mt-1">{formatDate(target.target_date)}</p>
                     <div className="flex gap-2 mt-2 flex-wrap">
+                      {target.insurance_type_name && (
+                        <Badge variant="outline">{target.insurance_type_name}</Badge>
+                      )}
                       <Badge variant="outline">Tarif: {formatCurrency(target.base_rate || 0)}</Badge>
                       <Badge variant="outline">Kunjungan: {target.target_visits || 0}</Badge>
                       <Badge variant="outline">Pendapatan: {formatCurrency(target.target_revenue)}</Badge>
@@ -829,6 +872,7 @@ export function CRUDDailyTarget({
                     <th className="text-left py-3 px-4 text-xs font-semibold text-slate-600">Klinik</th>
                     <th className="text-left py-3 px-4 text-xs font-semibold text-slate-600">Poli</th>
                     <th className="text-left py-3 px-4 text-xs font-semibold text-slate-600">Source</th>
+                    <th className="text-left py-3 px-4 text-xs font-semibold text-slate-600">Insurance Type</th>
                     <th className="text-left py-3 px-4 text-xs font-semibold text-slate-600">Tipe</th>
                     <th className="text-left py-3 px-4 text-xs font-semibold text-slate-600">Tanggal/Bulan/Tahun</th>
                     <th className="text-right py-3 px-4 text-xs font-semibold text-slate-600">Tarif</th>
@@ -854,6 +898,7 @@ export function CRUDDailyTarget({
                           <td className="py-3 px-4 text-sm font-medium text-slate-800">{target.clinic_name || '-'}</td>
                           <td className="py-3 px-4 text-sm text-slate-600">{target.poly_name || '-'}</td>
                           <td className="py-3 px-4 text-sm text-slate-600">{target.source_name}</td>
+                          <td className="py-3 px-4 text-sm text-slate-600">{target.insurance_type_name || '-'}</td>
                           <td className="py-3 px-4 text-sm text-slate-600">
                             <Badge variant={target.target_type === 'daily' ? 'default' : 'secondary'}>
                               {target.target_type === 'daily' ? 'Harian' : 'Kumulatif'}

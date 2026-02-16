@@ -1045,10 +1045,14 @@ export const getDailyTargetsPaginated = cache(async (
             cdt.*,
             c.name as clinic_name,
             mp.name as poly_name,
+            s.name as source_name,
+            mit.name as insurance_type_name,
             COALESCE(ctc.base_rate, 0) as base_rate
-        FROM clinic_daily_targets cdt
+          FROM clinic_daily_targets cdt
           JOIN clinics c ON c.id = cdt.clinic_id
           JOIN master_polies mp ON mp.id = cdt.master_poly_id
+          JOIN sources s ON s.id = cdt.source_id
+          LEFT JOIN master_insurance_types mit ON mit.id = cdt.insurance_type_id
           LEFT JOIN clinic_target_configs ctc ON ctc.clinic_id = cdt.clinic_id
             AND ctc.master_poly_id = cdt.master_poly_id
             AND ctc.target_year = COALESCE(EXTRACT(YEAR FROM cdt.target_date), cdt.target_year)
@@ -1083,10 +1087,14 @@ export const getDailyTargetsPaginated = cache(async (
             cdt.*,
             c.name as clinic_name,
             mp.name as poly_name,
+            s.name as source_name,
+            mit.name as insurance_type_name,
             COALESCE(ctc.base_rate, 0) as base_rate
           FROM clinic_daily_targets cdt
           JOIN clinics c ON c.id = cdt.clinic_id
           JOIN master_polies mp ON mp.id = cdt.master_poly_id
+          JOIN sources s ON s.id = cdt.source_id
+          LEFT JOIN master_insurance_types mit ON mit.id = cdt.insurance_type_id
           LEFT JOIN clinic_target_configs ctc ON ctc.clinic_id = cdt.clinic_id
             AND ctc.master_poly_id = cdt.master_poly_id
             AND ctc.target_year = COALESCE(EXTRACT(YEAR FROM cdt.target_date), cdt.target_year)
@@ -1119,10 +1127,14 @@ export const getDailyTargetsPaginated = cache(async (
             cdt.*,
             c.name as clinic_name,
             mp.name as poly_name,
+            s.name as source_name,
+            mit.name as insurance_type_name,
             COALESCE(ctc.base_rate, 0) as base_rate
           FROM clinic_daily_targets cdt
           JOIN clinics c ON c.id = cdt.clinic_id
           JOIN master_polies mp ON mp.id = cdt.master_poly_id
+          JOIN sources s ON s.id = cdt.source_id
+          LEFT JOIN master_insurance_types mit ON mit.id = cdt.insurance_type_id
           LEFT JOIN clinic_target_configs ctc ON ctc.clinic_id = cdt.clinic_id
             AND ctc.master_poly_id = cdt.master_poly_id
             AND ctc.target_year = COALESCE(EXTRACT(YEAR FROM cdt.target_date), cdt.target_year)
@@ -1151,10 +1163,14 @@ export const getDailyTargetsPaginated = cache(async (
             cdt.*,
             c.name as clinic_name,
             mp.name as poly_name,
+            s.name as source_name,
+            mit.name as insurance_type_name,
             COALESCE(ctc.base_rate, 0) as base_rate
           FROM clinic_daily_targets cdt
           JOIN clinics c ON c.id = cdt.clinic_id
           JOIN master_polies mp ON mp.id = cdt.master_poly_id
+          JOIN sources s ON s.id = cdt.source_id
+          LEFT JOIN master_insurance_types mit ON mit.id = cdt.insurance_type_id
           LEFT JOIN clinic_target_configs ctc ON ctc.clinic_id = cdt.clinic_id
             AND ctc.master_poly_id = cdt.master_poly_id
             AND ctc.target_year = COALESCE(EXTRACT(YEAR FROM cdt.target_date), cdt.target_year)
