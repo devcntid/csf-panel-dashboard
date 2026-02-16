@@ -943,6 +943,55 @@ export const getInsuranceTypesPaginated = cache(async (page: number = 1, limit: 
   }
 })
 
+export const getBpjsRealizationsPaginated = cache(async (
+  clinicId?: number,
+  year?: number,
+  month?: number,
+  page: number = 1,
+  limit: number = 10
+) => {
+  try {
+    const offset = (page - 1) * limit
+    const cid = clinicId ?? null
+    const y = year ?? null
+    const m = month ?? null
+    const [rows, countResultRaw] = await Promise.all([
+      sql`
+        SELECT r.*, c.name as clinic_name
+        FROM clinic_bpjs_realizations r
+        JOIN clinics c ON c.id = r.clinic_id
+        WHERE (${cid}::bigint IS NULL OR r.clinic_id = ${cid})
+          AND (${y}::int IS NULL OR r.year = ${y})
+          AND (${m}::int IS NULL OR r.month = ${m})
+        ORDER BY r.year DESC, r.month DESC, r.clinic_id ASC
+        LIMIT ${limit} OFFSET ${offset}
+      `,
+      sql`
+        SELECT COUNT(*) as total
+        FROM clinic_bpjs_realizations r
+        WHERE (${cid}::bigint IS NULL OR r.clinic_id = ${cid})
+          AND (${y}::int IS NULL OR r.year = ${y})
+          AND (${m}::int IS NULL OR r.month = ${m})
+      `
+    ])
+    const countResult = Array.isArray(countResultRaw) ? countResultRaw[0] : countResultRaw
+    return {
+      realizations: Array.isArray(rows) ? rows : [],
+      total: Number((countResult as any)?.total || 0),
+      page,
+      limit,
+    }
+  } catch (error) {
+    console.error('Error fetching bpjs realizations:', error)
+    return {
+      realizations: [],
+      total: 0,
+      page,
+      limit,
+    }
+  }
+})
+
 export const getTargetCategoriesPaginated = cache(async (page: number = 1, limit: number = 10) => {
   try {
     const offset = (page - 1) * limit

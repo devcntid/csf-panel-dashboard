@@ -1,11 +1,11 @@
 import { getMasterPolies, getMasterInsuranceTypes, getUsers, getAllClinics, getSources } from '@/lib/actions/config'
-import { getClinicsPaginated, getMasterPoliesPaginated, getTargetCategoriesPaginated, getUsersPaginated, getDailyTargetsPaginated, getSystemLogsPaginated, getPolyMappingsPaginated, getInsuranceMappingsPaginated, getInsuranceTypesPaginated } from '@/lib/actions/pagination'
+import { getClinicsPaginated, getMasterPoliesPaginated, getTargetCategoriesPaginated, getUsersPaginated, getDailyTargetsPaginated, getBpjsRealizationsPaginated, getSystemLogsPaginated, getPolyMappingsPaginated, getInsuranceMappingsPaginated, getInsuranceTypesPaginated } from '@/lib/actions/pagination'
 import { getTargetConfigs, getPublicHolidays } from '@/lib/actions/crud'
 import { KonfigurasiTabs } from './konfigurasi-tabs'
 
 export default async function KonfigurasiPage() {
   // Parallel fetching untuk performa maksimal - fetch semua data awal untuk semua tab
-  const [mappingsPaginated, insuranceMappingsPaginated, masterPolies, masterInsuranceTypes, users, clinics, sources, clinicsPaginated, poliesPaginated, categoriesPaginated, usersPaginated, targetConfigs, dailyTargets, systemLogs, insuranceTypesPaginated, publicHolidays] = await Promise.all([
+  const [mappingsPaginated, insuranceMappingsPaginated, masterPolies, masterInsuranceTypes, users, clinics, sources, clinicsPaginated, poliesPaginated, categoriesPaginated, usersPaginated, targetConfigs, dailyTargets, bpjsRealizations, systemLogs, insuranceTypesPaginated, publicHolidays] = await Promise.all([
     getPolyMappingsPaginated(undefined, undefined, undefined, 1, 10),
     getInsuranceMappingsPaginated(undefined, undefined, undefined, 1, 10),
     getMasterPolies(),
@@ -19,6 +19,7 @@ export default async function KonfigurasiPage() {
     getUsersPaginated(1, 10),
     getTargetConfigs(undefined, undefined, undefined, 1, 10),
     getDailyTargetsPaginated(undefined, undefined, undefined, undefined, 1, 10),
+    getBpjsRealizationsPaginated(undefined, undefined, undefined, 1, 10),
     getSystemLogsPaginated(undefined, undefined, undefined, undefined, undefined, undefined, 1, 10),
     getInsuranceTypesPaginated(1, 10),
     getPublicHolidays(undefined, 1, 10)
@@ -53,6 +54,7 @@ export default async function KonfigurasiPage() {
             users: usersPaginated,
             targetConfigs: targetConfigs,
             dailyTargets: dailyTargets,
+            bpjsRealizations: bpjsRealizations,
             systemLogs: systemLogs,
             insuranceTypes: insuranceTypesPaginated,
             publicHolidays: publicHolidays
