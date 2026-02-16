@@ -21,6 +21,7 @@ const migrationSQL = `
 DROP TABLE IF EXISTS app_settings CASCADE;
 DROP TABLE IF EXISTS system_logs CASCADE;
 DROP TABLE IF EXISTS public_holidays CASCADE;
+DROP TABLE IF EXISTS clinic_bpjs_realizations CASCADE;
 DROP TABLE IF EXISTS clinic_daily_targets CASCADE;
 DROP TABLE IF EXISTS clinic_target_configs CASCADE;
 DROP TABLE IF EXISTS master_target_categories CASCADE;
@@ -186,6 +187,7 @@ CREATE TABLE clinic_daily_targets (
     clinic_id BIGINT REFERENCES clinics(id) ON DELETE CASCADE,
     master_poly_id BIGINT REFERENCES master_polies(id) ON DELETE CASCADE,
     source_id BIGINT NOT NULL REFERENCES sources(id) ON DELETE CASCADE,
+    insurance_type_id BIGINT REFERENCES master_insurance_types(id) ON DELETE SET NULL,
     
     -- Mode Target: 'daily' untuk target harian per tanggal, 'cumulative' untuk target kumulatif bulanan
     target_type VARCHAR(20) NOT NULL DEFAULT 'daily' CHECK (target_type IN ('daily', 'cumulative')),
@@ -223,6 +225,25 @@ CREATE UNIQUE INDEX idx_unique_cumulative_target ON clinic_daily_targets(clinic_
 
 -- Index untuk clinic_target_configs
 CREATE INDEX idx_target_config_lookup ON clinic_target_configs(clinic_id, master_poly_id, target_year);
+
+-- =============================================
+-- 5d. REALISASI KAPITASI BPJS (Gaji Buta per Bulan per Klinik)
+-- =============================================
+CREATE TABLE clinic_bpjs_realizations (
+    id BIGSERIAL PRIMARY KEY,
+    clinic_id BIGINT NOT NULL REFERENCES clinics(id) ON DELETE CASCADE,
+    month INT NOT NULL CHECK (month >= 1 AND month <= 12),
+    year INT NOT NULL,
+    total_peserta_terdaftar INT DEFAULT 0,
+    total_kapitasi_diterima DECIMAL(15, 2) DEFAULT 0,
+    pbi_count INT DEFAULT 0,
+    non_pbi_count INT DEFAULT 0,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    CONSTRAINT unique_bpjs_realization_per_clinic_month_year UNIQUE (clinic_id, month, year)
+);
+
+CREATE INDEX idx_bpjs_realization_clinic_period ON clinic_bpjs_realizations(clinic_id, year, month);
 
 -- =============================================
 -- 6. TABLE: TRANSACTIONS (PARTITIONED BY DATE FOR SUPER FAST QUERIES)

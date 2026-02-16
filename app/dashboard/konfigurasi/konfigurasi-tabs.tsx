@@ -17,6 +17,7 @@ import { CRUDSource } from './crud-source'
 import { CRUDInsuranceMapping } from './crud-insurance-mapping'
 import { CRUDInsuranceType } from './crud-insurance-type'
 import { CRUDPublicHoliday } from './crud-public-holiday'
+import { CRUDBpjsRealization } from './crud-bpjs-realization'
 import { ZainsSyncSetting } from './zains-sync-setting'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
@@ -44,6 +45,7 @@ export function KonfigurasiTabs({
     users: { users: any[]; total: number; page: number; limit: number }
     targetConfigs: { configs: any[]; total: number; page: number; limit: number }
     dailyTargets: { targets: any[]; total: number; page: number; limit: number }
+    bpjsRealizations?: { realizations: any[]; total: number; page: number; limit: number }
     systemLogs?: { logs: any[]; total: number; page: number; limit: number }
     publicHolidays?: { holidays: any[]; total: number; page: number; limit: number }
   }
@@ -176,6 +178,16 @@ export function KonfigurasiTabs({
             }`}
           >
             Target Harian
+          </button>
+          <button
+            onClick={() => setActiveTab('bpjs-realization')}
+            className={`px-4 py-2 font-medium text-sm border-b-2 transition-colors ${
+              activeTab === 'bpjs-realization'
+                ? 'border-teal-600 text-teal-600'
+                : 'border-transparent text-slate-500 hover:text-slate-700'
+            }`}
+          >
+            Realisasi Kapitasi BPJS
           </button>
           <button
             onClick={() => setActiveTab('users')}
@@ -358,6 +370,22 @@ export function KonfigurasiTabs({
                 initialPolies={masterPolies}
                 initialClinics={clinics}
                 initialSources={sources}
+              />
+            </CardContent>
+          </Card>
+        )}
+
+        {activeTab === 'bpjs-realization' && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Realisasi Kapitasi BPJS</CardTitle>
+             
+            </CardHeader>
+            <CardContent>
+              <CRUDBpjsRealization
+                onRefresh={handleRefresh}
+                initialData={initialData?.bpjsRealizations}
+                clinics={clinics}
               />
             </CardContent>
           </Card>

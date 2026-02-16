@@ -1077,6 +1077,96 @@ export async function deleteInsuranceType(id: number) {
   }
 }
 
+// ============ CRUD CLINIC BPJS REALIZATIONS (Realisasi Kapitasi BPJS) ============
+
+export async function createBpjsRealization(data: {
+  clinic_id: number
+  month: number
+  year: number
+  total_peserta_terdaftar: number
+  total_kapitasi_diterima: number
+  pbi_count?: number | null
+  non_pbi_count?: number | null
+}) {
+  try {
+    const result = await sql`
+      INSERT INTO clinic_bpjs_realizations (
+        clinic_id, month, year,
+        total_peserta_terdaftar, total_kapitasi_diterima,
+        pbi_count, non_pbi_count
+      )
+      VALUES (
+        ${data.clinic_id}, ${data.month}, ${data.year},
+        ${data.total_peserta_terdaftar}, ${data.total_kapitasi_diterima},
+        ${data.pbi_count ?? null}, ${data.non_pbi_count ?? null}
+      )
+      ON CONFLICT (clinic_id, month, year) DO UPDATE SET
+        total_peserta_terdaftar = EXCLUDED.total_peserta_terdaftar,
+        total_kapitasi_diterima = EXCLUDED.total_kapitasi_diterima,
+        pbi_count = EXCLUDED.pbi_count,
+        non_pbi_count = EXCLUDED.non_pbi_count,
+        updated_at = NOW()
+      RETURNING *
+    `
+    const row = Array.isArray(result) ? result[0] : result
+    revalidatePath('/dashboard/konfigurasi')
+    return { success: true, data: row }
+  } catch (error: any) {
+    console.error('Error creating bpjs realization:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+export async function updateBpjsRealization(id: number, data: {
+  clinic_id?: number
+  month?: number
+  year?: number
+  total_peserta_terdaftar?: number
+  total_kapitasi_diterima?: number
+  pbi_count?: number | null
+  non_pbi_count?: number | null
+}) {
+  try {
+    if (data.clinic_id !== undefined) {
+      await sql`UPDATE clinic_bpjs_realizations SET clinic_id = ${data.clinic_id}, updated_at = NOW() WHERE id = ${id}`
+    }
+    if (data.month !== undefined) {
+      await sql`UPDATE clinic_bpjs_realizations SET month = ${data.month}, updated_at = NOW() WHERE id = ${id}`
+    }
+    if (data.year !== undefined) {
+      await sql`UPDATE clinic_bpjs_realizations SET year = ${data.year}, updated_at = NOW() WHERE id = ${id}`
+    }
+    if (data.total_peserta_terdaftar !== undefined) {
+      await sql`UPDATE clinic_bpjs_realizations SET total_peserta_terdaftar = ${data.total_peserta_terdaftar}, updated_at = NOW() WHERE id = ${id}`
+    }
+    if (data.total_kapitasi_diterima !== undefined) {
+      await sql`UPDATE clinic_bpjs_realizations SET total_kapitasi_diterima = ${data.total_kapitasi_diterima}, updated_at = NOW() WHERE id = ${id}`
+    }
+    if (data.pbi_count !== undefined) {
+      await sql`UPDATE clinic_bpjs_realizations SET pbi_count = ${data.pbi_count}, updated_at = NOW() WHERE id = ${id}`
+    }
+    if (data.non_pbi_count !== undefined) {
+      await sql`UPDATE clinic_bpjs_realizations SET non_pbi_count = ${data.non_pbi_count}, updated_at = NOW() WHERE id = ${id}`
+    }
+    revalidatePath('/dashboard/konfigurasi')
+    return { success: true }
+  } catch (error: any) {
+    console.error('Error updating bpjs realization:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+export async function deleteBpjsRealization(id: number) {
+  try {
+    await sql`DELETE FROM clinic_bpjs_realizations WHERE id = ${id}`
+    revalidatePath('/dashboard/konfigurasi')
+    return { success: true }
+  } catch (error: any) {
+    console.error('Error deleting bpjs realization:', error)
+    return { success: false, error: error.message }
+  }
+}
+
 // ============ CRUD INSURANCE MAPPING ============
 
 export async function createInsuranceMapping(data: {
