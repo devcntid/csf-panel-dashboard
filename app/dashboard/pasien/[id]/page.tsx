@@ -79,6 +79,10 @@ async function PatientInfo({ patientId }: { patientId: string }) {
               {patient.status}
             </Badge>
           </div>
+          <div className="space-y-2">
+            <p className="text-sm text-slate-500">ID Donatur Zains</p>
+            <p className="text-lg font-semibold text-teal-600">{patient.id_donatur_zains || '-'}</p>
+          </div>
           {patient.clinic_location && (
             <div className="space-y-2">
               <p className="text-sm text-slate-500">Lokasi Klinik</p>

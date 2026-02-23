@@ -244,6 +244,12 @@ export function TransaksiClient({
                   <th className="text-center py-3 px-4 text-xs font-semibold text-slate-600 relative" style={{ width: '100px', minWidth: '100px', maxWidth: '100px' }}>
                     Sync
                   </th>
+                  <th className="text-left py-3 px-4 text-xs font-semibold text-slate-600 relative" style={{ width: '280px', minWidth: '280px' }}>
+                    ID Transaksi Zains
+                  </th>
+                  <th className="text-left py-3 px-4 text-xs font-semibold text-slate-600 relative" style={{ width: '160px', minWidth: '160px' }}>
+                    ID Donatur Zains
+                  </th>
                   <th className="text-center py-3 px-4 text-xs font-semibold text-slate-600 relative" style={{ width: '110px', minWidth: '110px', maxWidth: '110px' }}>
                     Input Type
                   </th>
@@ -316,6 +322,14 @@ export function TransaksiClient({
                         ) : (
                           <Badge className="bg-amber-100 text-amber-700">Pending</Badge>
                         )}
+                      </td>
+                      <td className="py-3 px-4 text-sm text-slate-600 relative" style={{ width: '280px', minWidth: '280px' }}>
+                        <span className="break-all" title={trx.id_transaksi_zains || '-'}>
+                          {trx.id_transaksi_zains || '-'}
+                        </span>
+                      </td>
+                      <td className="py-3 px-4 text-sm font-medium text-teal-600 relative" style={{ width: '160px', minWidth: '160px' }}>
+                        {trx.id_donatur_zains || '-'}
                       </td>
                       <td className="py-3 px-4 text-center whitespace-nowrap relative" style={{ width: '110px', minWidth: '110px', maxWidth: '110px' }}>
                         <Badge
