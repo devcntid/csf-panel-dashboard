@@ -4,9 +4,10 @@ import { useState, useEffect } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { X } from 'lucide-react'
+import { X, Loader2 } from 'lucide-react'
 import { formatDate, formatCurrency } from '@/lib/db'
-import { getTransactionsToZains } from '@/lib/actions/transactions'
+import { getTransactionsToZains, syncTransactionsToZainsFromModal } from '@/lib/actions/transactions'
+import { toast } from 'sonner'
 
 export function TransaksiZainsDetail({ 
   transactionId, 
@@ -19,10 +20,39 @@ export function TransaksiZainsDetail({
 }) {
   const [zainsData, setZainsData] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+  const [isSyncing, setIsSyncing] = useState(false)
 
   useEffect(() => {
     loadData()
   }, [transactionId])
+
+  const handleSyncToZains = async () => {
+    setIsSyncing(true)
+    toast.loading('Mengirim ke Zains...', { id: 'zains-sync' })
+    try {
+      const result = await syncTransactionsToZainsFromModal(transactionId)
+      toast.dismiss('zains-sync')
+      if (result.error) {
+        toast.error(result.error)
+        return
+      }
+      if (result.total === 0) {
+        toast.info('Semua baris sudah terkirim ke Zains')
+      } else if (result.failedCount === 0) {
+        toast.success(`${result.successCount} baris berhasil dikirim ke Zains`)
+      } else {
+        const firstError = result.results?.find((r) => !r.success)?.error
+        const detail = firstError ? ` ${String(firstError).slice(0, 80)}${firstError.length > 80 ? '...' : ''}` : ''
+        toast.error(`${result.successCount} berhasil, ${result.failedCount} gagal.${detail}`)
+      }
+      await loadData()
+    } catch (err) {
+      toast.dismiss('zains-sync')
+      toast.error(err instanceof Error ? err.message : 'Gagal mengirim ke Zains')
+    } finally {
+      setIsSyncing(false)
+    }
+  }
 
   const loadData = async () => {
     setLoading(true)
@@ -129,6 +159,26 @@ export function TransaksiZainsDetail({
                   </tr>
                 </tfoot>
               </table>
+            </div>
+          )}
+
+          {/* Tombol Sync ke Zains */}
+          {!loading && zainsData.length > 0 && (
+            <div className="flex justify-end gap-2 pt-2">
+              <Button
+                onClick={handleSyncToZains}
+                disabled={isSyncing}
+                className="bg-blue-600 hover:bg-blue-700"
+              >
+                {isSyncing ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Mengirim...
+                  </>
+                ) : (
+                  'Sync ke Zains'
+                )}
+              </Button>
             </div>
           )}
         </CardContent>

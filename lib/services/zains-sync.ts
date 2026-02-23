@@ -713,6 +713,56 @@ export async function syncTransactionsToZainsByTransactionId(transactionId: numb
 }
 
 /**
+ * Sync transactions_to_zains untuk satu transaction_id secara sequential (satu per satu).
+ * Dipakai dari modal agar request ke API Zains berurutan.
+ */
+export async function syncTransactionsToZainsByTransactionIdSequential(transactionId: number): Promise<{
+  total: number
+  success: number
+  failed: number
+  results: Array<{
+    transactionsToZainsId: number
+    success: boolean
+    id_transaksi?: string
+    error?: string
+    rawResponse?: any
+    httpStatus?: number
+  }>
+}> {
+  const records = await getPendingTransactionsToZainsByTransactionId(transactionId)
+  if (records.length === 0) {
+    return { total: 0, success: 0, failed: 0, results: [] }
+  }
+  const results: Array<{
+    transactionsToZainsId: number
+    success: boolean
+    id_transaksi?: string
+    error?: string
+    rawResponse?: any
+    httpStatus?: number
+  }> = []
+  for (const record of records) {
+    const r = await syncSingleTransactionToZains(record)
+    results.push({
+      transactionsToZainsId: r.transactionsToZainsId,
+      success: r.success,
+      id_transaksi: r.id_transaksi,
+      error: r.error,
+      rawResponse: r.rawResponse,
+      httpStatus: r.httpStatus,
+    })
+  }
+  const successCount = results.filter((r) => r.success).length
+  const failedCount = results.filter((r) => !r.success).length
+  return {
+    total: records.length,
+    success: successCount,
+    failed: failedCount,
+    results,
+  }
+}
+
+/**
  * Sync single transactions_to_zains record ke Zains (/corez/transaksi/save)
  */
 export async function syncSingleTransactionToZains(record: any): Promise<{
