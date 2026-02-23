@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { getZainsApiConfig } from '@/lib/services/zains-sync'
+import { getZainsApiConfig } from '@/lib/zains-api-config'
 
 /**
  * GET: Cek URL Zains yang aktif (production vs staging).

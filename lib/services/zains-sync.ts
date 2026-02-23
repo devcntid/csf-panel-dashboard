@@ -3,6 +3,7 @@
 import { sql } from '@/lib/db'
 import { getZainsTransactionSyncEnabled } from '@/lib/settings'
 import { Client } from '@upstash/qstash'
+import { getZainsApiConfig } from '@/lib/zains-api-config'
 
 interface ZainsSyncPayload {
   nama: string
@@ -38,58 +39,6 @@ function extractContactFromErmNoForZains(ermNoForZains: string): { hp: string; t
     hp: ermNoForZains || '',
     telpon: ermNoForZains || '',
     email: ermNoForZains ? `${ermNoForZains}@gmail.com` : ''
-  }
-}
-
-/**
- * Normalisasi IS_PRODUCTION: terima 'true', '1', 'yes' (case-insensitive).
- * Di beberapa host env value bisa 'True' atau 'TRUE', sehingga === 'true' gagal.
- */
-function isProductionEnv(): boolean {
-  const v = process.env.IS_PRODUCTION
-  if (v == null || v === '') return false
-  const s = String(v).toLowerCase().trim()
-  return s === 'true' || s === '1' || s === 'yes'
-}
-
-/**
- * Ambil URL dan mode Zains untuk logging/verifikasi (export untuk endpoint cek env).
- */
-export function getZainsApiConfig(): {
-  url: string
-  mode: 'production' | 'staging'
-  isProduction: boolean
-  urlHost: string
-} {
-  const explicitUrl = process.env.URL_API_ZAINS?.trim()
-  if (explicitUrl) {
-    try {
-      const u = new URL(explicitUrl)
-      return {
-        url: explicitUrl,
-        mode: 'production',
-        isProduction: true,
-        urlHost: u.hostname,
-      }
-    } catch {
-      return { url: explicitUrl, mode: 'production', isProduction: true, urlHost: '(invalid url)' }
-    }
-  }
-  const isProduction = isProductionEnv()
-  const url = isProduction
-    ? (process.env.URL_API_ZAINS_PRODUCTION || '').trim()
-    : (process.env.URL_API_ZAINS_STAGING || '').trim()
-  let urlHost = ''
-  try {
-    if (url) urlHost = new URL(url).hostname
-  } catch {
-    urlHost = '(invalid url)'
-  }
-  return {
-    url,
-    mode: isProduction ? 'production' : 'staging',
-    isProduction,
-    urlHost: urlHost || '(empty)',
   }
 }
 
