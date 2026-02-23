@@ -6,7 +6,7 @@ import { Suspense } from 'react'
 export default async function TransaksiPage({
   searchParams,
 }: {
-  searchParams: Promise<{ search?: string; page?: string; perPage?: string; clinic?: string; poly?: string; insurance?: string; dateFrom?: string; dateTo?: string }>
+  searchParams: Promise<{ search?: string; page?: string; perPage?: string; clinic?: string; poly?: string; insurance?: string; dateFrom?: string; dateTo?: string; zainsSync?: string }>
 }) {
   const params = await searchParams
   
@@ -33,10 +33,12 @@ export default async function TransaksiPage({
   const insuranceTypeId = params.insurance ? parseInt(params.insurance) : undefined
   const dateFrom = params.dateFrom || getFirstDateOfMonth()
   const dateTo = params.dateTo || getTodayDate()
+  const zainsSync = (params.zainsSync === 'synced' || params.zainsSync === 'pending') ? params.zainsSync : 'all'
+  const zainsSynced: 'all' | 'synced' | 'pending' = zainsSync as 'all' | 'synced' | 'pending'
   
   const [transactionsData, stats, clinics, polies, insuranceTypes] = await Promise.all([
-    getTransactions(search, clinicId, dateFrom, dateTo, page, perPage, polyId, insuranceTypeId),
-    getTransactionStats(search, clinicId, dateFrom, dateTo, polyId, insuranceTypeId),
+    getTransactions(search, clinicId, dateFrom, dateTo, page, perPage, polyId, insuranceTypeId, zainsSynced),
+    getTransactionStats(search, clinicId, dateFrom, dateTo, polyId, insuranceTypeId, zainsSynced),
     getAllClinics(),
     getMasterPolies(),
     getMasterInsuranceTypes(),

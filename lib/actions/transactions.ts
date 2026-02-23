@@ -1417,7 +1417,8 @@ export const getTransactions = cache(async (
   page: number = 1,
   limit: number = 10,
   polyId?: number,
-  insuranceTypeId?: number
+  insuranceTypeId?: number,
+  zainsSynced?: 'all' | 'synced' | 'pending'
 ) => {
   try {
     const offset = (page - 1) * limit
@@ -1439,13 +1440,13 @@ export const getTransactions = cache(async (
       whereClauses.push(`t.clinic_id = $${paramIndex}`)
     }
 
-    // Filter search (trx_no, patient_name, erm_no)
+    // Filter search (trx_no, patient_name, erm_no, id_transaksi_zains, id_donatur_zains via transactions_to_zains)
     if (trimmedSearch) {
       paramIndex++
       params.push(`%${trimmedSearch}%`)
       const idx = paramIndex
       whereClauses.push(
-        `(t.trx_no ILIKE $${idx} OR t.patient_name ILIKE $${idx} OR t.erm_no ILIKE $${idx})`,
+        `(t.trx_no ILIKE $${idx} OR t.patient_name ILIKE $${idx} OR t.erm_no ILIKE $${idx} OR EXISTS (SELECT 1 FROM transactions_to_zains tz WHERE tz.transaction_id = t.id AND (tz.id_transaksi ILIKE $${idx} OR tz.id_donatur ILIKE $${idx})))`,
       )
     }
 
@@ -1486,6 +1487,13 @@ export const getTransactions = cache(async (
       whereClauses.push(`t.insurance_type_id = $${paramIndex}`)
     }
 
+    // Filter sync Zains: synced = true, pending = false
+    if (zainsSynced === 'synced') {
+      whereClauses.push('t.zains_synced = true')
+    } else if (zainsSynced === 'pending') {
+      whereClauses.push('(t.zains_synced = false OR t.zains_synced IS NULL)')
+    }
+
     const whereSql = whereClauses.length > 0 ? whereClauses.join(' AND ') : 'TRUE'
 
     // Tambahkan parameter limit & offset
@@ -1514,7 +1522,9 @@ export const getTransactions = cache(async (
           t.*,
           c.name AS clinic_name,
           mp.name AS master_poly_name,
-          mit.name AS master_insurance_name
+          mit.name AS master_insurance_name,
+          (SELECT string_agg(tz.id_transaksi, ', ' ORDER BY tz.id) FROM transactions_to_zains tz WHERE tz.transaction_id = t.id AND tz.id_transaksi IS NOT NULL AND tz.id_transaksi != '') AS id_transaksi_zains,
+          (SELECT tz.id_donatur FROM transactions_to_zains tz WHERE tz.transaction_id = t.id AND tz.id_donatur IS NOT NULL AND tz.id_donatur != '' LIMIT 1) AS id_donatur_zains
         ${baseFromWhere}
         ORDER BY t.trx_date DESC, t.trx_time DESC
         LIMIT $${limitIdx} OFFSET $${offsetIdx}
@@ -1661,7 +1671,8 @@ export const getTransactionStats = cache(async (
   dateFrom?: string,
   dateTo?: string,
   polyId?: number,
-  insuranceTypeId?: number
+  insuranceTypeId?: number,
+  zainsSynced?: 'all' | 'synced' | 'pending'
 ) => {
   try {
     const client = getSqlClient()
@@ -1681,13 +1692,13 @@ export const getTransactionStats = cache(async (
       whereClauses.push(`t.clinic_id = $${paramIndex}`)
     }
 
-    // Filter search
+    // Filter search (trx_no, patient_name, erm_no, id_transaksi_zains, id_donatur_zains via transactions_to_zains)
     if (trimmedSearch) {
       paramIndex++
       params.push(`%${trimmedSearch}%`)
       const idx = paramIndex
       whereClauses.push(
-        `(t.trx_no ILIKE $${idx} OR t.patient_name ILIKE $${idx} OR t.erm_no ILIKE $${idx})`,
+        `(t.trx_no ILIKE $${idx} OR t.patient_name ILIKE $${idx} OR t.erm_no ILIKE $${idx} OR EXISTS (SELECT 1 FROM transactions_to_zains tz WHERE tz.transaction_id = t.id AND (tz.id_transaksi ILIKE $${idx} OR tz.id_donatur ILIKE $${idx})))`,
       )
     }
 
@@ -1726,6 +1737,13 @@ export const getTransactionStats = cache(async (
       paramIndex++
       params.push(insuranceTypeId)
       whereClauses.push(`t.insurance_type_id = $${paramIndex}`)
+    }
+
+    // Filter sync Zains
+    if (zainsSynced === 'synced') {
+      whereClauses.push('t.zains_synced = true')
+    } else if (zainsSynced === 'pending') {
+      whereClauses.push('(t.zains_synced = false OR t.zains_synced IS NULL)')
     }
 
     const whereSql = whereClauses.length > 0 ? whereClauses.join(' AND ') : 'TRUE'

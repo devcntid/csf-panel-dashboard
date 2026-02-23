@@ -52,6 +52,7 @@ export function TransaksiSearch({
   const [selectedClinic, setSelectedClinic] = useState(searchParams.get('clinic') || '')
   const [selectedPoly, setSelectedPoly] = useState(searchParams.get('poly') || '')
   const [selectedInsurance, setSelectedInsurance] = useState(searchParams.get('insurance') || '')
+  const [selectedZainsSync, setSelectedZainsSync] = useState(searchParams.get('zainsSync') || 'all')
 
   useEffect(() => {
     const searchParam = searchParams.get('search') || ''
@@ -64,6 +65,7 @@ export function TransaksiSearch({
     setSelectedClinic(searchParams.get('clinic') || '')
     setSelectedPoly(searchParams.get('poly') || '')
     setSelectedInsurance(searchParams.get('insurance') || '')
+    setSelectedZainsSync(searchParams.get('zainsSync') || 'all')
   }, [searchParams])
 
   const handleSearch = () => {
@@ -117,9 +119,20 @@ export function TransaksiSearch({
         params.delete('insurance')
       }
       
+      // Apply Sync Zains filter
+      if (selectedZainsSync && selectedZainsSync !== 'all') {
+        params.set('zainsSync', selectedZainsSync)
+      } else {
+        params.delete('zainsSync')
+      }
+      
       params.set('page', '1')
       router.push(`/dashboard/transaksi?${params.toString()}`)
     })
+  }
+
+  const handleZainsSyncChange = (value: string) => {
+    setSelectedZainsSync(value)
   }
 
   const handleClinicChange = (value: string) => {
@@ -143,6 +156,7 @@ export function TransaksiSearch({
           setSelectedClinic('')
           setSelectedPoly('')
           setSelectedInsurance('')
+          setSelectedZainsSync('all')
     startTransition(() => {
       const params = new URLSearchParams(searchParams.toString())
       params.delete('dateFrom')
@@ -150,12 +164,13 @@ export function TransaksiSearch({
             params.delete('clinic')
             params.delete('poly')
             params.delete('insurance')
+            params.delete('zainsSync')
             params.set('page', '1')
       router.push(`/dashboard/transaksi?${params.toString()}`)
     })
   }
 
-  const hasFilter = dateFrom || dateTo || selectedClinic || selectedPoly || selectedInsurance
+  const hasFilter = dateFrom || dateTo || selectedClinic || selectedPoly || selectedInsurance || (selectedZainsSync && selectedZainsSync !== 'all')
 
   const handleScrap = async () => {
     if (!selectedClinic || selectedClinic === 'all') {
@@ -220,11 +235,13 @@ export function TransaksiSearch({
       const dateTo = searchParams.get('dateTo')
       const poly = searchParams.get('poly')
       const insurance = searchParams.get('insurance')
+      const zainsSync = searchParams.get('zainsSync')
 
       if (search) params.set('search', search)
       if (clinic) params.set('clinic', clinic)
       if (dateFrom) params.set('dateFrom', dateFrom)
       if (dateTo) params.set('dateTo', dateTo)
+      if (zainsSync) params.set('zainsSync', zainsSync)
       if (poly) params.set('poly', poly)
       if (insurance) params.set('insurance', insurance)
 
@@ -267,7 +284,7 @@ export function TransaksiSearch({
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 w-5 h-5" />
           <Input
             type="text"
-            placeholder="Cari berdasarkan No Transaksi, Nama Pasien, atau No RM..."
+            placeholder="Cari berdasarkan No Transaksi, Nama Pasien, No RM, ID Transaksi Zains, atau ID Donatur Zains..."
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
             onKeyDown={(e) => {
@@ -340,6 +357,23 @@ export function TransaksiSearch({
                     {insurance.name}
                   </SelectItem>
                 ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1 min-w-[140px]">
+            <Label className="text-xs">Sync Zains</Label>
+            <Select
+              value={selectedZainsSync || 'all'}
+              onValueChange={handleZainsSyncChange}
+              disabled={isPending}
+            >
+              <SelectTrigger className="h-9">
+                <SelectValue placeholder="Semua" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Semua</SelectItem>
+                <SelectItem value="synced">Synced</SelectItem>
+                <SelectItem value="pending">Pending</SelectItem>
               </SelectContent>
             </Select>
           </div>
