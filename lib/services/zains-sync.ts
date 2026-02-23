@@ -3,6 +3,7 @@
 import { sql } from '@/lib/db'
 import { getZainsTransactionSyncEnabled } from '@/lib/settings'
 import { Client } from '@upstash/qstash'
+import { getZainsApiConfig } from '@/lib/zains-api-config'
 
 interface ZainsSyncPayload {
   nama: string
@@ -41,17 +42,20 @@ function extractContactFromErmNoForZains(ermNoForZains: string): { hp: string; t
   }
 }
 
+/** Helper: tambah mode dan host Zains ke payload log agar bisa diverifikasi di system_logs */
+function payloadWithZainsEnv(payload: any): any {
+  const { mode, urlHost } = getZainsApiConfig()
+  return { ...payload, _zains_env: { mode, urlHost } }
+}
+
 /**
- * Get Zains API URL based on environment
+ * Get Zains API URL based on environment.
+ * - Jika URL_API_ZAINS di-set: dipakai langsung (override, untuk paksa URL tertentu).
+ * - Jika IS_PRODUCTION true: pakai URL_API_ZAINS_PRODUCTION.
+ * - Else: pakai URL_API_ZAINS_STAGING.
  */
 function getZainsApiUrl(): string {
-  const isProduction = process.env.IS_PRODUCTION === 'true'
-  
-  if (isProduction) {
-    return process.env.URL_API_ZAINS_PRODUCTION || ''
-  } else {
-    return process.env.URL_API_ZAINS_STAGING || ''
-  }
+  return getZainsApiConfig().url
 }
 
 /**
@@ -556,6 +560,54 @@ export async function syncPatientToZainsWorkflow(
 }
 
 /**
+ * Trigger sync batch transactions_to_zains via QStash (agar muncul di log QStash).
+ * Jika QStash tidak tersedia atau gagal setelah retry, jalankan sync secara lokal.
+ */
+export async function syncTransactionsBatchToZainsWorkflow(): Promise<void> {
+  const qstash = getQStashClient()
+  if (!qstash) {
+    console.warn('⚠️  [Workflow] QStash tidak dikonfigurasi, jalankan sync transaksi batch secara lokal')
+    await syncTransactionsBatchToZains()
+    return
+  }
+
+  const baseUrl =
+    process.env.BASE_URL ||
+    process.env.NEXT_PUBLIC_APP_URL ||
+    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : '') ||
+    'http://localhost:3000'
+  const workflowEndpoint = `${baseUrl}/api/workflow/sync-transactions-to-zains`
+
+  let lastError: any = null
+  for (let attempt = 1; attempt <= QSTASH_RETRY_ATTEMPTS; attempt++) {
+    try {
+      await qstash.publishJSON({
+        url: workflowEndpoint,
+        body: {},
+        headers: { 'Content-Type': 'application/json' },
+      })
+      console.log('✅ [Upstash Workflow] Workflow sync transaksi batch ke Zains triggered')
+      return
+    } catch (err: any) {
+      lastError = err
+      const isLast = attempt === QSTASH_RETRY_ATTEMPTS
+      console.warn(
+        `⚠️  [Upstash Workflow] Attempt ${attempt}/${QSTASH_RETRY_ATTEMPTS} gagal (sync transaksi batch):`,
+        err?.message || err,
+      )
+      if (!isLast) {
+        await new Promise((r) => setTimeout(r, QSTASH_RETRY_DELAY_MS))
+      }
+    }
+  }
+
+  console.warn(
+    '⚠️  [Workflow] QStash gagal setelah retry, jalankan sync transaksi batch secara lokal',
+  )
+  await syncTransactionsBatchToZains()
+}
+
+/**
  * Response type untuk Zains /corez/transaksi/save
  * Bentuk sukses: { status: true, data: { id_transaksi, ... } }
  * Bentuk "transaksi sudah ada": { status: false, message: "...", id_transaksi, no_bukti, id_donatur } (top-level)
@@ -897,7 +949,7 @@ export async function syncSingleTransactionToZains(record: any): Promise<{
         record.clinic_id || null,
         'error',
         errorText,
-        payload,
+        payloadWithZainsEnv(payload),
       )
 
       return {
@@ -945,7 +997,7 @@ export async function syncSingleTransactionToZains(record: any): Promise<{
         record.clinic_id || null,
         'success',
         { ...data, _note: 'Transaksi sudah ada di Zains, di-skip dan ditandai synced' },
-        payload,
+        payloadWithZainsEnv(payload),
       )
       return {
         success: true,
@@ -962,7 +1014,7 @@ export async function syncSingleTransactionToZains(record: any): Promise<{
         record.clinic_id || null,
         'error',
         data,
-        payload,
+        payloadWithZainsEnv(payload),
       )
 
       return {
@@ -1002,7 +1054,7 @@ export async function syncSingleTransactionToZains(record: any): Promise<{
       record.clinic_id || null,
       'success',
       data,
-      payload,
+      payloadWithZainsEnv(payload),
     )
 
     return {
@@ -1066,7 +1118,7 @@ export async function syncTransactionsBatchToZains(): Promise<{
     null, // clinic_id bisa null untuk batch summary
     failedCount === 0 ? 'success' : successCount > 0 ? 'success' : 'error',
     `Sync batch transaksi_to_zains: ${successCount} berhasil, ${failedCount} gagal dari ${records.length} records`,
-    {
+    payloadWithZainsEnv({
       total: records.length,
       success: successCount,
       failed: failedCount,
@@ -1078,7 +1130,7 @@ export async function syncTransactionsBatchToZains(): Promise<{
         rawResponse: r.rawResponse,
         httpStatus: r.httpStatus,
       })),
-    },
+    }),
   )
 
   // Log detail error per record yang gagal, termasuk ke system_logs
@@ -1095,7 +1147,7 @@ export async function syncTransactionsBatchToZains(): Promise<{
         clinicId,
         'error',
         `Gagal sync transactions_to_zains ID ${result.transactionsToZainsId}: ${result.error}`,
-        {
+        payloadWithZainsEnv({
           transactionsToZainsId: result.transactionsToZainsId,
           transactionId: record?.transaction_id,
           id_program: record?.id_program,
@@ -1109,7 +1161,7 @@ export async function syncTransactionsBatchToZains(): Promise<{
           error: result.error,
           rawResponse: result.rawResponse,
           httpStatus: result.httpStatus,
-        },
+        }),
       )
     }
   }
