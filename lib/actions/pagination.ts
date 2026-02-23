@@ -1276,6 +1276,7 @@ export const getSystemLogsPaginated = cache(async (
             OR sl.message ILIKE ${validSearch ? `%${validSearch}%` : null}
             OR sl.process_type ILIKE ${validSearch ? `%${validSearch}%` : null}
             OR sl.status ILIKE ${validSearch ? `%${validSearch}%` : null}
+            OR (sl.payload IS NOT NULL AND sl.payload::text ILIKE ${validSearch ? `%${validSearch}%` : null})
           )
         ORDER BY sl.created_at DESC
         LIMIT ${limit} OFFSET ${offset}
@@ -1295,6 +1296,7 @@ export const getSystemLogsPaginated = cache(async (
             OR sl.message ILIKE ${validSearch ? `%${validSearch}%` : null}
             OR sl.process_type ILIKE ${validSearch ? `%${validSearch}%` : null}
             OR sl.status ILIKE ${validSearch ? `%${validSearch}%` : null}
+            OR (sl.payload IS NOT NULL AND sl.payload::text ILIKE ${validSearch ? `%${validSearch}%` : null})
           )
       `
     ])
