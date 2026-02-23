@@ -417,7 +417,7 @@ CREATE TABLE transactions_to_zains (
     id BIGSERIAL PRIMARY KEY,
     transaction_id BIGINT, -- Relasi logis ke transactions(id), tanpa FK constraint
     id_transaksi VARCHAR(100),
-    id_program VARCHAR(100) REFERENCES master_target_categories(id_program_zains) ON DELETE SET NULL,
+    id_program VARCHAR(100) REFERENCES master_target_categories(id_program_zains) ON DELETE SET NULL ON UPDATE CASCADE,
     id_kantor VARCHAR(100) REFERENCES clinics(id_kantor_zains) ON DELETE SET NULL,
     tgl_transaksi DATE,
     id_donatur VARCHAR(100) REFERENCES patients(id_donatur_zains) ON DELETE SET NULL,

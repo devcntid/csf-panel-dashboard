@@ -81,6 +81,9 @@ URL_API_ZAINS_PRODUCTION=<production_url>
 URL_API_ZAINS_STAGING=<staging_url>
 API_KEY_ZAINS=<zains_api_key>
 IS_PRODUCTION=<true|false>
+
+# Vercel Blob (untuk upload logo & background login di App Settings)
+BLOB_READ_WRITE_TOKEN=<dari Vercel Dashboard → Storage → Blob>
 ```
 
 #### Local Mac (untuk worker)

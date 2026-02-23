@@ -4,6 +4,8 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
+  --brand-primary: #00786F;
+  --brand-primary-hover: #00665e;
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
   --card: oklch(1 0 0);
@@ -122,4 +124,21 @@
   body {
     @apply bg-background text-foreground;
   }
+}
+
+/* Pastikan ul/ol/li ter-render bullet & numbering di editor dan konten HTML (login, dll) */
+.prose ul,
+.ProseMirror ul {
+  list-style-type: disc;
+  padding-left: 1.5rem;
+}
+.prose ol,
+.ProseMirror ol {
+  list-style-type: decimal;
+  padding-left: 1.5rem;
+}
+.prose li,
+.ProseMirror li {
+  margin-top: 0.25em;
+  margin-bottom: 0.25em;
 }

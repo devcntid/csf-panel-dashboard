@@ -1229,6 +1229,34 @@ async function seed() {
     }
     console.log(`✅ Public holidays seeded (${publicHolidays2026.length} hari libur)`);
 
+    // J. App Settings (pengaturan dinamisasi: logo, warna sidebar, nama perusahaan, teks login, dll.)
+    console.log('📝 Seeding app_settings...')
+    const defaultLoginContent = `<h2>Kelola Klinik dengan Lebih Efisien</h2>
+<p>Pantau transaksi, kelola pasien, dan optimalkan operasional klinik dalam satu dashboard yang terpadu.</p>
+<ul>
+<li><strong>Monitoring Real-time</strong> — Lihat progres transaksi dan aktivitas klinik secara langsung dengan update real-time.</li>
+<li><strong>Tim Lebih Terkoordinasi</strong> — Berikan akses terkontrol untuk operator dan tim lapangan dengan manajemen peran yang fleksibel.</li>
+<li><strong>Laporan Siap Pakai</strong> — Unduh laporan transaksi dan kehadiran pasien untuk evaluasi dan analisis operasional klinik.</li>
+</ul>`
+    const defaultAppSettings = [
+      { key: 'app_title', value: 'Cita Sehat - Dashboard' },
+      { key: 'app_favicon_url', value: '/favicon.png' },
+      { key: 'app_logo_url', value: '/asset/logo_csf_new.png' },
+      { key: 'app_sidebar_bg_color', value: '#00786F' },
+      { key: 'app_company_name', value: 'Cita Sehat Foundation' },
+      { key: 'app_login_content', value: defaultLoginContent },
+      { key: 'app_login_tone_bg', value: 'linear-gradient(to bottom right, rgba(19,78,74,0.85), rgba(25,58,58,0.75), rgba(30,58,138,0.85))' },
+      { key: 'app_login_bg_image', value: 'https://images.unsplash.com/photo-1519494026892-80bbd2d6fd0d' },
+    ]
+    for (const row of defaultAppSettings) {
+      await sql`
+        INSERT INTO app_settings (key, value)
+        VALUES (${row.key}, ${row.value})
+        ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()
+      `
+    }
+    console.log('✅ app_settings seeded')
+
     console.log('✅ Seed database berhasil!');
     process.exit(0);
   } catch (error: any) {
