@@ -2,6 +2,7 @@
 
 import { sql, getSqlClient } from '@/lib/db'
 import { cache } from 'react'
+import { syncTransactionsToZainsByTransactionIdSequential } from '@/lib/services/zains-sync'
 
 // Legacy implementation (masih disimpan jika suatu saat perlu dirujuk kembali)
 // Jangan digunakan langsung di code baru.
@@ -1829,6 +1830,64 @@ export const getTransactionsToZains = cache(async (
     return []
   }
 })
+
+/**
+ * Server action: sync transactions_to_zains untuk satu transaction_id ke API Zains (sequential).
+ * Dipanggil dari modal Detail Transaksi ke Zains.
+ */
+export async function syncTransactionsToZainsFromModal(transactionId: number): Promise<{
+  success: boolean
+  total: number
+  successCount: number
+  failedCount: number
+  message?: string
+  error?: string
+  results?: Array<{
+    transactionsToZainsId: number
+    success: boolean
+    id_transaksi?: string
+    error?: string
+  }>
+}> {
+  try {
+    const result = await syncTransactionsToZainsByTransactionIdSequential(transactionId)
+    if (result.total === 0) {
+      return {
+        success: true,
+        total: 0,
+        successCount: 0,
+        failedCount: 0,
+        message: 'Semua baris sudah terkirim ke Zains atau tidak ada data pending.',
+      }
+    }
+    return {
+      success: result.failed === 0,
+      total: result.total,
+      successCount: result.success,
+      failedCount: result.failed,
+      message:
+        result.failed === 0
+          ? `${result.success} baris berhasil dikirim ke Zains`
+          : `${result.success} berhasil, ${result.failed} gagal`,
+      results: result.results.map((r) => ({
+        transactionsToZainsId: r.transactionsToZainsId,
+        success: r.success,
+        id_transaksi: r.id_transaksi,
+        error: r.error,
+      })),
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Gagal sync ke Zains'
+    console.error('syncTransactionsToZainsFromModal:', error)
+    return {
+      success: false,
+      total: 0,
+      successCount: 0,
+      failedCount: 0,
+      error: message,
+    }
+  }
+}
 
 /**
  * Hapus transaksi beserta cascade ke transactions_to_zains.
