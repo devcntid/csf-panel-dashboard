@@ -742,9 +742,9 @@ export async function POST(request: NextRequest) {
             `
           }
 
-          // Sync patient ke Zains hanya jika memang ada record di transactions_to_zains
+          // Sync patient ke Zains hanya jika toggle sync aktif, ada record di transactions_to_zains,
           // dan patient ini belum memiliki id_donatur_zains dari Zains.
-          if (hasZainsTransaction && patientId && !idDonatur) {
+          if (hasZainsTransaction && patientId && !idDonatur && todoZains) {
             syncPatientToZainsWorkflow(patientId, transactionId)
           }
         } catch (error: any) {

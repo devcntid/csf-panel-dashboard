@@ -73,6 +73,7 @@ export async function GET(
         'ID Klinik',
         'Tanggal',
         'No. eRM',
+        'NIK',
         'Nama Pasien',
         'Asuransi',
         'Ruangan / Poli',
@@ -127,6 +128,7 @@ export async function GET(
         clinicIdNum,
         formatDate(twoDaysAgo),
         'RM001',
+        '3201010101010001',
         'Contoh Pasien 1',
         sampleInsurances[0] || 'BPJS',
         samplePolies[0] || 'Poli Umum',
@@ -180,6 +182,7 @@ export async function GET(
         clinicIdNum,
         formatDate(yesterday),
         'RM002',
+        '3201010101010002',
         'Contoh Pasien 2',
         sampleInsurances[1] || sampleInsurances[0] || 'UMUM',
         samplePolies[1] || samplePolies[0] || 'Poli Gigi',
@@ -233,6 +236,7 @@ export async function GET(
         clinicIdNum,
         formatDate(today),
         'RM003',
+        '3201010101010003',
         'Contoh Pasien 3',
         sampleInsurances[0] || 'BPJS',
         samplePolies[2] || samplePolies[0] || 'Poli KIA',
@@ -292,6 +296,7 @@ export async function GET(
       { wch: 12 }, // ID Klinik
       { wch: 20 }, // Tanggal (format "31 January 2026" lebih panjang)
       { wch: 12 }, // No. eRM
+      { wch: 20 }, // NIK
       { wch: 20 }, // Nama Pasien
       { wch: 15 }, // Asuransi
       { wch: 20 }, // Ruangan / Poli

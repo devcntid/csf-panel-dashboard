@@ -220,6 +220,9 @@ export function TransaksiClient({
                   <th className="sticky z-30 text-left py-3 px-4 text-xs font-semibold text-slate-600 bg-slate-50 border-r border-slate-200 shadow-[2px_0_4px_rgba(0,0,0,0.05)]" style={{ backgroundColor: '#f8fafc', isolation: 'isolate', left: '344px', width: '110px', minWidth: '110px', maxWidth: '110px' }}>
                     No. RM
                   </th>
+                  <th className="text-left py-3 px-4 text-xs font-semibold text-slate-600 relative" style={{ width: '150px', minWidth: '150px', maxWidth: '150px' }}>
+                    NIK
+                  </th>
                   <th className="sticky z-30 text-left py-3 px-4 text-xs font-semibold text-slate-600 bg-slate-50 border-r border-slate-200 shadow-[2px_0_4px_rgba(0,0,0,0.05)]" style={{ backgroundColor: '#f8fafc', isolation: 'isolate', left: '454px', width: '220px', minWidth: '220px', maxWidth: '220px' }}>
                     Nama Pasien
                   </th>
@@ -281,6 +284,9 @@ export function TransaksiClient({
                       </td>
                       <td className="sticky z-20 py-3 px-4 text-sm text-slate-600 bg-white group-hover:bg-slate-50 border-r border-slate-200 shadow-[2px_0_4px_rgba(0,0,0,0.05)]" style={{ backgroundColor: 'white', isolation: 'isolate', left: '344px', width: '110px', minWidth: '110px', maxWidth: '110px' }}>
                         {trx.erm_no}
+                      </td>
+                      <td className="py-3 px-4 text-sm text-slate-600 whitespace-nowrap relative" style={{ width: '150px', minWidth: '150px', maxWidth: '150px' }}>
+                        {trx.nik || '-'}
                       </td>
                       <td className="sticky z-20 py-3 px-4 text-sm font-medium text-slate-800 bg-white group-hover:bg-slate-50 border-r border-slate-200 shadow-[2px_0_4px_rgba(0,0,0,0.05)]" style={{ backgroundColor: 'white', isolation: 'isolate', left: '454px', width: '220px', minWidth: '220px', maxWidth: '220px' }}>
                         <div className="truncate">{trx.patient_name || '-'}</div>

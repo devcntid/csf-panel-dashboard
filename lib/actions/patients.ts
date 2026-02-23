@@ -27,6 +27,7 @@ export const getPatients = cache(async (search?: string, page: number = 1, limit
             WHERE 
               (p.full_name ILIKE ${`%${search}%`} OR
               p.erm_no ILIKE ${`%${search}%`} OR
+              p.nik ILIKE ${`%${search}%`} OR
               p.id_donatur_zains ILIKE ${`%${search}%`})
               AND p.clinic_id = ${clinicId}
             ORDER BY p.last_visit_at DESC
@@ -38,6 +39,7 @@ export const getPatients = cache(async (search?: string, page: number = 1, limit
             WHERE 
               (p.full_name ILIKE ${`%${search}%`} OR
               p.erm_no ILIKE ${`%${search}%`} OR
+              p.nik ILIKE ${`%${search}%`} OR
               p.id_donatur_zains ILIKE ${`%${search}%`})
               AND p.clinic_id = ${clinicId}
           `
@@ -68,6 +70,7 @@ export const getPatients = cache(async (search?: string, page: number = 1, limit
             WHERE 
               p.full_name ILIKE ${`%${search}%`} OR
               p.erm_no ILIKE ${`%${search}%`} OR
+              p.nik ILIKE ${`%${search}%`} OR
               p.id_donatur_zains ILIKE ${`%${search}%`}
             ORDER BY p.last_visit_at DESC
             LIMIT ${limit} OFFSET ${offset}
@@ -78,6 +81,7 @@ export const getPatients = cache(async (search?: string, page: number = 1, limit
             WHERE 
               p.full_name ILIKE ${`%${search}%`} OR
               p.erm_no ILIKE ${`%${search}%`} OR
+              p.nik ILIKE ${`%${search}%`} OR
               p.id_donatur_zains ILIKE ${`%${search}%`}
           `
         ])

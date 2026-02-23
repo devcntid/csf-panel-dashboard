@@ -7,6 +7,7 @@
     "dev": "next dev",
     "lint": "eslint .",
     "migrate": "tsx scripts/migrate.ts",
+    "migrate:nik": "tsx scripts/add-nik-to-patients-and-transactions.ts",
     "migrate:fix-fk": "tsx scripts/fix-master-target-categories-fk.ts",
     "migrate:app-settings": "tsx scripts/add-app-settings-table.ts",
     "migrate:input-type": "tsx scripts/add-input-type-to-transactions.ts",

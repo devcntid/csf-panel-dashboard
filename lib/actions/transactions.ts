@@ -1440,13 +1440,13 @@ export const getTransactions = cache(async (
       whereClauses.push(`t.clinic_id = $${paramIndex}`)
     }
 
-    // Filter search (trx_no, patient_name, erm_no, id_transaksi_zains, id_donatur_zains via transactions_to_zains)
+    // Filter search (trx_no, patient_name, erm_no, nik, id_transaksi_zains, id_donatur_zains via transactions_to_zains)
     if (trimmedSearch) {
       paramIndex++
       params.push(`%${trimmedSearch}%`)
       const idx = paramIndex
       whereClauses.push(
-        `(t.trx_no ILIKE $${idx} OR t.patient_name ILIKE $${idx} OR t.erm_no ILIKE $${idx} OR EXISTS (SELECT 1 FROM transactions_to_zains tz WHERE tz.transaction_id = t.id AND (tz.id_transaksi ILIKE $${idx} OR tz.id_donatur ILIKE $${idx})))`,
+        `(t.trx_no ILIKE $${idx} OR t.patient_name ILIKE $${idx} OR t.erm_no ILIKE $${idx} OR t.nik ILIKE $${idx} OR EXISTS (SELECT 1 FROM transactions_to_zains tz WHERE tz.transaction_id = t.id AND (tz.id_transaksi ILIKE $${idx} OR tz.id_donatur ILIKE $${idx})))`,
       )
     }
 

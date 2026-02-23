@@ -1082,9 +1082,9 @@ async function performScraping(
           `
         }
 
-        // Hanya sync via workflow jika memang ada record di transactions_to_zains
+        // Hanya sync via workflow jika toggle sync aktif, ada record di transactions_to_zains,
         // dan patient ini belum punya id_donatur_zains dari Zains.
-        if (hasZainsTransaction && patientId && !idDonatur) {
+        if (hasZainsTransaction && patientId && !idDonatur && todoZains) {
           syncPatientToZainsWorkflow(patientId, transactionId)
         }
       } catch (error: any) {
