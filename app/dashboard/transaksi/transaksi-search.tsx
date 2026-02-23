@@ -284,7 +284,7 @@ export function TransaksiSearch({
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 w-5 h-5" />
           <Input
             type="text"
-            placeholder="Cari berdasarkan No Transaksi, Nama Pasien, No RM, ID Transaksi Zains, atau ID Donatur Zains..."
+            placeholder="Cari berdasarkan No Transaksi, Nama Pasien, No RM, NIK, ID Transaksi Zains, atau ID Donatur Zains..."
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
             onKeyDown={(e) => {

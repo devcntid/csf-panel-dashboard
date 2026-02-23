@@ -101,6 +101,7 @@ export async function POST(request: NextRequest) {
 
         const trxNo = row['trx_no'] || row['No Transaksi'] || row['no_transaksi'] || ''
         const ermNo = row['erm_no'] || row['No. eRM'] || row['no_erm'] || ''
+        const nik = row['nik'] || row['NIK'] || ''
 
         // Fast duplicate check: jika sudah ada transaksi dengan clinic_id + trx_no + erm_no yang sama,
         // anggap transaksi sudah pernah masuk dan skip tanpa melakukan proses berat lainnya.
@@ -232,7 +233,7 @@ export async function POST(request: NextRequest) {
         // patient_id sementara NULL; akan di-update setelah patient ter-insert (jika perlu dikirim ke Zains)
         const [insertedTransaction] = await sql`
           INSERT INTO transactions (
-            clinic_id, patient_id, poly_id, insurance_type_id, trx_date, trx_no, erm_no, patient_name,
+            clinic_id, patient_id, poly_id, insurance_type_id, trx_date, trx_no, erm_no, nik, patient_name,
             insurance_type, polyclinic, payment_method, voucher_code,
             bill_regist, bill_action, bill_lab, bill_drug, bill_alkes, bill_mcu, bill_radio, bill_total,
             bill_regist_discount, bill_action_discount, bill_lab_discount, bill_drug_discount, bill_alkes_discount, bill_mcu_discount, bill_radio_discount,
@@ -244,7 +245,7 @@ export async function POST(request: NextRequest) {
             raw_json_data, input_type
           )
           VALUES (
-            ${clinic_id}, NULL, ${polyId}, ${insuranceTypeId}, ${trxDateFormatted}, ${trxNo}, ${ermNo}, ${patientName},
+            ${clinic_id}, NULL, ${polyId}, ${insuranceTypeId}, ${trxDateFormatted}, ${trxNo}, ${ermNo}, ${nik || null}, ${patientName},
             ${insuranceType}, ${polyclinic}, ${paymentMethod}, ${voucherCode === '-' ? null : voucherCode},
             ${billRegist}, ${billAction}, ${billLab}, ${billDrug}, ${billAlkes}, ${billMcu}, ${billRadio}, ${billTotal},
             ${billRegistDiscount}, ${billActionDiscount}, ${billLabDiscount}, ${billDrugDiscount}, ${billAlkesDiscount}, ${billMcuDiscount}, ${billRadioDiscount},
@@ -369,6 +370,7 @@ export async function POST(request: NextRequest) {
           INSERT INTO patients (
             clinic_id, 
             erm_no, 
+            nik,
             full_name, 
             first_visit_at, 
             last_visit_at, 
@@ -379,6 +381,7 @@ export async function POST(request: NextRequest) {
           VALUES (
             ${clinic_id},
             ${ermNo},
+            ${nik || null},
             ${patientName},
             ${trxDateFormatted},
             ${trxDateFormatted},
@@ -391,6 +394,7 @@ export async function POST(request: NextRequest) {
             full_name = COALESCE(NULLIF(EXCLUDED.full_name, ''), patients.full_name),
             first_visit_at = LEAST(patients.first_visit_at, EXCLUDED.first_visit_at),
             last_visit_at = GREATEST(patients.last_visit_at, EXCLUDED.last_visit_at),
+            nik = COALESCE(NULLIF(EXCLUDED.nik, ''), patients.nik),
             erm_no_for_zains = EXCLUDED.erm_no_for_zains,
             updated_at = NOW()
           RETURNING id, visit_count
@@ -421,9 +425,9 @@ export async function POST(request: NextRequest) {
           `
         }
 
-        // Sync patient ke Zains hanya jika memang ada record di transactions_to_zains
+        // Sync patient ke Zains hanya jika toggle sync aktif, ada record di transactions_to_zains,
         // dan patient ini belum memiliki id_donatur_zains dari Zains.
-        if (hasZainsTransaction && patientId && !idDonatur) {
+        if (hasZainsTransaction && patientId && !idDonatur && todoZains) {
           syncPatientToZainsWorkflow(patientId, transactionId)
         }
       } catch (error: any) {

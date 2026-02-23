@@ -29,16 +29,16 @@ interface ZainsSyncResponse {
 }
 
 /**
- * Extract phone and email from erm_no_for_zains
- * Menggunakan erm_no_for_zains untuk hp, telpon, dan email
+ * Extract phone and email dari NIK
+ * Menggunakan NIK untuk hp, telpon, dan email
  */
-function extractContactFromErmNoForZains(ermNoForZains: string): { hp: string; telpon: string; email: string } {
-  // Gunakan erm_no_for_zains untuk hp dan telpon
-  // Email format: {erm_no_for_zains}@gmail.com
+function extractContactFromNik(nik: string): { hp: string; telpon: string; email: string } {
+  // Gunakan NIK untuk hp dan telpon
+  // Email format: {nik}@gmail.com
   return {
-    hp: ermNoForZains || '',
-    telpon: ermNoForZains || '',
-    email: ermNoForZains ? `${ermNoForZains}@gmail.com` : ''
+    hp: nik || '',
+    telpon: nik || '',
+    email: nik ? `${nik}@gmail.com` : ''
   }
 }
 
@@ -86,8 +86,8 @@ export async function syncPatientToZains(patient: any): Promise<{
     }
   }
 
-  // Gunakan erm_no_for_zains untuk hp, telpon, dan email
-  const { hp, telpon, email } = extractContactFromErmNoForZains(patient.erm_no_for_zains || '')
+  // Gunakan NIK untuk hp, telpon, dan email; fallback ke erm_no_for_zains jika NIK kosong
+  const { hp, telpon, email } = extractContactFromNik(patient.nik || patient.erm_no_for_zains || '')
   
   const payload: ZainsSyncPayload = {
     nama: patient.full_name || '',
@@ -252,7 +252,7 @@ export async function syncPatientToZains(patient: any): Promise<{
 export async function getUnsyncedPatients(limit: number = 10): Promise<any[]> {
   try {
     const patients = await sql`
-      SELECT p.id, p.clinic_id, p.erm_no, p.full_name, p.erm_no_for_zains
+      SELECT p.id, p.clinic_id, p.erm_no, p.full_name, p.erm_no_for_zains, p.nik
       FROM patients p
       WHERE (p.id_donatur_zains IS NULL OR p.id_donatur_zains = '')
         AND p.erm_no_for_zains IS NOT NULL
@@ -341,6 +341,16 @@ export async function syncPatientsBatchToZains(): Promise<{
     error?: string
   }>
 }> {
+  const syncEnabled = await getZainsTransactionSyncEnabled()
+  if (!syncEnabled) {
+    return {
+      total: 0,
+      success: 0,
+      failed: 0,
+      results: []
+    }
+  }
+
   const patients = await getUnsyncedPatients(10)
   
   if (patients.length === 0) {
@@ -486,7 +496,7 @@ export async function syncPatientToZainsWorkflow(
 ): Promise<void> {
   try {
     const patientResult = await sql`
-      SELECT id, clinic_id, erm_no, full_name, erm_no_for_zains, id_donatur_zains
+      SELECT id, clinic_id, erm_no, full_name, erm_no_for_zains, nik, id_donatur_zains
       FROM patients
       WHERE id = ${patientId}
         AND (id_donatur_zains IS NULL OR id_donatur_zains = '')

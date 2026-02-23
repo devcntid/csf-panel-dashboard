@@ -47,7 +47,7 @@ export function ZainsSyncSetting() {
         return
       }
       setEnabled(checked)
-      toast.success(checked ? 'Sync transaksi ke Zains diaktifkan' : 'Sync transaksi ke Zains dimatikan')
+      toast.success(checked ? 'Sync transaksi & pasien ke Zains diaktifkan' : 'Sync transaksi & pasien ke Zains dimatikan')
     } catch {
       toast.error('Gagal menyimpan pengaturan')
     } finally {
@@ -92,19 +92,19 @@ export function ZainsSyncSetting() {
       <CardHeader>
         <CardTitle>Sync Transaksi ke Zains</CardTitle>
         <CardDescription>
-          Toggle global untuk mengirim transaksi ke Zains. Matikan sementara jika tidak ingin ada POST ke API Zains (cron & workflow tetap jalan tapi tidak memproses data). Nyalakan lagi kapan saja; data baru (manual/upload) akan mengikuti nilai toggle saat insert.
+          Toggle global untuk mengirim transaksi dan pasien (donatur) ke Zains. Matikan sementara jika tidak ingin ada POST ke API Zains (cron & workflow tetap jalan tapi tidak memproses data). Nyalakan lagi kapan saja; data baru (manual/upload/scrap) akan mengikuti nilai toggle saat insert.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
         <div className="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50/50 p-4">
           <div className="space-y-0.5">
             <Label htmlFor="zains-sync-toggle" className="text-base font-medium">
-              Sync transaksi ke Zains
+              Sync transaksi & pasien (donatur) ke Zains
             </Label>
             <p className="text-sm text-slate-500">
               {enabled
-                ? 'Aktif — cron dan workflow akan mengirim transaksi yang todo_zains = true ke Zains.'
-                : 'Nonaktif — tidak ada transaksi yang di-POST ke Zains.'}
+                ? 'Aktif — cron dan workflow akan mengirim transaksi dan pasien ke Zains.'
+                : 'Nonaktif — tidak ada transaksi maupun pasien yang di-POST ke Zains.'}
             </p>
           </div>
           <Switch

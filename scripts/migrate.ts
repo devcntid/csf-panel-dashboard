@@ -74,23 +74,26 @@ CREATE TABLE users (
 -- =============================================
 -- 4. TABLE: PATIENTS (Master Pasien untuk Retensi)
 -- =============================================
-CREATE TABLE patients (
-    id BIGSERIAL PRIMARY KEY,
-    clinic_id BIGINT NOT NULL REFERENCES clinics(id) ON DELETE CASCADE,
-    erm_no VARCHAR(50) NOT NULL,
-    full_name VARCHAR(255),
-    first_visit_at DATE NOT NULL,
-    last_visit_at DATE NOT NULL,
-    visit_count INT DEFAULT 1,
-    id_donatur_zains VARCHAR(100) UNIQUE,
-    erm_no_for_zains VARCHAR(100),
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    CONSTRAINT unique_patient_per_clinic UNIQUE (clinic_id, erm_no)
-);
+      CREATE TABLE patients (
+      id BIGSERIAL PRIMARY KEY,
+      clinic_id BIGINT NOT NULL REFERENCES clinics(id) ON DELETE CASCADE,
+      erm_no VARCHAR(50) NOT NULL,
+      nik VARCHAR(20),
+      full_name VARCHAR(255),
+      first_visit_at DATE NOT NULL,
+      last_visit_at DATE NOT NULL,
+      visit_count INT DEFAULT 1,
+      id_donatur_zains VARCHAR(100) UNIQUE,
+      erm_no_for_zains VARCHAR(100),
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+      updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+      CONSTRAINT unique_patient_per_clinic UNIQUE (clinic_id, erm_no)
+      );
 
--- Index untuk erm_no_for_zains
-CREATE INDEX IF NOT EXISTS idx_patients_erm_no_for_zains ON patients(erm_no_for_zains);
+      -- Index untuk erm_no_for_zains
+      CREATE INDEX IF NOT EXISTS idx_patients_erm_no_for_zains ON patients(erm_no_for_zains);
+      -- Index untuk NIK pasien
+      CREATE INDEX IF NOT EXISTS idx_patients_nik ON patients(nik);
 
 -- =============================================
 -- 5. CONFIG: POLYCLINIC MAPPING
@@ -250,23 +253,24 @@ CREATE INDEX idx_bpjs_realization_clinic_period ON clinic_bpjs_realizations(clin
 -- =============================================
 -- PENTING: Tabel ini menggunakan PARTITION BY RANGE untuk optimasi performa
 -- Setiap partisi berisi data 1 bulan, sehingga query hanya scan partisi yang relevan
-CREATE TABLE transactions (
-    id BIGSERIAL NOT NULL,
-    clinic_id BIGINT NOT NULL REFERENCES clinics(id) ON DELETE CASCADE,
-    patient_id BIGINT REFERENCES patients(id) ON DELETE SET NULL,
-    poly_id BIGINT REFERENCES master_polies(id) ON DELETE SET NULL,
-    insurance_type_id BIGINT REFERENCES master_insurance_types(id) ON DELETE SET NULL,
-    
-    -- === IDENTITAS TRANSAKSI ===
-    trx_date DATE NOT NULL,
-    trx_no VARCHAR(50),
-    trx_time TIME,
-    erm_no VARCHAR(50) NOT NULL,
-    patient_name VARCHAR(255),
-    insurance_type VARCHAR(100),
-    polyclinic VARCHAR(100),
-    payment_method VARCHAR(100),
-    voucher_code VARCHAR(100),
+      CREATE TABLE transactions (
+      id BIGSERIAL NOT NULL,
+      clinic_id BIGINT NOT NULL REFERENCES clinics(id) ON DELETE CASCADE,
+      patient_id BIGINT REFERENCES patients(id) ON DELETE SET NULL,
+      poly_id BIGINT REFERENCES master_polies(id) ON DELETE SET NULL,
+      insurance_type_id BIGINT REFERENCES master_insurance_types(id) ON DELETE SET NULL,
+      
+      -- === IDENTITAS TRANSAKSI ===
+      trx_date DATE NOT NULL,
+      trx_no VARCHAR(50),
+      trx_time TIME,
+      erm_no VARCHAR(50) NOT NULL,
+      nik VARCHAR(20),
+      patient_name VARCHAR(255),
+      insurance_type VARCHAR(100),
+      polyclinic VARCHAR(100),
+      payment_method VARCHAR(100),
+      voucher_code VARCHAR(100),
     
     -- === 1. JUMLAH TAGIHAN ===
     bill_regist DECIMAL(15, 2) DEFAULT 0,
@@ -392,15 +396,16 @@ CREATE TABLE IF NOT EXISTS transactions_y2027m02 PARTITION OF transactions
 CREATE TABLE IF NOT EXISTS transactions_y2027m03 PARTITION OF transactions
     FOR VALUES FROM ('2027-03-01') TO ('2027-04-01');
 
--- =============================================
--- 6c. INDEXES FOR TRANSACTIONS (Optimized for Dashboard Queries)
--- =============================================
--- Index di parent table akan otomatis diterapkan ke semua partisi
-CREATE INDEX idx_trx_date_partition ON transactions(trx_date);
-CREATE INDEX idx_trx_clinic_partition ON transactions(clinic_id);
-CREATE INDEX idx_trx_poly_partition ON transactions(polyclinic);
-CREATE INDEX idx_trx_poly_id_partition ON transactions(poly_id);
-CREATE INDEX idx_trx_synced_partition ON transactions(zains_synced);
+      -- =============================================
+      -- 6c. INDEXES FOR TRANSACTIONS (Optimized for Dashboard Queries)
+      -- =============================================
+      -- Index di parent table akan otomatis diterapkan ke semua partisi
+      CREATE INDEX idx_trx_date_partition ON transactions(trx_date);
+      CREATE INDEX idx_trx_clinic_partition ON transactions(clinic_id);
+      CREATE INDEX idx_trx_poly_partition ON transactions(polyclinic);
+      CREATE INDEX idx_trx_poly_id_partition ON transactions(poly_id);
+      CREATE INDEX idx_trx_synced_partition ON transactions(zains_synced);
+      CREATE INDEX idx_trx_nik_partition ON transactions(nik);
 
 -- Composite Index untuk Dashboard Queries (Super Fast)
 -- Index ini membuat filter Klinik + Tanggal menjadi sangat cepat

@@ -103,6 +103,9 @@ async function PatientList({ search, page, clinicId, perPage }: { search: string
                   No. RM
                 </th>
                 <th className="text-left py-3 px-4 text-xs font-semibold text-slate-600">
+                  NIK
+                </th>
+                <th className="text-left py-3 px-4 text-xs font-semibold text-slate-600">
                   Nama Pasien
                 </th>
                 <th className="text-left py-3 px-4 text-xs font-semibold text-slate-600">
@@ -139,6 +142,9 @@ async function PatientList({ search, page, clinicId, perPage }: { search: string
                     <td className="py-3 px-4 text-sm text-center text-slate-500">{rowNumber}</td>
                     <td className="py-3 px-4 text-sm font-medium text-teal-600">
                       {patient.erm_no}
+                    </td>
+                    <td className="py-3 px-4 text-sm text-slate-600">
+                      {patient.nik || '-'}
                     </td>
                   <td className="py-3 px-4 text-sm font-medium text-slate-800">
                     {patient.full_name || '-'}

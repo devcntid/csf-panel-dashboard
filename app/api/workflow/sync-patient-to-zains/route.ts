@@ -4,6 +4,7 @@ import {
   syncTransactionsToZainsByTransactionId,
 } from '@/lib/services/zains-sync'
 import { sql } from '@/lib/db'
+import { getZainsTransactionSyncEnabled } from '@/lib/settings'
 
 /**
  * Endpoint untuk handle Upstash workflow execution (spesifik per transaksi).
@@ -17,6 +18,16 @@ import { sql } from '@/lib/db'
  */
 export async function POST(request: NextRequest) {
   try {
+    // Jika toggle Sync Transaksi ke Zains dimatikan, sync pasien juga di-hold
+    const syncEnabled = await getZainsTransactionSyncEnabled()
+    if (!syncEnabled) {
+      return NextResponse.json({
+        success: true,
+        message: 'Sync ke Zains dimatikan (toggle). Pasien dan transaksi tidak dikirim.',
+        skipped: true,
+      })
+    }
+
     const body = await request.json()
     const { patientId, transactionId } = body
 
@@ -43,7 +54,7 @@ export async function POST(request: NextRequest) {
     const hasTransactionId = !isNaN(transactionIdNum) && transactionIdNum > 0
 
     const [patient] = await sql`
-      SELECT id, clinic_id, erm_no, full_name, erm_no_for_zains, id_donatur_zains
+      SELECT id, clinic_id, erm_no, full_name, erm_no_for_zains, nik, id_donatur_zains
       FROM patients
       WHERE id = ${patientIdNum}
         AND (id_donatur_zains IS NULL OR id_donatur_zains = '')
