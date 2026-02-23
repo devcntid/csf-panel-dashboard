@@ -19,6 +19,7 @@ import { CRUDInsuranceType } from './crud-insurance-type'
 import { CRUDPublicHoliday } from './crud-public-holiday'
 import { CRUDBpjsRealization } from './crud-bpjs-realization'
 import { ZainsSyncSetting } from './zains-sync-setting'
+import { AppSettingsForm } from './app-settings-form'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 
@@ -50,7 +51,7 @@ export function KonfigurasiTabs({
     publicHolidays?: { holidays: any[]; total: number; page: number; limit: number }
   }
 }) {
-  const [activeTab, setActiveTab] = useState('mapping')
+  const [activeTab, setActiveTab] = useState('zains-sync')
   const [runningQueue, setRunningQueue] = useState(false)
   const router = useRouter()
 
@@ -89,6 +90,16 @@ export function KonfigurasiTabs({
         {/* Scrollable tabs untuk mode mobile supaya tidak offside */}
         <div className="overflow-x-auto">
           <nav className="flex gap-4 min-w-max px-2 pb-1">
+          <button
+            onClick={() => setActiveTab('zains-sync')}
+            className={`px-4 py-2 font-medium text-sm border-b-2 transition-colors ${
+              activeTab === 'zains-sync'
+                ? 'border-teal-600 text-teal-600'
+                : 'border-transparent text-slate-500 hover:text-slate-700'
+            }`}
+          >
+            App Settings
+          </button>
           <button
             onClick={() => setActiveTab('mapping')}
             className={`px-4 py-2 font-medium text-sm border-b-2 transition-colors ${
@@ -208,16 +219,6 @@ export function KonfigurasiTabs({
             }`}
           >
             Hari Libur
-          </button>
-          <button
-            onClick={() => setActiveTab('zains-sync')}
-            className={`px-4 py-2 font-medium text-sm border-b-2 transition-colors ${
-              activeTab === 'zains-sync'
-                ? 'border-teal-600 text-teal-600'
-                : 'border-transparent text-slate-500 hover:text-slate-700'
-            }`}
-          >
-            Sync Zains
           </button>
           <button
             onClick={() => setActiveTab('logs')}
@@ -417,7 +418,12 @@ export function KonfigurasiTabs({
           </Card>
         )}
 
-        {activeTab === 'zains-sync' && <ZainsSyncSetting />}
+        {activeTab === 'zains-sync' && (
+          <div className="space-y-6">
+            <AppSettingsForm />
+            <ZainsSyncSetting />
+          </div>
+        )}
 
         {activeTab === 'logs' && (
           <Card>
