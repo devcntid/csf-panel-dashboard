@@ -473,11 +473,12 @@ async function runWorkflowSyncLocally(
 }
 
 /**
- * Sync single patient to Zains (untuk workflow integration via Upstash).
- * Jika Upstash gagal (limit/error), fallback jalankan alur lengkap secara lokal agar tetap selesai.
+ * Sync single patient ke Zains lalu (jika ada transactionId) sync transactions_to_zains.
+ * Selalu dijalankan secara lokal (tanpa QStash) agar log bisa ditelusuri di process yang sama.
+ * Dipanggil dari API insert/upload/scrap tanpa await sehingga async (non-blocking).
  *
  * @param patientId - ID patient yang akan di-sync donatur ke Zains
- * @param transactionId - Opsional; jika ada, setelah patient sync akan sync transactions_to_zains untuk transaction ini
+ * @param transactionId - Opsional; jika ada, setelah patient sync akan sync transactions_to_zains ke /corez/transaksi/save
  */
 export async function syncPatientToZainsWorkflow(
   patientId: number,
@@ -499,60 +500,18 @@ export async function syncPatientToZainsWorkflow(
       console.log(
         `ℹ️  [Workflow] Patient ID ${patientId} sudah di-sync atau tidak memiliki erm_no_for_zains, skip`,
       )
-      return
-    }
-
-    const qstash = getQStashClient()
-    const body: { patientId: number; transactionId?: number } = { patientId }
-    if (transactionId != null && transactionId > 0) {
-      body.transactionId = transactionId
-    }
-
-    if (!qstash) {
-      console.warn('⚠️  [Workflow] QStash tidak dikonfigurasi, jalankan alur sync secara lokal')
-      await runWorkflowSyncLocally(patient, patientId, transactionId)
-      return
-    }
-
-    // Gunakan BASE_URL dari env sebagai sumber kebenaran utama
-    // Contoh: BASE_URL="https://csf-dashboard.vercel.app"
-    let baseUrl =
-      process.env.BASE_URL ||
-      process.env.NEXT_PUBLIC_APP_URL ||
-      (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : '') ||
-      'http://localhost:3000'
-
-    const workflowEndpoint = `${baseUrl}/api/workflow/sync-patient-to-zains`
-
-    let lastError: any = null
-    for (let attempt = 1; attempt <= QSTASH_RETRY_ATTEMPTS; attempt++) {
-      try {
-        await qstash.publishJSON({
-          url: workflowEndpoint,
-          body,
-          headers: { 'Content-Type': 'application/json' },
-        })
+      // Jika patient sudah synced tapi ada transactionId, tetap sync transaksi ke Zains
+      if (transactionId != null && transactionId > 0) {
+        const trxResult = await syncTransactionsToZainsByTransactionId(transactionId)
         console.log(
-          `✅ [Upstash Workflow] Workflow triggered untuk Patient ID ${patientId}` +
-            (body.transactionId != null ? `, transaction_id=${body.transactionId}` : ''),
+          `✅ [Workflow] Sync transaksi (transaction_id=${transactionId}): ${trxResult.success}/${trxResult.total} records`,
         )
-        return
-      } catch (err: any) {
-        lastError = err
-        const isLast = attempt === QSTASH_RETRY_ATTEMPTS
-        console.warn(
-          `⚠️  [Upstash Workflow] Attempt ${attempt}/${QSTASH_RETRY_ATTEMPTS} gagal:`,
-          err?.message || err,
-        )
-        if (!isLast) {
-          await new Promise((r) => setTimeout(r, QSTASH_RETRY_DELAY_MS))
-        }
       }
+      return
     }
 
-    console.warn(
-      '⚠️  [Workflow] QStash gagal setelah retry, jalankan alur sync secara lokal agar tetap selesai',
-    )
+    // Selalu jalankan secara lokal (tanpa QStash) agar tracing mudah: log patient + transaction sync
+    // muncul di process/request yang sama dengan API insert/upload/scrap.
     await runWorkflowSyncLocally(patient, patientId, transactionId)
   } catch (error) {
     console.error(`❌ [Workflow] Error saat fetch/sync patient ID ${patientId}:`, error)
