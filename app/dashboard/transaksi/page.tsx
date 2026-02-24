@@ -2,6 +2,8 @@ import { getTransactions, getTransactionStats } from '@/lib/actions/transactions
 import { getAllClinics, getMasterPolies, getMasterInsuranceTypes } from '@/lib/actions/config'
 import { TransaksiClient } from './transaksi-client'
 import { Suspense } from 'react'
+import { getServerSession } from 'next-auth'
+import { authOptions } from '@/lib/auth'
 
 export default async function TransaksiPage({
   searchParams,
@@ -9,6 +11,10 @@ export default async function TransaksiPage({
   searchParams: Promise<{ search?: string; page?: string; perPage?: string; clinic?: string; poly?: string; insurance?: string; dateFrom?: string; dateTo?: string; zainsSync?: string }>
 }) {
   const params = await searchParams
+
+  const session = await getServerSession(authOptions)
+  const role = (session?.user as any)?.role || 'super_admin'
+  const sessionClinicId = (session?.user as any)?.clinic_id as number | null | undefined
   
   // Default tanggal awal ke tanggal 1 bulan ini, tanggal akhir ke hari ini
   const getTodayDate = () => {
@@ -28,13 +34,18 @@ export default async function TransaksiPage({
   const search = params.search || ''
   const page = parseInt(params.page || '1')
   const perPage = parseInt(params.perPage || '10') || 10
-  const clinicId = params.clinic ? parseInt(params.clinic) : undefined
+  const requestedClinicId = params.clinic ? parseInt(params.clinic) : undefined
   const polyId = params.poly ? parseInt(params.poly) : undefined
   const insuranceTypeId = params.insurance ? parseInt(params.insurance) : undefined
   const dateFrom = params.dateFrom || getFirstDateOfMonth()
   const dateTo = params.dateTo || getTodayDate()
   const zainsSync = (params.zainsSync === 'synced' || params.zainsSync === 'pending') ? params.zainsSync : 'all'
   const zainsSynced: 'all' | 'synced' | 'pending' = zainsSync as 'all' | 'synced' | 'pending'
+
+  const isClinicManager = role === 'clinic_manager'
+  const clinicId = isClinicManager
+    ? (sessionClinicId ?? undefined)
+    : requestedClinicId
   
   const [transactionsData, stats, clinics, polies, insuranceTypes] = await Promise.all([
     getTransactions(search, clinicId, dateFrom, dateTo, page, perPage, polyId, insuranceTypeId, zainsSynced),
@@ -61,6 +72,8 @@ export default async function TransaksiPage({
             clinics={clinics}
             polies={polies}
             insuranceTypes={insuranceTypes}
+            role={role}
+            clinicId={clinicId}
           />
         </div>
       </div>

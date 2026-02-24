@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
+import Link from 'next/link'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import {
@@ -68,6 +69,7 @@ export default function DashboardPage() {
   const [data, setData] = useState<DashboardData | null>(null)
   const [loading, setLoading] = useState(true)
   const [clinics, setClinics] = useState<{ id: number; name: string }[]>([])
+  const [polyCompositionExpanded, setPolyCompositionExpanded] = useState(false)
 
   const fetchData = useCallback(async () => {
     setLoading(true)
@@ -89,6 +91,10 @@ export default function DashboardPage() {
   useEffect(() => {
     fetchData()
   }, [fetchData])
+
+  useEffect(() => {
+    setPolyCompositionExpanded(false)
+  }, [data?.polyComposition])
 
   useEffect(() => {
     getAllClinics().then((list) => {
@@ -122,33 +128,25 @@ export default function DashboardPage() {
     },
   }
 
-  // Tren pendapatan per tanggal - Bulan Ini vs Bulan Lalu
-  // Sumbu X: tanggal 1-31 (day of month)
-  const revenueTrendData = data
+  // Tren pendapatan per bulan per klinik: sumbu X = Jan–Des, satu garis per klinik
+  const revenueTrendData = data?.revenueTrendByClinic
     ? {
-        labels: data.revenueByDate.map((d) => String(d.day)),
-        datasets: [
-          {
-            label: `Bulan Ini (${data.revenueTrendLabels?.bulanIniLabel || ''})`,
-            data: data.revenueByDate.map((d) => d.bulanIni),
-            borderColor: '#0d9488',
-            backgroundColor: 'rgba(13, 148, 136, 0.1)',
+        labels: data.revenueTrendByClinic.monthLabels,
+        datasets: data.revenueTrendByClinic.clinics.map((clinic, i) => {
+          const colors = ['#0d9488', '#2563eb', '#7c3aed', '#d97706', '#059669', '#dc2626', '#0891b2', '#4f46e5']
+          const color = colors[i % colors.length]
+          return {
+            label: clinic.clinicName.replace(/^Klinik\s+/i, '') || clinic.clinicName,
+            data: clinic.data,
+            borderColor: color,
+            backgroundColor: `${color}20`,
             tension: 0.4,
-            fill: true,
-          },
-          {
-            label: `Bulan Lalu (${data.revenueTrendLabels?.bulanLaluLabel || ''})`,
-            data: data.revenueByDate.map((d) => d.bulanLalu),
-            borderColor: '#cbd5e1',
-            backgroundColor: 'rgba(203, 213, 225, 0.1)',
-            tension: 0.4,
-            fill: true,
-          },
-        ],
+            fill: false,
+          }
+        }),
       }
     : null
 
-  // Options khusus untuk chart Tren Pendapatan dengan tooltip lengkap (tanggal + bulan + tahun)
   const revenueTrendChartOptions = {
     ...chartOptions,
     plugins: {
@@ -156,17 +154,15 @@ export default function DashboardPage() {
       tooltip: {
         callbacks: {
           title: (items: { dataIndex: number }[]) => {
-            const day = items[0]?.dataIndex !== undefined && data ? data.revenueByDate[items[0].dataIndex]?.day : ''
-            const bulanIniLabel = data?.revenueTrendLabels?.bulanIniLabel || ''
-            const bulanLaluLabel = data?.revenueTrendLabels?.bulanLaluLabel || ''
-            return day ? `Tanggal ${day} - ${bulanIniLabel} vs ${bulanLaluLabel}` : ''
+            const idx = items[0]?.dataIndex ?? 0
+            const monthLabel = data?.revenueTrendByClinic?.monthLabels?.[idx] ?? ''
+            const year = dateTo ? new Date(dateTo).getFullYear() : new Date().getFullYear()
+            return monthLabel ? `${monthLabel} ${year}` : ''
           },
-          label: (ctx: { datasetIndex: number; raw: number }) => {
-            const label = ctx.datasetIndex === 0
-              ? `Bulan Ini (${data?.revenueTrendLabels?.bulanIniLabel || ''})`
-              : `Bulan Lalu (${data?.revenueTrendLabels?.bulanLaluLabel || ''})`
+          label: (ctx: { dataset: { label?: string }; raw: number }) => {
+            const label = ctx.dataset?.label ?? ''
             const value = ctx.raw
-            return `${label}: ${value?.toLocaleString('id-ID') || 0}`
+            return `${label}: ${formatRupiah(value)}`
           },
         },
       },
@@ -200,14 +196,23 @@ export default function DashboardPage() {
       }
     : null
 
-  // Komposisi poli
-  const polyData = data
+  // Komposisi poli: pie hanya top 5 + Lainnya, daftar rincian pakai load more
+  const POLY_TOP_N = 5
+  const polyColors = ['#0d9488', '#14b8a6', '#2dd4bf', '#5eead4', '#99f6e4', '#64748b']
+  const polyTopFive = data?.polyComposition?.slice(0, POLY_TOP_N) ?? []
+  const polyRest = data?.polyComposition?.slice(POLY_TOP_N) ?? []
+  const polyRestPercent = polyRest.reduce((s, p) => s + p.percent, 0)
+  const polyData = data?.polyComposition?.length
     ? {
-        labels: data.polyComposition.map((p) => p.label),
+        labels: polyRest.length > 0
+          ? [...polyTopFive.map((p) => p.label), 'Lainnya']
+          : polyTopFive.map((p) => p.label),
         datasets: [
           {
-            data: data.polyComposition.map((p) => p.percent),
-            backgroundColor: ['#0d9488', '#14b8a6', '#2dd4bf', '#5eead4', '#99f6e4', '#64748b'],
+            data: polyRest.length > 0
+              ? [...polyTopFive.map((p) => p.percent), polyRestPercent]
+              : polyTopFive.map((p) => p.percent),
+            backgroundColor: polyRest.length > 0 ? polyColors.slice(0, 6) : polyColors.slice(0, polyTopFive.length),
           },
         ],
       }
@@ -427,30 +432,21 @@ export default function DashboardPage() {
                 </CardContent>
               </Card>
 
-              {/* Line Chart - Tren Pendapatan Per Tanggal */}
+              {/* Line Chart - Tren Pendapatan Per Bulan (per klinik) */}
               <Card className="lg:col-span-2">
                 <CardHeader>
                   <div className="flex items-center justify-between">
-                    <CardTitle className="text-base">Tren Pendapatan Per Tanggal</CardTitle>
-                    <div className="flex items-center gap-4 text-sm">
-                      <div className="flex items-center gap-2">
-                        <div className="w-3 h-3 bg-teal-500 rounded-full"></div>
-                        <span className="text-slate-600">
-                          Bulan Ini {data?.revenueTrendLabels?.bulanIniLabel ? `(${data.revenueTrendLabels.bulanIniLabel})` : ''}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <div className="w-3 h-3 bg-slate-300 rounded-full"></div>
-                        <span className="text-slate-600">
-                          Bulan Lalu {data?.revenueTrendLabels?.bulanLaluLabel ? `(${data.revenueTrendLabels.bulanLaluLabel})` : ''}
-                        </span>
-                      </div>
+                    <div>
+                      <CardTitle className="text-base">Tren Pendapatan Per Bulan</CardTitle>
+                      <p className="text-slate-500 text-xs mt-0.5">
+                        Pendapatan per klinik per bulan — tahun {dateTo ? new Date(dateTo).getFullYear() : new Date().getFullYear()}
+                      </p>
                     </div>
                   </div>
                 </CardHeader>
                 <CardContent>
                   <div className="h-[250px]">
-                    {revenueTrendData && revenueTrendData.labels.length > 0 ? (
+                    {revenueTrendData && revenueTrendData.datasets.length > 0 ? (
                       <Line data={revenueTrendData} options={revenueTrendChartOptions} />
                     ) : (
                       <div className="flex items-center justify-center h-full text-slate-400 text-sm">
@@ -458,6 +454,101 @@ export default function DashboardPage() {
                       </div>
                     )}
                   </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Baris ranking: progress pendapatan (kiri) & progress kunjungan (kanan) */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+              {/* Ranking Klinik by Pendapatan - progress menuju target (sama seperti gauge) */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Ranking Klinik by Pendapatan</CardTitle>
+              
+                </CardHeader>
+                <CardContent>
+                  {data && data.revenueByClinic.length > 0 ? (
+                    <div className="space-y-4">
+                      {data.revenueByClinic.map((c, i) => {
+                        const target = c.targetRevenue > 0 ? c.targetRevenue : 1
+                        const pct = Math.min(100, (c.revenue / target) * 100)
+                        const isOverTarget = c.targetRevenue > 0 && c.revenue >= c.targetRevenue
+                        return (
+                          <div key={i} className="flex items-center gap-3">
+                            <Link
+                              href={`/dashboard/klinik/${c.clinicId}`}
+                              className="text-sm text-slate-700 shrink-0 min-w-[180px] hover:text-teal-600 hover:underline"
+                              title={c.clinicName}
+                            >
+                              {c.clinicName}
+                            </Link>
+                            <div className="flex-1 min-w-0 h-6 rounded-full bg-slate-200 overflow-hidden">
+                              <div
+                                className={`h-full rounded-full transition-all duration-300 ${isOverTarget ? 'bg-teal-600' : 'bg-teal-500'}`}
+                                style={{ width: `${pct}%` }}
+                              />
+                            </div>
+                            <span className="text-sm font-semibold text-slate-800 shrink-0 text-right whitespace-nowrap" title={formatRupiah(c.revenue)}>
+                              {formatRupiah(c.revenue)}
+                              {c.targetRevenue > 0 && (
+                                <span className="text-slate-400 font-normal text-xs ml-1">
+                                  / {formatRupiah(c.targetRevenue)}
+                                </span>
+                              )}
+                            </span>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  ) : (
+                    <div className="text-slate-400 text-sm py-8 text-center">Tidak ada data</div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Ranking Klinik by Visit - progress menuju target */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Ranking Klinik by Visit</CardTitle>
+                 
+                </CardHeader>
+                <CardContent>
+                  {data && data.clinicRankByVisits.length > 0 ? (
+                    <div className="space-y-4">
+                      {data.clinicRankByVisits.map((c, i) => {
+                        const target = c.targetVisits > 0 ? c.targetVisits : 1
+                        const pct = Math.min(100, (c.visits / target) * 100)
+                        const isOverTarget = c.targetVisits > 0 && c.visits >= c.targetVisits
+                        return (
+                          <div key={i} className="flex items-center gap-3">
+                            <Link
+                              href={`/dashboard/klinik/${c.clinicId}`}
+                              className="text-sm text-slate-700 shrink-0 min-w-[180px] hover:text-teal-600 hover:underline"
+                              title={c.clinicName}
+                            >
+                              {c.clinicName}
+                            </Link>
+                            <div className="flex-1 min-w-0 h-6 rounded-full bg-slate-200 overflow-hidden">
+                              <div
+                                className={`h-full rounded-full transition-all duration-300 ${isOverTarget ? 'bg-teal-600' : 'bg-teal-500'}`}
+                                style={{ width: `${pct}%` }}
+                              />
+                            </div>
+                            <span className="text-sm font-semibold text-slate-800 shrink-0 text-right whitespace-nowrap" title={`${c.visits.toLocaleString('id-ID')} visit`}>
+                              {c.visits.toLocaleString('id-ID')} visit
+                              {c.targetVisits > 0 && (
+                                <span className="text-slate-400 font-normal text-xs ml-1">
+                                  / {c.targetVisits.toLocaleString('id-ID')} target
+                                </span>
+                              )}
+                            </span>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  ) : (
+                    <div className="text-slate-400 text-sm py-8 text-center">Tidak ada data</div>
+                  )}
                 </CardContent>
               </Card>
             </div>
@@ -524,10 +615,11 @@ export default function DashboardPage() {
                 </CardContent>
               </Card>
 
-              {/* Pie Chart - Komposisi Poli */}
+              {/* Pie Chart - Komposisi Poli (top 5 + Lainnya, daftar pakai load more) */}
               <Card>
                 <CardHeader>
                   <CardTitle className="text-base">Komposisi Poli</CardTitle>
+                  <p className="text-slate-500 text-xs mt-0.5">Top 5 poli + Lainnya</p>
                 </CardHeader>
                 <CardContent>
                   <div className="h-[180px] flex items-center justify-center">
@@ -546,21 +638,50 @@ export default function DashboardPage() {
                   </div>
                   {data && data.polyComposition.length > 0 && (
                     <div className="mt-4 space-y-2">
-                      {data.polyComposition.map((p, i) => (
+                      {polyTopFive.map((p, i) => (
                         <div key={i} className="flex items-center justify-between text-sm">
                           <div className="flex items-center gap-2">
                             <div
-                              className="w-3 h-3 rounded-full"
-                              style={{
-                                backgroundColor:
-                                  ['#0d9488', '#14b8a6', '#2dd4bf', '#5eead4', '#99f6e4', '#64748b'][i % 6],
-                              }}
+                              className="w-3 h-3 rounded-full shrink-0"
+                              style={{ backgroundColor: polyColors[i % polyColors.length] }}
                             />
-                            <span className="text-slate-600 truncate max-w-[100px]" title={p.label}>{p.label}</span>
+                            <span className="text-slate-600 truncate max-w-[120px]" title={p.label}>{p.label}</span>
                           </div>
                           <span className="font-semibold">{p.percent.toFixed(1)}%</span>
                         </div>
                       ))}
+                      {polyRest.length > 0 && !polyCompositionExpanded && (
+                        <button
+                          type="button"
+                          onClick={() => setPolyCompositionExpanded(true)}
+                          className="w-full text-center py-1.5 text-sm text-teal-600 hover:text-teal-700 font-medium"
+                        >
+                          Tampilkan lebih banyak ({polyRest.length})
+                        </button>
+                      )}
+                      {polyCompositionExpanded && polyRest.length > 0 && (
+                        <>
+                          {polyRest.map((p, i) => (
+                            <div key={`rest-${i}`} className="flex items-center justify-between text-sm">
+                              <div className="flex items-center gap-2">
+                                <div
+                                  className="w-3 h-3 rounded-full shrink-0"
+                                  style={{ backgroundColor: polyColors[(POLY_TOP_N + i) % polyColors.length] }}
+                                />
+                                <span className="text-slate-600 truncate max-w-[120px]" title={p.label}>{p.label}</span>
+                              </div>
+                              <span className="font-semibold">{p.percent.toFixed(1)}%</span>
+                            </div>
+                          ))}
+                          <button
+                            type="button"
+                            onClick={() => setPolyCompositionExpanded(false)}
+                            className="w-full text-center py-1.5 text-sm text-slate-500 hover:text-slate-700 font-medium"
+                          >
+                            Tampilkan lebih sedikit
+                          </button>
+                        </>
+                      )}
                     </div>
                   )}
                 </CardContent>

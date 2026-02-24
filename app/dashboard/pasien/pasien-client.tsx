@@ -17,21 +17,25 @@ import { useTransition, useState, useEffect } from 'react'
 
 export function PasienClient({
   clinics,
+  readonlyClinicId,
 }: {
   clinics: any[]
+  readonlyClinicId?: number
 }) {
   const router = useRouter()
   const searchParams = useSearchParams()
   const [isPending, startTransition] = useTransition()
   const search = searchParams.get('search') || ''
   const [searchInput, setSearchInput] = useState(search)
-  const [selectedClinic, setSelectedClinic] = useState(searchParams.get('clinic') || '')
+  const [selectedClinic, setSelectedClinic] = useState(
+    readonlyClinicId ? String(readonlyClinicId) : searchParams.get('clinic') || ''
+  )
 
   useEffect(() => {
     const searchParam = searchParams.get('search') || ''
     setSearchInput(searchParam)
-    setSelectedClinic(searchParams.get('clinic') || '')
-  }, [searchParams])
+    setSelectedClinic(readonlyClinicId ? String(readonlyClinicId) : searchParams.get('clinic') || '')
+  }, [searchParams, readonlyClinicId])
 
   const handleSearch = () => {
     startTransition(() => {
@@ -45,7 +49,9 @@ export function PasienClient({
       }
       
       // Apply clinic filter
-      if (selectedClinic && selectedClinic !== 'all') {
+      if (readonlyClinicId) {
+        params.set('clinic', String(readonlyClinicId))
+      } else if (selectedClinic && selectedClinic !== 'all') {
         params.set('clinic', selectedClinic)
       } else {
         params.delete('clinic')
@@ -63,23 +69,28 @@ export function PasienClient({
   }
 
   const handleClinicChange = (value: string) => {
+    if (readonlyClinicId) return
     setSelectedClinic(value)
     // Hanya update state lokal, tidak langsung update URL
   }
 
   const handleResetFilter = () => {
     setSearchInput('')
-    setSelectedClinic('')
+    setSelectedClinic(readonlyClinicId ? String(readonlyClinicId) : '')
     startTransition(() => {
       const params = new URLSearchParams(searchParams.toString())
       params.delete('search')
-      params.delete('clinic')
+      if (readonlyClinicId) {
+        params.set('clinic', String(readonlyClinicId))
+      } else {
+        params.delete('clinic')
+      }
       params.set('page', '1')
       router.push(`/dashboard/pasien?${params.toString()}`)
     })
   }
 
-  const hasFilter = searchInput || (selectedClinic && selectedClinic !== 'all')
+  const hasFilter = searchInput || (!readonlyClinicId && selectedClinic && selectedClinic !== 'all')
 
   return (
     <Card className="mb-6">
@@ -108,26 +119,28 @@ export function PasienClient({
         </div>
         
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2 border-t">
-          <div className="space-y-2">
-            <Label>Klinik</Label>
-            <Select
-              value={selectedClinic || 'all'}
-              onValueChange={handleClinicChange}
-              disabled={isPending}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Semua Klinik" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Semua Klinik</SelectItem>
-                {clinics.map((clinic) => (
-                  <SelectItem key={clinic.id} value={clinic.id.toString()}>
-                    {clinic.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+          {!readonlyClinicId && (
+            <div className="space-y-2">
+              <Label>Klinik</Label>
+              <Select
+                value={selectedClinic || 'all'}
+                onValueChange={handleClinicChange}
+                disabled={isPending}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Semua Klinik" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Semua Klinik</SelectItem>
+                  {clinics.map((clinic) => (
+                    <SelectItem key={clinic.id} value={clinic.id.toString()}>
+                      {clinic.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
           <div className="flex items-end justify-end gap-2">
             {hasFilter && (
               <Button 

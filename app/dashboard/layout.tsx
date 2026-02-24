@@ -18,7 +18,6 @@ import { useSession, signOut } from 'next-auth/react'
 import {
   LayoutDashboard,
   Building2,
-  Hospital,
   ClipboardList,
   Users,
   Settings,
@@ -40,8 +39,9 @@ export default function DashboardLayout({
   const [sidebarOpen, setSidebarOpen] = useState(false) // Mobile sidebar
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false) // Desktop sidebar collapse
   const [clinicsExpanded, setClinicsExpanded] = useState(true)
-  const [userName, setUserName] = useState('Admin Finance')
-  const [userRole, setUserRole] = useState('Super Admin')
+  const [userName, setUserName] = useState<string | null>(null)
+  const [userRole, setUserRole] = useState<string | null>(null)
+  const [userClinicId, setUserClinicId] = useState<number | null>(null)
   const [brandColor, setBrandColor] = useState('#00786F')
   const [logoUrl, setLogoUrl] = useState('/asset/logo_csf_new.png')
 
@@ -57,6 +57,8 @@ export default function DashboardLayout({
       const user = session?.user
       setUserName(user?.name || 'User')
       setUserRole((user as any)?.role || 'User')
+      const clinicId = (user as any)?.clinic_id
+      setUserClinicId(typeof clinicId === 'number' ? clinicId : clinicId ? Number(clinicId) : null)
     }
     
     // Load sidebar state from localStorage
@@ -92,24 +94,26 @@ export default function DashboardLayout({
     await signOut({ callbackUrl: '/login' })
   }
 
-  const menuItems = [
-    { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-    { href: '/dashboard/yayasan', label: 'Dashboard Yayasan', icon: Building2 },
-    {
-      href: '/dashboard/klinik',
-      label: 'Manajemen Klinik',
-      icon: Hospital,
-      subItems: [
-        { href: '/dashboard/klinik/ciputat', label: 'Klinik Ciputat' },
-        { href: '/dashboard/klinik/serpong', label: 'Klinik Serpong' },
-        { href: '/dashboard/klinik/bsd', label: 'Klinik BSD' },
-        { href: '/dashboard/klinik/pamulang', label: 'Klinik Pamulang' },
-      ],
-    },
-    { href: '/dashboard/transaksi', label: 'Data Transaksi', icon: ClipboardList },
-    { href: '/dashboard/pasien', label: 'Data Pasien', icon: Users },
-    { href: '/dashboard/konfigurasi', label: 'Konfigurasi', icon: Settings },
-  ]
+  const isUserReady = status === 'authenticated' && !!session?.user
+  const isRoleReady = isUserReady && !!userRole
+  const isClinicManager = isRoleReady && userRole === 'clinic_manager'
+  const clinicSummaryHref = userClinicId ? `/dashboard/klinik/${userClinicId}` : '/dashboard'
+
+  const menuItems = !isRoleReady
+    ? []
+    : isClinicManager
+      ? [
+          { href: clinicSummaryHref, label: 'Summary Klinik', icon: LayoutDashboard },
+          { href: '/dashboard/transaksi', label: 'Data Transaksi', icon: ClipboardList },
+          { href: '/dashboard/pasien', label: 'Data Pasien', icon: Users },
+        ]
+      : [
+          { href: '/dashboard/yayasan', label: 'Dashboard Lembaga', icon: Building2 },
+          { href: '/dashboard', label: 'Dashboard Klinik', icon: LayoutDashboard },
+          { href: '/dashboard/transaksi', label: 'Data Transaksi', icon: ClipboardList },
+          { href: '/dashboard/pasien', label: 'Data Pasien', icon: Users },
+          { href: '/dashboard/konfigurasi', label: 'Konfigurasi', icon: Settings },
+        ]
 
   const isActive = (href: string) => pathname === href
 
@@ -153,15 +157,25 @@ export default function DashboardLayout({
 
           {/* User Info */}
           <div className={`p-4 border-b border-white/20 transition-opacity duration-300 ${sidebarCollapsed ? 'lg:opacity-0 lg:hidden' : 'lg:opacity-100'}`}>
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center flex-shrink-0">
-                <Users className="w-5 h-5" />
+            {isUserReady ? (
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center flex-shrink-0">
+                  <Users className="w-5 h-5" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold text-sm truncate">{userName}</p>
+                  <p className="text-white/80 text-xs">{userRole}</p>
+                </div>
               </div>
-              <div className="flex-1 min-w-0">
-                <p className="font-semibold text-sm truncate">{userName}</p>
-                <p className="text-white/80 text-xs">{userRole}</p>
+            ) : (
+              <div className="animate-pulse flex items-center gap-3">
+                <div className="w-10 h-10 bg-white/10 rounded-full flex-shrink-0" />
+                <div className="flex-1 space-y-2">
+                  <div className="h-3 bg-white/20 rounded w-24" />
+                  <div className="h-2 bg-white/10 rounded w-16" />
+                </div>
               </div>
-            </div>
+            )}
           </div>
 
           {/* Navigation */}
