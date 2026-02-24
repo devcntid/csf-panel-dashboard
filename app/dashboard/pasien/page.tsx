@@ -9,6 +9,8 @@ import { PasienClient } from './pasien-client'
 import { PatientPagination } from './patient-pagination'
 import { PasienRowActions } from './pasien-row-actions'
 import { Suspense } from 'react'
+import { getServerSession } from 'next-auth'
+import { authOptions } from '@/lib/auth'
 
 // Komponen terpisah untuk stats - bisa di-stream
 async function PatientStats({ search, clinicId }: { search: string; clinicId?: number }) {
@@ -195,10 +197,18 @@ export default async function PasienPage({
   searchParams: Promise<{ search?: string; page?: string; clinic?: string; perPage?: string }>
 }) {
   const params = await searchParams
+
+  const session = await getServerSession(authOptions)
+  const role = (session?.user as any)?.role || 'super_admin'
+  const sessionClinicId = (session?.user as any)?.clinic_id as number | null | undefined
+
   const search = params.search || ''
   const page = parseInt(params.page || '1')
-  const clinicId = params.clinic ? parseInt(params.clinic) : undefined
+  const requestedClinicId = params.clinic ? parseInt(params.clinic) : undefined
   const perPage = parseInt(params.perPage || '10') || 10
+
+  const isClinicManager = role === 'clinic_manager'
+  const clinicId = isClinicManager ? (sessionClinicId ?? undefined) : requestedClinicId
 
   // Fetch clinics untuk dropdown filter
   const clinics = await getAllClinics()
@@ -223,7 +233,7 @@ export default async function PasienPage({
         </Suspense>
 
         {/* Search */}
-        <PasienClient clinics={clinics} />
+        <PasienClient clinics={clinics} readonlyClinicId={isClinicManager ? clinicId : undefined} />
 
         {/* Patient Table - Streamed separately */}
         <Suspense fallback={null}>

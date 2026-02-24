@@ -21,7 +21,11 @@ export type DashboardData = {
   gapRevenue: number
   revenueByDate: { day: number; bulanIni: number; bulanLalu: number }[]
   revenueTrendLabels: { bulanIniLabel: string; bulanLaluLabel: string }
-  revenueByClinic: { clinicName: string; revenue: number }[]
+  /** Tren pendapatan per bulan per klinik: sumbu X = Jan–Des, satu garis per klinik */
+  revenueTrendByClinic: { monthLabels: string[]; clinics: { clinicName: string; data: number[] }[] }
+  revenueByClinic: { clinicId: number; clinicName: string; revenue: number; targetRevenue: number }[]
+  /** Ranking klinik by visit (jumlah transaksi); targetVisits = target kunjungan dari clinic_daily_targets */
+  clinicRankByVisits: { clinicId: number; clinicName: string; visits: number; targetVisits: number }[]
   patientComposition: { label: string; count: number; percent: number }[]
   polyComposition: { label: string; count: number; percent: number }[]
 }
@@ -217,9 +221,45 @@ export async function getDashboardData(
       })
     }
 
-    // 5. Performa klinik cabang (by filter utama)
+    // Tren pendapatan per bulan per klinik (sumbu X = Jan–Des, satu garis per klinik)
+    const trendYear = new Date(dateTo).getFullYear()
+    const clinicsForTrend = await sql`
+      SELECT id, name FROM clinics
+      WHERE is_active = true
+        AND (${clinicId}::bigint IS NULL OR id = ${clinicId})
+      ORDER BY name
+    `
+    const revenueByClinicMonthRows = await sql`
+      SELECT 
+        t.clinic_id,
+        EXTRACT(MONTH FROM t.trx_date)::int as month,
+        COALESCE(SUM(t.paid_total), 0)::numeric as revenue
+      FROM transactions t
+      WHERE t.trx_date >= ${`${trendYear}-01-01`} AND t.trx_date <= ${`${trendYear}-12-31`}
+        AND (${clinicId}::bigint IS NULL OR t.clinic_id = ${clinicId})
+      GROUP BY t.clinic_id, EXTRACT(MONTH FROM t.trx_date)
+    `
+    const revenueTrendByClinic: { monthLabels: string[]; clinics: { clinicName: string; data: number[] }[] } = {
+      monthLabels: [...monthNames],
+      clinics: [],
+    }
+    const revenueMap = new Map<string, number>() // key: "clinicId_month"
+    ;(revenueByClinicMonthRows as any[]).forEach((r: any) => {
+      const monthIdx = Math.min(12, Math.max(1, Number(r.month) || 0)) - 1
+      const key = `${r.clinic_id}_${monthIdx}`
+      revenueMap.set(key, Number(r.revenue || 0))
+    })
+    revenueTrendByClinic.clinics = (clinicsForTrend as any[]).map((c: any) => {
+      const id = Number(c.id)
+      const name = String(c.name || 'Unknown')
+      const data = Array.from({ length: 12 }, (_, monthIdx) => revenueMap.get(`${id}_${monthIdx}`) ?? 0)
+      return { clinicName: name, data }
+    })
+
+    // 5. Performa klinik cabang (by filter utama) + persiapan untuk target
     const clinicRevenueRows = await sql`
       SELECT 
+        c.id as clinic_id,
         c.name as clinic_name,
         COALESCE(SUM(t.paid_total), 0)::numeric as revenue
       FROM clinics c
@@ -231,10 +271,62 @@ export async function getDashboardData(
       ORDER BY revenue DESC
     `
 
-    const revenueByClinic = (clinicRevenueRows as any[]).map((r: any) => ({
-      clinicName: r.clinic_name || 'Unknown',
-      revenue: Number(r.revenue || 0),
-    }))
+    const targetYear = new Date(dateTo).getFullYear()
+    const clinicTargetRows = await sql`
+      SELECT 
+        cdt.clinic_id,
+        COALESCE(SUM(cdt.target_revenue), 0)::numeric as target_revenue,
+        COALESCE(SUM(cdt.target_visits), 0)::bigint as target_visits
+      FROM clinic_daily_targets cdt
+      WHERE cdt.source_id = 1
+        AND cdt.target_year = ${targetYear}
+        AND (${clinicId}::bigint IS NULL OR cdt.clinic_id = ${clinicId})
+      GROUP BY cdt.clinic_id
+    `
+    const targetByClinic = new Map<number, { targetRevenue: number; targetVisits: number }>()
+    ;(clinicTargetRows as any[]).forEach((r: any) => {
+      const id = Number(r.clinic_id)
+      targetByClinic.set(id, {
+        targetRevenue: Number(r.target_revenue || 0),
+        targetVisits: Number(r.target_visits || 0),
+      })
+    })
+
+    const revenueByClinic = (clinicRevenueRows as any[]).map((r: any) => {
+      const cid = Number(r.clinic_id)
+      const targets = targetByClinic.get(cid) || { targetRevenue: 0, targetVisits: 0 }
+      return {
+        clinicId: cid,
+        clinicName: r.clinic_name || 'Unknown',
+        revenue: Number(r.revenue || 0),
+        targetRevenue: targets.targetRevenue,
+      }
+    })
+
+    // 5b. Ranking klinik by visit (jumlah transaksi)
+    const clinicVisitsRows = await sql`
+      SELECT 
+        c.id as clinic_id,
+        c.name as clinic_name,
+        COUNT(t.id)::int as visits
+      FROM clinics c
+      LEFT JOIN transactions t ON t.clinic_id = c.id 
+        AND t.trx_date >= ${dateFrom} AND t.trx_date <= ${dateTo}
+      WHERE c.is_active = true
+        AND (${clinicId}::bigint IS NULL OR c.id = ${clinicId})
+      GROUP BY c.id, c.name
+      ORDER BY visits DESC
+    `
+    const clinicRankByVisits = (clinicVisitsRows as any[]).map((r: any) => {
+      const cid = Number(r.clinic_id)
+      const targets = targetByClinic.get(cid) || { targetRevenue: 0, targetVisits: 0 }
+      return {
+        clinicId: cid,
+        clinicName: r.clinic_name || 'Unknown',
+        visits: Number(r.visits || 0),
+        targetVisits: targets.targetVisits,
+      }
+    })
 
     // 6. Komposisi pasien by insurance (BPJS, Umum, Asuransi)
     const compositionRows = await sql`
@@ -265,16 +357,20 @@ export async function getDashboardData(
       return { label, count, percent }
     })
 
-    // 7. Komposisi poli by master_polies
+    // 7. Komposisi poli grouped by poly_id (master_polies), bukan by string nama
     const polyRows = await sql`
       SELECT 
-        COALESCE(mp.name, t.polyclinic, 'Lainnya') as label,
+        t.poly_id,
+        CASE 
+          WHEN t.poly_id IS NULL THEN COALESCE(MAX(t.polyclinic), 'Lainnya')
+          ELSE MAX(mp.name)
+        END as label,
         COUNT(t.id)::int as cnt
       FROM transactions t
       LEFT JOIN master_polies mp ON mp.id = t.poly_id
       WHERE t.trx_date >= ${dateFrom} AND t.trx_date <= ${dateTo}
         AND (${clinicId}::bigint IS NULL OR t.clinic_id = ${clinicId})
-      GROUP BY COALESCE(mp.name, t.polyclinic, 'Lainnya')
+      GROUP BY t.poly_id
       ORDER BY cnt DESC
     `
 
@@ -302,7 +398,9 @@ export async function getDashboardData(
       gapRevenue,
       revenueByDate,
       revenueTrendLabels: { bulanIniLabel, bulanLaluLabel },
+      revenueTrendByClinic,
       revenueByClinic,
+      clinicRankByVisits,
       patientComposition,
       polyComposition,
     }
@@ -321,7 +419,9 @@ export async function getDashboardData(
       gapRevenue: 0,
       revenueByDate: [],
       revenueTrendLabels: { bulanIniLabel: '', bulanLaluLabel: '' },
+      revenueTrendByClinic: { monthLabels: [], clinics: [] },
       revenueByClinic: [],
+      clinicRankByVisits: [],
       patientComposition: [],
       polyComposition: [],
     }

@@ -35,6 +35,8 @@ export function TransaksiClient({
   clinics,
   polies,
   insuranceTypes,
+  role,
+  clinicId,
 }: {
   transactions: any[]
   stats: any
@@ -45,6 +47,8 @@ export function TransaksiClient({
   clinics: any[]
   polies: any[]
   insuranceTypes: any[]
+  role?: string
+  clinicId?: number | null
 }) {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -194,7 +198,12 @@ export function TransaksiClient({
       {/* Filter Card - Toggleable (default: hidden) */}
       {showFilter && (
         <div className="mb-6">
-          <TransaksiSearch clinics={clinics} polies={polies} insuranceTypes={insuranceTypes} />
+          <TransaksiSearch 
+            clinics={clinics} 
+            polies={polies} 
+            insuranceTypes={insuranceTypes} 
+            readonlyClinicId={role === 'clinic_manager' ? clinicId || undefined : undefined}
+          />
         </div>
       )}
 

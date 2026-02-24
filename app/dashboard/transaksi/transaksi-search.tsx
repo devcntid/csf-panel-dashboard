@@ -20,10 +20,12 @@ export function TransaksiSearch({
   clinics,
   polies,
   insuranceTypes,
+  readonlyClinicId,
 }: {
   clinics: any[]
   polies: any[]
   insuranceTypes: any[]
+  readonlyClinicId?: number
 }) {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -49,7 +51,9 @@ export function TransaksiSearch({
   const [searchInput, setSearchInput] = useState(search)
   const [dateFrom, setDateFrom] = useState(searchParams.get('dateFrom') || getFirstDateOfMonth())
   const [dateTo, setDateTo] = useState(searchParams.get('dateTo') || getTodayDate())
-  const [selectedClinic, setSelectedClinic] = useState(searchParams.get('clinic') || '')
+  const [selectedClinic, setSelectedClinic] = useState(
+    readonlyClinicId ? String(readonlyClinicId) : searchParams.get('clinic') || ''
+  )
   const [selectedPoly, setSelectedPoly] = useState(searchParams.get('poly') || '')
   const [selectedInsurance, setSelectedInsurance] = useState(searchParams.get('insurance') || '')
   const [selectedZainsSync, setSelectedZainsSync] = useState(searchParams.get('zainsSync') || 'all')
@@ -62,7 +66,7 @@ export function TransaksiSearch({
     setSearchInput(searchParam)
     setDateFrom(dateFromParam || getFirstDateOfMonth())
     setDateTo(dateToParam || getTodayDate())
-    setSelectedClinic(searchParams.get('clinic') || '')
+    setSelectedClinic(readonlyClinicId ? String(readonlyClinicId) : searchParams.get('clinic') || '')
     setSelectedPoly(searchParams.get('poly') || '')
     setSelectedInsurance(searchParams.get('insurance') || '')
     setSelectedZainsSync(searchParams.get('zainsSync') || 'all')
@@ -99,7 +103,9 @@ export function TransaksiSearch({
       params.set('dateTo', finalDateTo)
       
       // Apply clinic filter
-      if (selectedClinic && selectedClinic !== 'all') {
+      if (readonlyClinicId) {
+        params.set('clinic', String(readonlyClinicId))
+      } else if (selectedClinic && selectedClinic !== 'all') {
         params.set('clinic', selectedClinic)
       } else {
         params.delete('clinic')
@@ -136,6 +142,7 @@ export function TransaksiSearch({
   }
 
   const handleClinicChange = (value: string) => {
+    if (readonlyClinicId) return
     setSelectedClinic(value)
     // Hanya update state lokal, tidak langsung update URL
   }
@@ -153,27 +160,33 @@ export function TransaksiSearch({
   const handleResetFilter = () => {
           setDateFrom('')
           setDateTo('')
-          setSelectedClinic('')
+          setSelectedClinic(readonlyClinicId ? String(readonlyClinicId) : '')
           setSelectedPoly('')
           setSelectedInsurance('')
           setSelectedZainsSync('all')
     startTransition(() => {
       const params = new URLSearchParams(searchParams.toString())
       params.delete('dateFrom')
-            params.delete('dateTo')
-            params.delete('clinic')
-            params.delete('poly')
-            params.delete('insurance')
-            params.delete('zainsSync')
-            params.set('page', '1')
+      params.delete('dateTo')
+      if (readonlyClinicId) {
+        params.set('clinic', String(readonlyClinicId))
+      } else {
+        params.delete('clinic')
+      }
+      params.delete('poly')
+      params.delete('insurance')
+      params.delete('zainsSync')
+      params.set('page', '1')
       router.push(`/dashboard/transaksi?${params.toString()}`)
     })
   }
 
-  const hasFilter = dateFrom || dateTo || selectedClinic || selectedPoly || selectedInsurance || (selectedZainsSync && selectedZainsSync !== 'all')
+  const hasFilter =
+    dateFrom || dateTo || (!readonlyClinicId && selectedClinic) || selectedPoly || selectedInsurance || (selectedZainsSync && selectedZainsSync !== 'all')
 
   const handleScrap = async () => {
-    if (!selectedClinic || selectedClinic === 'all') {
+    const clinicForScrap = readonlyClinicId ? String(readonlyClinicId) : selectedClinic
+    if (!clinicForScrap || clinicForScrap === 'all') {
       toast.error('Pilih klinik terlebih dahulu')
       return
     }
@@ -192,7 +205,7 @@ export function TransaksiSearch({
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          clinic_id: parseInt(selectedClinic),
+          clinic_id: parseInt(clinicForScrap),
           tgl_awal: dateFrom,
           tgl_akhir: dateTo,
           requested_by: 'UI',
@@ -230,7 +243,7 @@ export function TransaksiSearch({
       // Build query params dari filter yang aktif
       const params = new URLSearchParams()
       const search = searchParams.get('search')
-      const clinic = searchParams.get('clinic')
+      const clinic = readonlyClinicId ? String(readonlyClinicId) : searchParams.get('clinic')
       const dateFrom = searchParams.get('dateFrom')
       const dateTo = searchParams.get('dateTo')
       const poly = searchParams.get('poly')
@@ -300,26 +313,28 @@ export function TransaksiSearch({
         {/* Filter dan Tombol - Sebaris di bawah */}
         <div className="flex flex-wrap items-end gap-2">
           {/* Filter Dropdowns */}
-          <div className="space-y-1 min-w-[140px]">
-            <Label className="text-xs">Klinik</Label>
-            <Select
-              value={selectedClinic || 'all'}
-              onValueChange={handleClinicChange}
-              disabled={isPending}
-            >
-              <SelectTrigger className="h-9">
-                <SelectValue placeholder="Semua Klinik" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Semua Klinik</SelectItem>
-                {clinics.map((clinic) => (
-                  <SelectItem key={clinic.id} value={clinic.id.toString()}>
-                    {clinic.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+          {!readonlyClinicId && (
+            <div className="space-y-1 min-w-[140px]">
+              <Label className="text-xs">Klinik</Label>
+              <Select
+                value={selectedClinic || 'all'}
+                onValueChange={handleClinicChange}
+                disabled={isPending}
+              >
+                <SelectTrigger className="h-9">
+                  <SelectValue placeholder="Semua Klinik" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Semua Klinik</SelectItem>
+                  {clinics.map((clinic) => (
+                    <SelectItem key={clinic.id} value={clinic.id.toString()}>
+                      {clinic.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
           <div className="space-y-1 min-w-[140px]">
             <Label className="text-xs">Poli</Label>
             <Select
