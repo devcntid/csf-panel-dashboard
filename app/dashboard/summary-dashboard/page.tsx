@@ -15,6 +15,7 @@ import {
   Legend,
 } from 'chart.js'
 import { getAllClinics } from '@/lib/actions/config'
+import { Spinner } from '@/components/ui/spinner'
 
 type SummaryRow = {
   label: string
@@ -104,7 +105,6 @@ export default function SummaryDashboardPage() {
 
   // State untuk tabel pivot SE & Fundraising
   const [loadingTable, setLoadingTable] = useState(false)
-  const [tableProgress, setTableProgress] = useState(0)
   const [tableData, setTableData] = useState<PivotResponse | null>(null)
 
   // State untuk chart SE per klinik per bulan
@@ -211,10 +211,8 @@ export default function SummaryDashboardPage() {
   const loadTableData = async (options?: { year?: number }) => {
     const y = options?.year ?? year
     setLoadingTable(true)
-    setTableProgress(0)
     try {
       const monthNumbers = monthOptions.map((m) => Number(m.value))
-      const totalMonths = monthNumbers.length || 1
       const responses = await Promise.all(
         monthNumbers.map(async (m) => {
           try {
@@ -223,14 +221,11 @@ export default function SummaryDashboardPage() {
             const json = (await res.json()) as SummaryResponse
             if (!json.success) {
               console.error(`Gagal mengambil summary SE untuk bulan ${m}`, json)
-              setTableProgress((prev) => Math.min(prev + 100 / totalMonths, 100))
               return null
             }
-            setTableProgress((prev) => Math.min(prev + 100 / totalMonths, 100))
             return json
           } catch (error) {
             console.error(`Error fetch summary SE untuk bulan ${m}:`, error)
-            setTableProgress((prev) => Math.min(prev + 100 / totalMonths, 100))
             return null
           }
         }),
@@ -242,7 +237,6 @@ export default function SummaryDashboardPage() {
       console.error('Error fetch summary SE:', error)
       setTableData(null)
     } finally {
-      setTableProgress(100)
       setLoadingTable(false)
     }
   }
@@ -396,21 +390,19 @@ export default function SummaryDashboardPage() {
           <Button
             onClick={handleApply}
             disabled={loadingTable || loadingChart}
-            className="bg-teal-600 hover:bg-teal-700"
+            className="bg-teal-600 hover:bg-teal-700 flex items-center gap-2"
           >
-            {loadingTable || loadingChart ? 'Memuat...' : 'Terapkan'}
+            {loadingTable || loadingChart ? (
+              <>
+                <Spinner className="size-5 text-white" />
+                <span>Memuat...</span>
+              </>
+            ) : (
+              'Terapkan'
+            )}
           </Button>
         </div>
       </div>
-
-      {loadingTable && (
-        <div className="w-full h-1 bg-slate-100 rounded-full overflow-hidden">
-          <div
-            className="h-full bg-teal-500 transition-all duration-300"
-            style={{ width: `${Math.round(tableProgress)}%` }}
-          />
-        </div>
-      )}
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
         <div className="xl:col-span-2 space-y-4">
@@ -510,9 +502,14 @@ export default function SummaryDashboardPage() {
                 </div>
               </CardContent>
             </Card>
+          ) : loadingTable ? (
+            <div className="flex flex-col items-center justify-center gap-3 py-12 text-slate-400 text-sm">
+              <Spinner className="size-6 text-teal-600" />
+              <span>Memuat data summary...</span>
+            </div>
           ) : (
             <div className="flex items-center justify-center py-12 text-slate-400 text-sm">
-              {loadingTable ? 'Memuat data summary...' : 'Belum ada data summary yang bisa ditampilkan'}
+              Belum ada data summary yang bisa ditampilkan
             </div>
           )}
         </div>
@@ -529,9 +526,14 @@ export default function SummaryDashboardPage() {
                 <div className="h-[280px]">
                   {clinicChartData && clinicChartData.labels.length > 0 ? (
                     <Bar data={clinicChartData} options={horizontalBarOptions('Capaian SE per Klinik')} />
+                  ) : loadingChart ? (
+                    <div className="flex flex-col items-center justify-center h-full gap-3 text-slate-400 text-sm">
+                      <Spinner className="size-6 text-teal-600" />
+                      <span>Memuat grafik...</span>
+                    </div>
                   ) : (
                     <div className="flex items-center justify-center h-full text-slate-400 text-sm">
-                      {loadingChart ? 'Memuat grafik...' : 'Tidak ada data grafik'}
+                      Tidak ada data grafik
                     </div>
                   )}
                 </div>
@@ -584,9 +586,14 @@ export default function SummaryDashboardPage() {
                         </tr>
                       </tfoot>
                     </table>
+                  ) : loadingChart ? (
+                    <div className="flex flex-col items-center justify-center gap-3 py-6 text-slate-400 text-xs">
+                      <Spinner className="size-5 text-teal-600" />
+                      <span>Memuat ringkasan grafik...</span>
+                    </div>
                   ) : (
                     <div className="flex items-center justify-center py-6 text-slate-400 text-xs">
-                      {loadingChart ? 'Memuat ringkasan grafik...' : 'Belum ada data grafik yang bisa ditampilkan'}
+                      Belum ada data grafik yang bisa ditampilkan
                     </div>
                   )}
                 </div>
