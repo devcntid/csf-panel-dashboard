@@ -110,6 +110,7 @@ export default function DashboardLayout({
       : [
           { href: '/dashboard/yayasan', label: 'Dashboard Lembaga', icon: Building2 },
           { href: '/dashboard', label: 'Dashboard Klinik', icon: LayoutDashboard },
+          { href: '/dashboard/summary-dashboard', label: 'Summary Dashboard', icon: LayoutDashboard },
           { href: '/dashboard/transaksi', label: 'Data Transaksi', icon: ClipboardList },
           { href: '/dashboard/pasien', label: 'Data Pasien', icon: Users },
           { href: '/dashboard/konfigurasi', label: 'Konfigurasi', icon: Settings },

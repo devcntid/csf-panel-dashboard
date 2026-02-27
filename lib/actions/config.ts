@@ -82,8 +82,17 @@ export const getAllClinics = cache(async () => {
 export const getSources = cache(async () => {
   try {
     const sources = await sql`
-      SELECT id, name FROM sources
-      ORDER BY name
+      SELECT 
+        id,
+        name,
+        slug,
+        category,
+        mode,
+        coa_debet,
+        coa_kredit,
+        summary_order
+      FROM sources
+      ORDER BY COALESCE(summary_order, 9999), name
     `
     return Array.isArray(sources) ? sources : []
   } catch (error) {

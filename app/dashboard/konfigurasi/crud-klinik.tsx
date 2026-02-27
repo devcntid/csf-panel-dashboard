@@ -48,6 +48,11 @@ export function CRUDKlinik({
     coa_qris: '',
     id_rekening: '',
     is_active: true,
+    summary_alias: '',
+    summary_order: '',
+    include_in_se_summary: true,
+    se_receipt_coa_debet: '',
+    se_receipt_coa_kredit: '',
   })
 
   const loadClinics = async () => {
@@ -70,9 +75,26 @@ export function CRUDKlinik({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    const payload = {
+      name: formData.name,
+      location: formData.location || undefined,
+      login_url: formData.login_url || undefined,
+      username: formData.username,
+      password_encrypted: formData.password_encrypted,
+      kode_coa: formData.kode_coa || undefined,
+      id_kantor_zains: formData.id_kantor_zains || undefined,
+      coa_qris: formData.coa_qris || undefined,
+      id_rekening: formData.id_rekening || undefined,
+      is_active: formData.is_active,
+      summary_alias: formData.summary_alias || null,
+      summary_order: formData.summary_order ? Number(formData.summary_order) : null,
+      include_in_se_summary: formData.include_in_se_summary,
+      se_receipt_coa_debet: formData.se_receipt_coa_debet || null,
+      se_receipt_coa_kredit: formData.se_receipt_coa_kredit || null,
+    }
     const result = editingId
-      ? await updateClinic(editingId, formData)
-      : await createClinic(formData)
+      ? await updateClinic(editingId, payload)
+      : await createClinic(payload)
     
     if (result.success) {
       toast.success(editingId ? 'Klinik berhasil diupdate' : 'Klinik berhasil ditambahkan')
@@ -89,6 +111,11 @@ export function CRUDKlinik({
         coa_qris: '',
         id_rekening: '',
         is_active: true,
+        summary_alias: '',
+        summary_order: '',
+        include_in_se_summary: true,
+        se_receipt_coa_debet: '',
+        se_receipt_coa_kredit: '',
       })
       await loadClinics()
       onRefresh()
@@ -110,6 +137,11 @@ export function CRUDKlinik({
       coa_qris: clinic.coa_qris || '',
       id_rekening: clinic.id_rekening || '',
       is_active: clinic.is_active ?? true,
+      summary_alias: clinic.summary_alias || '',
+      summary_order: clinic.summary_order != null ? String(clinic.summary_order) : '',
+      include_in_se_summary: clinic.include_in_se_summary ?? true,
+      se_receipt_coa_debet: clinic.se_receipt_coa_debet || '',
+      se_receipt_coa_kredit: clinic.se_receipt_coa_kredit || '',
     })
     setIsOpen(true)
   }
@@ -236,6 +268,56 @@ export function CRUDKlinik({
                     placeholder="Contoh: 10109003000"
                   />
                 </div>
+                <div className="space-y-2">
+                  <Label>Alias Summary (Nama singkat)</Label>
+                  <Input
+                    value={formData.summary_alias}
+                    onChange={(e) => setFormData({ ...formData, summary_alias: e.target.value })}
+                    placeholder="Contoh: JAKTIM"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Urutan Summary SE</Label>
+                  <Input
+                    type="number"
+                    value={formData.summary_order}
+                    onChange={(e) => setFormData({ ...formData, summary_order: e.target.value })}
+                    placeholder="Angka kecil tampil lebih atas"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Ikut Summary SE</Label>
+                  <Select
+                    value={formData.include_in_se_summary ? 'yes' : 'no'}
+                    onValueChange={(v) =>
+                      setFormData({ ...formData, include_in_se_summary: v === 'yes' })
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Pilih" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="yes">Ya</SelectItem>
+                      <SelectItem value="no">Tidak</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2 md:col-span-2">
+                  <Label>SE Receipt COA Debet (per klinik, pisahkan dengan koma)</Label>
+                  <Input
+                    value={formData.se_receipt_coa_debet}
+                    onChange={(e) => setFormData({ ...formData, se_receipt_coa_debet: e.target.value })}
+                    placeholder="Contoh: 101.01.002.013,101.02.003.000"
+                  />
+                </div>
+                <div className="space-y-2 md:col-span-2">
+                  <Label>SE Receipt COA Kredit (per klinik, pisahkan dengan koma)</Label>
+                  <Input
+                    value={formData.se_receipt_coa_kredit}
+                    onChange={(e) => setFormData({ ...formData, se_receipt_coa_kredit: e.target.value })}
+                    placeholder="Contoh: 401.04.002.020,401.04.002.021,..."
+                  />
+                </div>
               </div>
               <div className="flex gap-2">
                 <Button type="submit" className="bg-teal-600 hover:bg-teal-700">
@@ -273,7 +355,16 @@ export function CRUDKlinik({
                       {clinic.kode_coa && (
                         <Badge variant="outline">{clinic.kode_coa}</Badge>
                       )}
+                      {clinic.summary_alias && (
+                        <Badge variant="outline">Alias: {clinic.summary_alias}</Badge>
+                      )}
                     </div>
+                    {clinic.se_receipt_coa_debet && (
+                      <p className="mt-2 text-xs text-slate-500">
+                        SE Debet: {String(clinic.se_receipt_coa_debet).slice(0, 60)}
+                        {String(clinic.se_receipt_coa_debet).length > 60 ? '…' : ''}
+                      </p>
+                    )}
                   </div>
                   <div className="flex gap-2">
                     <Button size="sm" variant="outline" onClick={() => handleEdit(clinic)}>
@@ -307,6 +398,9 @@ export function CRUDKlinik({
                     <th className="text-left py-3 px-4 text-xs font-semibold text-slate-600">ID Kantor Zains</th>
                     <th className="text-left py-3 px-4 text-xs font-semibold text-slate-600">COA QRIS</th>
                     <th className="text-left py-3 px-4 text-xs font-semibold text-slate-600">ID Rekening</th>
+                    <th className="text-left py-3 px-4 text-xs font-semibold text-slate-600">Alias Summary</th>
+                    <th className="text-center py-3 px-4 text-xs font-semibold text-slate-600">Order SE</th>
+                    <th className="text-center py-3 px-4 text-xs font-semibold text-slate-600">Ikut SE</th>
                     <th className="text-center py-3 px-4 text-xs font-semibold text-slate-600">Status</th>
                     <th className="text-center py-3 px-4 text-xs font-semibold text-slate-600">Aksi</th>
                   </tr>
@@ -314,7 +408,7 @@ export function CRUDKlinik({
                 <tbody>
                   {clinics.length === 0 && !loading ? (
                     <tr>
-                      <td colSpan={11} className="text-center py-8 text-slate-500">Tidak ada data</td>
+                      <td colSpan={14} className="text-center py-8 text-slate-500">Tidak ada data</td>
                     </tr>
                   ) : (
                     clinics.map((clinic, index) => {
@@ -323,31 +417,38 @@ export function CRUDKlinik({
                         <tr key={clinic.id} className="border-b border-slate-100 hover:bg-slate-50 transition-colors">
                           <td className="py-3 px-4 text-sm text-center text-slate-500">{rowNumber}</td>
                           <td className="py-3 px-4 text-sm font-medium text-slate-800">{clinic.name}</td>
-                        <td className="py-3 px-4 text-sm text-slate-600">{clinic.location || '-'}</td>
-                        <td className="py-3 px-4 text-sm text-slate-600">{clinic.login_url || '-'}</td>
-                        <td className="py-3 px-4 text-sm text-slate-600">{clinic.username || '-'}</td>
-                        <td className="py-3 px-4 text-sm text-slate-600">{clinic.kode_coa || '-'}</td>
-                        <td className="py-3 px-4 text-sm text-slate-600">{clinic.id_kantor_zains || '-'}</td>
-                        <td className="py-3 px-4 text-sm text-slate-600">{clinic.coa_qris || '-'}</td>
-                        <td className="py-3 px-4 text-sm text-slate-600">{clinic.id_rekening || '-'}</td>
-                        <td className="py-3 px-4 text-center">
-                          <Badge className={clinic.is_active ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}>
-                            {clinic.is_active ? 'Aktif' : 'Tidak Aktif'}
-                          </Badge>
-                        </td>
-                        <td className="py-3 px-4 text-center">
-                          <div className="flex gap-2 justify-center">
-                            <Button size="sm" variant="outline" onClick={() => handleEdit(clinic)}>
-                              <Edit className="w-4 h-4 mr-1" />
-                              Edit
-                            </Button>
-                            <Button size="sm" variant="destructive" onClick={() => handleDelete(clinic.id)}>
-                              <Trash2 className="w-4 h-4 mr-1" />
-                              Hapus
-                            </Button>
-                          </div>
-                        </td>
-                      </tr>
+                          <td className="py-3 px-4 text-sm text-slate-600">{clinic.location || '-'}</td>
+                          <td className="py-3 px-4 text-sm text-slate-600">{clinic.login_url || '-'}</td>
+                          <td className="py-3 px-4 text-sm text-slate-600">{clinic.username || '-'}</td>
+                          <td className="py-3 px-4 text-sm text-slate-600">{clinic.kode_coa || '-'}</td>
+                          <td className="py-3 px-4 text-sm text-slate-600">{clinic.id_kantor_zains || '-'}</td>
+                          <td className="py-3 px-4 text-sm text-slate-600">{clinic.coa_qris || '-'}</td>
+                          <td className="py-3 px-4 text-sm text-slate-600">{clinic.id_rekening || '-'}</td>
+                          <td className="py-3 px-4 text-sm text-slate-600">{clinic.summary_alias || '-'}</td>
+                          <td className="py-3 px-4 text-sm text-center text-slate-600">
+                            {clinic.summary_order ?? '-'}
+                          </td>
+                          <td className="py-3 px-4 text-sm text-center text-slate-600">
+                            {clinic.include_in_se_summary === false ? 'Tidak' : 'Ya'}
+                          </td>
+                          <td className="py-3 px-4 text-center">
+                            <Badge className={clinic.is_active ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}>
+                              {clinic.is_active ? 'Aktif' : 'Tidak Aktif'}
+                            </Badge>
+                          </td>
+                          <td className="py-3 px-4 text-center">
+                            <div className="flex gap-2 justify-center">
+                              <Button size="sm" variant="outline" onClick={() => handleEdit(clinic)}>
+                                <Edit className="w-4 h-4 mr-1" />
+                                Edit
+                              </Button>
+                              <Button size="sm" variant="destructive" onClick={() => handleDelete(clinic.id)}>
+                                <Trash2 className="w-4 h-4 mr-1" />
+                                Hapus
+                              </Button>
+                            </div>
+                          </td>
+                        </tr>
                       )
                     })
                   )}
