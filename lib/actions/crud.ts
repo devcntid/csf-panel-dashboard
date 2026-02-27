@@ -15,11 +15,46 @@ export async function createClinic(data: {
   id_kantor_zains?: string
   coa_qris?: string
   id_rekening?: string
+  summary_alias?: string
+  summary_order?: number
+  include_in_se_summary?: boolean
+  se_receipt_coa_debet?: string
+  se_receipt_coa_kredit?: string
 }) {
   try {
     const result = await sql`
-      INSERT INTO clinics (name, location, login_url, username, password_encrypted, kode_coa, id_kantor_zains, coa_qris, id_rekening)
-      VALUES (${data.name}, ${data.location || null}, ${data.login_url || 'https://csf.eclinic.id/login'}, ${data.username}, ${data.password_encrypted}, ${data.kode_coa || null}, ${data.id_kantor_zains || null}, ${data.coa_qris || null}, ${data.id_rekening || null})
+      INSERT INTO clinics (
+        name, 
+        location, 
+        login_url, 
+        username, 
+        password_encrypted, 
+        kode_coa, 
+        id_kantor_zains, 
+        coa_qris, 
+        id_rekening,
+        summary_alias,
+        summary_order,
+        include_in_se_summary,
+        se_receipt_coa_debet,
+        se_receipt_coa_kredit
+      )
+      VALUES (
+        ${data.name},
+        ${data.location || null},
+        ${data.login_url || 'https://csf.eclinic.id/login'},
+        ${data.username},
+        ${data.password_encrypted},
+        ${data.kode_coa || null},
+        ${data.id_kantor_zains || null},
+        ${data.coa_qris || null},
+        ${data.id_rekening || null},
+        ${data.summary_alias || null},
+        ${data.summary_order ?? null},
+        ${data.include_in_se_summary ?? true},
+        ${data.se_receipt_coa_debet || null},
+        ${data.se_receipt_coa_kredit || null}
+      )
       RETURNING *
     `
     const clinic = Array.isArray(result) ? result[0] : result
@@ -42,6 +77,11 @@ export async function updateClinic(id: number, data: {
   coa_qris?: string
   id_rekening?: string
   is_active?: boolean
+  summary_alias?: string
+  summary_order?: number | null
+  include_in_se_summary?: boolean
+  se_receipt_coa_debet?: string | null
+  se_receipt_coa_kredit?: string | null
 }) {
   try {
     if (data.name !== undefined) {
@@ -73,6 +113,21 @@ export async function updateClinic(id: number, data: {
     }
     if (data.is_active !== undefined) {
       await sql`UPDATE clinics SET is_active = ${data.is_active}, updated_at = NOW() WHERE id = ${id}`
+    }
+    if (data.summary_alias !== undefined) {
+      await sql`UPDATE clinics SET summary_alias = ${data.summary_alias}, updated_at = NOW() WHERE id = ${id}`
+    }
+    if (data.summary_order !== undefined) {
+      await sql`UPDATE clinics SET summary_order = ${data.summary_order}, updated_at = NOW() WHERE id = ${id}`
+    }
+    if (data.include_in_se_summary !== undefined) {
+      await sql`UPDATE clinics SET include_in_se_summary = ${data.include_in_se_summary}, updated_at = NOW() WHERE id = ${id}`
+    }
+    if (data.se_receipt_coa_debet !== undefined) {
+      await sql`UPDATE clinics SET se_receipt_coa_debet = ${data.se_receipt_coa_debet}, updated_at = NOW() WHERE id = ${id}`
+    }
+    if (data.se_receipt_coa_kredit !== undefined) {
+      await sql`UPDATE clinics SET se_receipt_coa_kredit = ${data.se_receipt_coa_kredit}, updated_at = NOW() WHERE id = ${id}`
     }
     
     revalidatePath('/dashboard/konfigurasi')
@@ -1276,11 +1331,27 @@ export async function deleteInsuranceMapping(id: number) {
 
 // ============ CRUD SOURCES ============
 
-export async function createSource(data: { name: string }) {
+export async function createSource(data: {
+  name: string
+  slug?: string | null
+  category?: string | null
+  mode?: string | null
+  coa_debet?: string | null
+  coa_kredit?: string | null
+  summary_order?: number | null
+}) {
   try {
     const result = await sql`
-      INSERT INTO sources (name)
-      VALUES (${data.name})
+      INSERT INTO sources (name, slug, category, mode, coa_debet, coa_kredit, summary_order)
+      VALUES (
+        ${data.name},
+        ${data.slug || null},
+        ${data.category || null},
+        ${data.mode || null},
+        ${data.coa_debet || null},
+        ${data.coa_kredit || null},
+        ${data.summary_order ?? null}
+      )
       ON CONFLICT (name) DO NOTHING
       RETURNING *
     `
@@ -1293,10 +1364,36 @@ export async function createSource(data: { name: string }) {
   }
 }
 
-export async function updateSource(id: number, data: { name?: string }) {
+export async function updateSource(id: number, data: {
+  name?: string
+  slug?: string | null
+  category?: string | null
+  mode?: string | null
+  coa_debet?: string | null
+  coa_kredit?: string | null
+  summary_order?: number | null
+}) {
   try {
     if (data.name !== undefined) {
       await sql`UPDATE sources SET name = ${data.name}, created_at = created_at WHERE id = ${id}`
+    }
+    if (data.slug !== undefined) {
+      await sql`UPDATE sources SET slug = ${data.slug}, created_at = created_at WHERE id = ${id}`
+    }
+    if (data.category !== undefined) {
+      await sql`UPDATE sources SET category = ${data.category}, created_at = created_at WHERE id = ${id}`
+    }
+    if (data.mode !== undefined) {
+      await sql`UPDATE sources SET mode = ${data.mode}, created_at = created_at WHERE id = ${id}`
+    }
+    if (data.coa_debet !== undefined) {
+      await sql`UPDATE sources SET coa_debet = ${data.coa_debet}, created_at = created_at WHERE id = ${id}`
+    }
+    if (data.coa_kredit !== undefined) {
+      await sql`UPDATE sources SET coa_kredit = ${data.coa_kredit}, created_at = created_at WHERE id = ${id}`
+    }
+    if (data.summary_order !== undefined) {
+      await sql`UPDATE sources SET summary_order = ${data.summary_order}, created_at = created_at WHERE id = ${id}`
     }
     revalidatePath('/dashboard/konfigurasi')
     return { success: true }

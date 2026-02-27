@@ -19,7 +19,15 @@ export function CRUDSource({
   const [sources, setSources] = useState<any[]>(initialData || [])
   const [isOpen, setIsOpen] = useState(false)
   const [editingId, setEditingId] = useState<number | null>(null)
-  const [formData, setFormData] = useState({ name: '' })
+  const [formData, setFormData] = useState({
+    name: '',
+    slug: '',
+    category: '',
+    mode: '',
+    coaDebet: '',
+    coaKredit: '',
+    summaryOrder: '',
+  })
 
   useEffect(() => {
     if (initialData) {
@@ -29,7 +37,15 @@ export function CRUDSource({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    const payload = { name: formData.name.trim() }
+    const payload: any = {
+      name: formData.name.trim(),
+      slug: formData.slug.trim() || null,
+      category: formData.category.trim() || null,
+      mode: formData.mode.trim() || null,
+      coa_debet: formData.coaDebet.trim() || null,
+      coa_kredit: formData.coaKredit.trim() || null,
+      summary_order: formData.summaryOrder ? Number(formData.summaryOrder) : null,
+    }
     if (!payload.name) {
       toast.error('Nama source wajib diisi')
       return
@@ -43,7 +59,15 @@ export function CRUDSource({
       toast.success(editingId ? 'Source berhasil diupdate' : 'Source berhasil ditambahkan')
       setIsOpen(false)
       setEditingId(null)
-      setFormData({ name: '' })
+      setFormData({
+        name: '',
+        slug: '',
+        category: '',
+        mode: '',
+        coaDebet: '',
+        coaKredit: '',
+        summaryOrder: '',
+      })
       onRefresh()
     } else {
       toast.error((result as any).error || 'Terjadi kesalahan')
@@ -52,7 +76,15 @@ export function CRUDSource({
 
   const handleEdit = (source: any) => {
     setEditingId(source.id)
-    setFormData({ name: source.name || '' })
+    setFormData({
+      name: source.name || '',
+      slug: source.slug || '',
+      category: source.category || '',
+      mode: source.mode || '',
+      coaDebet: source.coa_debet || '',
+      coaKredit: source.coa_kredit || '',
+      summaryOrder: source.summary_order != null ? String(source.summary_order) : '',
+    })
     setIsOpen(true)
   }
 
@@ -88,7 +120,15 @@ export function CRUDSource({
                 onClick={() => {
                   setIsOpen(false)
                   setEditingId(null)
-                  setFormData({ name: '' })
+                  setFormData({
+                    name: '',
+                    slug: '',
+                    category: '',
+                    mode: '',
+                    coaDebet: '',
+                    coaKredit: '',
+                    summaryOrder: '',
+                  })
                 }}
               >
                 <X className="w-4 h-4" />
@@ -97,14 +137,65 @@ export function CRUDSource({
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="space-y-2">
-                <Label>Nama Source *</Label>
-                <Input
-                  required
-                  value={formData.name}
-                  onChange={(e) => setFormData({ name: e.target.value })}
-                  placeholder="Contoh: SE Klinik"
-                />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Nama Source *</Label>
+                  <Input
+                    required
+                    value={formData.name}
+                    onChange={(e) => setFormData((prev) => ({ ...prev, name: e.target.value }))}
+                    placeholder="Contoh: SE Klinik"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Slug (unik, untuk kode)</Label>
+                  <Input
+                    value={formData.slug}
+                    onChange={(e) => setFormData((prev) => ({ ...prev, slug: e.target.value }))}
+                    placeholder="Contoh: se_klinik"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Kategori</Label>
+                  <Input
+                    value={formData.category}
+                    onChange={(e) => setFormData((prev) => ({ ...prev, category: e.target.value }))}
+                    placeholder="Contoh: SE / FUNDRAISING"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Mode</Label>
+                  <Input
+                    value={formData.mode}
+                    onChange={(e) => setFormData((prev) => ({ ...prev, mode: e.target.value }))}
+                    placeholder="per_clinic / single"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>COA Debet (pisahkan dengan koma)</Label>
+                  <Input
+                    value={formData.coaDebet}
+                    onChange={(e) => setFormData((prev) => ({ ...prev, coaDebet: e.target.value }))}
+                    placeholder="Contoh: 101.01.002.013,101.02.003.000"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>COA Kredit (pisahkan dengan koma)</Label>
+                  <Input
+                    value={formData.coaKredit}
+                    onChange={(e) => setFormData((prev) => ({ ...prev, coaKredit: e.target.value }))}
+                    placeholder="Contoh: 401.04.002.020,401.04.002.021,..."
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Urutan Summary</Label>
+                  <Input
+                    type="number"
+                    value={formData.summaryOrder}
+                    onChange={(e) => setFormData((prev) => ({ ...prev, summaryOrder: e.target.value }))}
+                    placeholder="Semakin kecil semakin atas"
+                  />
+                </div>
               </div>
               <div className="flex gap-2">
                 <Button type="submit" className="bg-teal-600 hover:bg-teal-700">
@@ -135,6 +226,12 @@ export function CRUDSource({
                 <tr>
                   <th className="text-center py-3 px-4 text-xs font-semibold text-slate-600 w-16">No</th>
                   <th className="text-left py-3 px-4 text-xs font-semibold text-slate-600">Nama Source</th>
+                  <th className="text-left py-3 px-4 text-xs font-semibold text-slate-600">Slug</th>
+                  <th className="text-left py-3 px-4 text-xs font-semibold text-slate-600">Kategori</th>
+                  <th className="text-left py-3 px-4 text-xs font-semibold text-slate-600">Mode</th>
+                  <th className="text-left py-3 px-4 text-xs font-semibold text-slate-600">COA Debet</th>
+                  <th className="text-left py-3 px-4 text-xs font-semibold text-slate-600">COA Kredit</th>
+                  <th className="text-center py-3 px-4 text-xs font-semibold text-slate-600">Order</th>
                   <th className="text-center py-3 px-4 text-xs font-semibold text-slate-600">Aksi</th>
                 </tr>
               </thead>
@@ -147,12 +244,24 @@ export function CRUDSource({
                   </tr>
                 ) : (
                   sources.map((source, index) => (
-                    <tr
+                  <tr
                       key={source.id}
                       className="border-b border-slate-100 hover:bg-slate-50 transition-colors"
                     >
                       <td className="py-3 px-4 text-sm text-center text-slate-500">{index + 1}</td>
                       <td className="py-3 px-4 text-sm font-medium text-slate-800">{source.name}</td>
+                      <td className="py-3 px-4 text-xs text-slate-600">{source.slug || '-'}</td>
+                      <td className="py-3 px-4 text-xs text-slate-600">{source.category || '-'}</td>
+                      <td className="py-3 px-4 text-xs text-slate-600">{source.mode || '-'}</td>
+                      <td className="py-3 px-4 text-xs text-slate-600 max-w-[220px] truncate" title={source.coa_debet || ''}>
+                        {source.coa_debet || '-'}
+                      </td>
+                      <td className="py-3 px-4 text-xs text-slate-600 max-w-[220px] truncate" title={source.coa_kredit || ''}>
+                        {source.coa_kredit || '-'}
+                      </td>
+                      <td className="py-3 px-4 text-xs text-center text-slate-600">
+                        {source.summary_order ?? '-'}
+                      </td>
                       <td className="py-3 px-4 text-center">
                         <div className="flex gap-2 justify-center">
                           <Button size="sm" variant="outline" onClick={() => handleEdit(source)}>
