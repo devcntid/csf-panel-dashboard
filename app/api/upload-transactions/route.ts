@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { after } from 'next/server'
 import { sql } from '@/lib/db'
 import * as XLSX from 'xlsx'
 import { getZainsTransactionSyncEnabled } from '@/lib/settings'
@@ -167,6 +168,7 @@ export async function POST(request: NextRequest) {
     let zainsInsertedCount = 0
     const errors: string[] = []
     const results: { row: number; status: 'success' | 'skipped' | 'error'; message?: string }[] = []
+    const syncWorkflows: { patientId: number; transactionId: number }[] = []
 
     for (let i = 0; i < data.length; i++) {
       const rowIndex = i + 2 // Excel baris (1-based + header)
@@ -559,9 +561,9 @@ export async function POST(request: NextRequest) {
         }
 
         // Sync patient ke Zains hanya jika toggle sync aktif, ada record di transactions_to_zains,
-        // dan patient ini belum memiliki id_donatur_zains dari Zains.
+        // dan patient ini belum memiliki id_donatur_zains dari Zains. Dijadwalkan via after().
         if (hasZainsTransaction && patientId && !idDonatur && todoZains) {
-          syncPatientToZainsWorkflow(patientId, transactionId)
+          syncWorkflows.push({ patientId, transactionId })
         }
       } catch (error: any) {
         const msg = error.message || 'Error tidak diketahui'
@@ -570,6 +572,19 @@ export async function POST(request: NextRequest) {
         results.push({ row: rowIndex, status: 'error', message: msg })
         skippedCount++
       }
+    }
+
+    if (syncWorkflows.length > 0) {
+      const workflows = [...syncWorkflows]
+      after(async () => {
+        for (const { patientId, transactionId } of workflows) {
+          try {
+            await syncPatientToZainsWorkflow(patientId, transactionId)
+          } catch (err: any) {
+            console.error(`[after] Sync Zains gagal (patientId=${patientId}, transactionId=${transactionId}):`, err?.message ?? err)
+          }
+        }
+      })
     }
 
     return NextResponse.json({

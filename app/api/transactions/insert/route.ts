@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { sql } from '@/lib/db'
 import { getZainsTransactionSyncEnabled } from '@/lib/settings'
-import { syncPatientToZainsWorkflow } from '@/lib/services/zains-sync'
+import {
+  syncPatientToZains,
+  syncTransactionsToZainsByTransactionId,
+} from '@/lib/services/zains-sync'
 
 // Helper function untuk parse angka dengan koma (format Indonesia)
 function parseIndonesianNumber(value: string | number | undefined): number {
@@ -78,6 +81,24 @@ export async function POST(request: NextRequest) {
     let skippedCount = 0
     let zainsInsertedCount = 0
     const errors: any[] = []
+
+    // Helper: log langkah proses ke system_logs (untuk capture alur sync)
+    const logStep = async (
+      clinicId: number,
+      processType: string,
+      status: string,
+      message: string,
+      payload: Record<string, unknown> = {},
+    ) => {
+      try {
+        await sql`
+          INSERT INTO system_logs (clinic_id, process_type, status, message, payload)
+          VALUES (${clinicId}, ${processType}, ${status}, ${message}, ${JSON.stringify(payload)}::jsonb)
+        `
+      } catch (e: any) {
+        console.error('Error log step ke system_logs:', e?.message)
+      }
+    }
 
     // Process setiap transaksi
     for (let i = 0; i < transaction_data.length; i++) {
@@ -425,10 +446,73 @@ export async function POST(request: NextRequest) {
           `
         }
 
-        // Sync patient ke Zains hanya jika toggle sync aktif, ada record di transactions_to_zains,
-        // dan patient ini belum memiliki id_donatur_zains dari Zains.
-        if (hasZainsTransaction && patientId && !idDonatur && todoZains) {
-          syncPatientToZainsWorkflow(patientId, transactionId)
+        // --- Alur sinkron: 2) Sync patient ke Zains, 3) Sync transaksi ke Zains, 4) Status sudah di-update di dalam sync ---
+        if (hasZainsTransaction && patientId && todoZains) {
+          try {
+            // 2) Hit patient ke Zains (jika belum punya id_donatur_zains)
+            await logStep(
+              clinic_id,
+              'patient_zains_sync',
+              'processing',
+              'Memulai sync patient ke Zains',
+              { patientId, transactionId },
+            )
+            if (!idDonatur) {
+              const [patientRow] = await sql`
+                SELECT id, clinic_id, erm_no, full_name, erm_no_for_zains, nik
+                FROM patients WHERE id = ${patientId} LIMIT 1
+              `
+              const patient = patientRow as any
+              if (patient) {
+                const patientResult = await syncPatientToZains(patient)
+                if (!patientResult.success) {
+                  await logStep(
+                    clinic_id,
+                    'patient_zains_sync',
+                    'error',
+                    patientResult.error || 'Sync patient gagal',
+                    { patientId, transactionId, error: patientResult.error },
+                  )
+                }
+              }
+            } else {
+              await logStep(
+                clinic_id,
+                'patient_zains_sync',
+                'success',
+                'Patient sudah terdaftar di Zains, lanjut sync transaksi',
+                { patientId, transactionId },
+              )
+            }
+
+            // 3) Hit transactions_to_zains ke Zains (masing-masing record; di dalamnya sudah log + update status)
+            await logStep(
+              clinic_id,
+              'transaction_zains_sync',
+              'processing',
+              'Memulai sync transaksi ke Zains',
+              { transactionId },
+            )
+            const trxResult = await syncTransactionsToZainsByTransactionId(transactionId)
+
+            // 4) Konfirmasi: status sudah di-update di syncSingleTransactionToZains
+            await logStep(
+              clinic_id,
+              'transaction_zains_sync',
+              'success',
+              `Sync selesai, status transactions_to_zains dan transactions di-update (${trxResult.success}/${trxResult.total} berhasil)`,
+              { transactionId, success: trxResult.success, total: trxResult.total, failed: trxResult.failed },
+            )
+          } catch (syncErr: any) {
+            console.error('Error sync Zains (patient/transaksi):', syncErr?.message)
+            await logStep(
+              clinic_id,
+              'transaction_zains_sync',
+              'error',
+              syncErr?.message || 'Error saat sync ke Zains',
+              { patientId, transactionId, error: syncErr?.message },
+            )
+          }
         }
       } catch (error: any) {
         console.error('❌ Error processing transaction:', error.message, row)
