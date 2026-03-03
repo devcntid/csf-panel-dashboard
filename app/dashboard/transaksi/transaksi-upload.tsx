@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { X, Upload, FileSpreadsheet, Download, CheckCircle2, XCircle, AlertCircle } from 'lucide-react'
 import { toast } from 'sonner'
+import * as XLSX from 'xlsx'
 
 export function TransaksiUpload({ 
   clinics, 
@@ -20,6 +21,7 @@ export function TransaksiUpload({
   const [file, setFile] = useState<File | null>(null)
   const [uploading, setUploading] = useState(false)
   const [uploadResult, setUploadResult] = useState<any>(null)
+  const [progress, setProgress] = useState<{ current: number; total: number; percentage: number } | null>(null)
   const resultSectionRef = useRef<HTMLDivElement>(null)
 
   // Setelah hasil upload ada, scroll ke bagian hasil agar tabel per baris terlihat
@@ -65,6 +67,7 @@ export function TransaksiUpload({
       }
       setFile(selectedFile)
       setUploadResult(null)
+      setProgress(null)
     }
   }
 
@@ -76,37 +79,106 @@ export function TransaksiUpload({
 
     setUploading(true)
     setUploadResult(null)
-    toast.loading('Memproses file... Proses bisa beberapa saat. Jangan tutup halaman.', { id: 'upload' })
+    setProgress(null)
+    toast.loading('Membaca file Excel di browser...', { id: 'upload' })
 
     try {
-      const formData = new FormData()
-      formData.append('file', file)
-
-      const response = await fetch('/api/upload-transactions', {
-        method: 'POST',
-        body: formData,
+      // 1. Baca isi Excel di Frontend menggunakan xlsx client-side (agar tidak melempar format buffer error ke backend)
+      const data = await new Promise<any[]>((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload = (e) => {
+          try {
+            const buffer = e.target?.result
+            if (!buffer) throw new Error('Cannot read file')
+            const workbook = XLSX.read(buffer, { type: 'array' })
+            const sheetName = workbook.SheetNames[0]
+            const worksheet = workbook.Sheets[sheetName]
+            const jsonData = XLSX.utils.sheet_to_json(worksheet, { raw: false })
+            resolve(jsonData)
+          } catch (err) {
+            reject(err)
+          }
+        }
+        reader.onerror = reject
+        reader.readAsArrayBuffer(file)
       })
 
-      const data = await response.json()
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Gagal mengupload file')
+      if (!data || data.length === 0) {
+        throw new Error('File Excel kosong atau tidak memiliki data')
       }
 
-      setUploadResult(data)
-      const successCount = data.results?.filter((r: any) => r.status === 'success').length ?? data.insertedCount
-      const failCount = (data.results?.filter((r: any) => r.status === 'error' || r.status === 'skipped').length) ?? data.skippedCount
+      const totalRows = data.length
+      toast.loading(`Memproses ${totalRows} baris data ke server...`, { id: 'upload' })
+      
+      setProgress({ current: 0, total: totalRows, percentage: 0 })
+
+      // 2. Pecah menjadi batch (misal: 50 baris per request agar menghindari timeout 15 detik Vercel)
+      const CHUNK_SIZE = 50
+      const totalChunks = Math.ceil(totalRows / CHUNK_SIZE)
+      
+      let totalInserted = 0
+      let totalZainsInserted = 0
+      let totalSkipped = 0
+      let allResults: any[] = []
+      let allErrors: string[] = []
+
+      for (let i = 0; i < totalChunks; i++) {
+        const start = i * CHUNK_SIZE
+        const end = Math.min(start + CHUNK_SIZE, totalRows)
+        const chunk = data.slice(start, end)
+        
+        // 3. Kirim ke API khusus batch upload
+        const response = await fetch('/api/upload-transactions-batch', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            data: chunk,
+            startIndex: start
+          })
+        })
+
+        const result = await response.json()
+        if (!response.ok) {
+          throw new Error(result.error || `Gagal memproses potongan batch ${i + 1}`)
+        }
+
+        totalInserted += result.insertedCount || 0
+        totalZainsInserted += result.zainsInsertedCount || 0
+        totalSkipped += result.skippedCount || 0
+        allResults = [...allResults, ...(result.results || [])]
+        allErrors = [...allErrors, ...(result.errors || [])]
+
+        // 4. Update Progress Bar state untuk real-time feedback
+        setProgress({
+          current: end,
+          total: totalRows,
+          percentage: Math.round((end / totalRows) * 100)
+        })
+      }
+
+      setUploadResult({
+        totalRows,
+        insertedCount: totalInserted,
+        zainsInsertedCount: totalZainsInserted,
+        skippedCount: totalSkipped,
+        results: allResults,
+        errors: allErrors
+      })
+      
       toast.success(
-        `Selesai: ${successCount} baris berhasil, ${failCount} baris gagal/dilewati. Lihat detail di bawah.`,
+        `Selesai: ${totalInserted} baris berhasil, ${totalSkipped} baris gagal/dilewati. Lihat detail di bawah.`,
         { id: 'upload' }
       )
 
-      if (data.insertedCount > 0 && onSuccess) {
+      if (totalInserted > 0 && onSuccess) {
         setTimeout(() => onSuccess(), 2000)
       }
+
     } catch (error: any) {
       console.error('Error uploading:', error)
-      toast.error(error.message || 'Gagal mengupload file', { id: 'upload' })
+      toast.error(error.message || 'Gagal mengupload file, silakan coba lagi.', { id: 'upload' })
     } finally {
       setUploading(false)
     }
@@ -151,13 +223,29 @@ export function TransaksiUpload({
               </div>
             </div>
 
+            {/* PROGRESS BAR: Menampilkan progres upload baris ke backend */}
+            {progress !== null && uploading && (
+              <div className="flex-shrink-0 bg-slate-50 border border-slate-200 p-4 rounded-lg">
+                <div className="flex justify-between text-sm mb-2">
+                  <span className="font-semibold text-teal-700">Mengunggah ke Database...</span>
+                  <span className="text-slate-600 font-medium">Baris {progress.current} dari {progress.total} ({progress.percentage}%)</span>
+                </div>
+                <div className="w-full bg-slate-200 rounded-full h-2.5 overflow-hidden">
+                  <div 
+                    className="bg-teal-600 h-2.5 rounded-full transition-all duration-300 ease-in-out" 
+                    style={{ width: `${progress.percentage}%` }}
+                  ></div>
+                </div>
+              </div>
+            )}
+
             {/* Daftar Klinik dengan Tombol Download Format */}
             <div className="flex-shrink-0">
               <Label className="text-sm font-semibold mb-2 block">
                 Download Format Upload per Klinik
               </Label>
               <div className="border rounded-lg overflow-hidden">
-                <div className="overflow-x-auto max-h-[200px] overflow-y-auto">
+                <div className="overflow-x-auto max-h-[160px] overflow-y-auto">
                   <table className="w-full text-sm">
                     <thead className="bg-slate-50 border-b sticky top-0">
                       <tr>
@@ -195,11 +283,10 @@ export function TransaksiUpload({
 
             {/* Tempat hasil upload: placeholder saat proses, isi setelah selesai */}
             <div ref={resultSectionRef} className="flex-1 min-h-[140px] flex flex-col">
-              {uploading && !uploadResult && (
+              {uploading && !uploadResult && !progress && (
                 <div className="bg-slate-100 border border-slate-200 rounded-lg p-6 flex flex-col items-center justify-center gap-2 text-slate-600">
                   <span className="animate-spin text-2xl">⏳</span>
-                  <p className="text-sm font-medium">Memproses baris...</p>
-                  <p className="text-xs">Hasil per baris (sukses/gagal) akan tampil di sini setelah selesai.</p>
+                  <p className="text-sm font-medium">Membaca file...</p>
                 </div>
               )}
               {uploadResult && (
@@ -279,12 +366,12 @@ export function TransaksiUpload({
               <Button
                 onClick={handleUpload}
                 disabled={!file || uploading}
-                className="bg-teal-600 hover:bg-teal-700"
+                className="bg-teal-600 hover:bg-teal-700 min-w-[120px]"
               >
                 {uploading ? (
                   <>
                     <span className="animate-spin mr-2">⏳</span>
-                    Mengupload...
+                    {progress ? `${progress.percentage}%` : 'Memproses'}
                   </>
                 ) : (
                   <>

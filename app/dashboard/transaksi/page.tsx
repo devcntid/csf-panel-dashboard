@@ -8,7 +8,7 @@ import { authOptions } from '@/lib/auth'
 export default async function TransaksiPage({
   searchParams,
 }: {
-  searchParams: Promise<{ search?: string; page?: string; perPage?: string; clinic?: string; poly?: string; insurance?: string; dateFrom?: string; dateTo?: string; zainsSync?: string }>
+  searchParams: Promise<{ search?: string; page?: string; perPage?: string; clinic?: string; poly?: string; insurance?: string; dateFrom?: string; dateTo?: string; zainsSync?: string; sort?: string }>
 }) {
   const params = await searchParams
 
@@ -41,6 +41,7 @@ export default async function TransaksiPage({
   const dateTo = params.dateTo || getTodayDate()
   const zainsSync = (params.zainsSync === 'synced' || params.zainsSync === 'pending') ? params.zainsSync : 'all'
   const zainsSynced: 'all' | 'synced' | 'pending' = zainsSync as 'all' | 'synced' | 'pending'
+  const sort = params.sort
 
   const isClinicManager = role === 'clinic_manager'
   const clinicId = isClinicManager
@@ -48,7 +49,7 @@ export default async function TransaksiPage({
     : requestedClinicId
   
   const [transactionsData, stats, clinics, polies, insuranceTypes] = await Promise.all([
-    getTransactions(search, clinicId, dateFrom, dateTo, page, perPage, polyId, insuranceTypeId, zainsSynced),
+    getTransactions(search, clinicId, dateFrom, dateTo, page, perPage, polyId, insuranceTypeId, zainsSynced, sort),
     getTransactionStats(search, clinicId, dateFrom, dateTo, polyId, insuranceTypeId, zainsSynced),
     getAllClinics(),
     getMasterPolies(),
@@ -74,6 +75,7 @@ export default async function TransaksiPage({
             insuranceTypes={insuranceTypes}
             role={role}
             clinicId={clinicId}
+            sortParam={sort}
           />
         </div>
       </div>

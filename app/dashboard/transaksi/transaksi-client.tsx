@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Eye, ExternalLink, Trash2 } from 'lucide-react'
+import { Eye, ExternalLink, Trash2, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react'
 import { toast } from 'sonner'
 import { Pagination } from '@/components/ui/pagination'
 import {
@@ -37,6 +37,7 @@ export function TransaksiClient({
   insuranceTypes,
   role,
   clinicId,
+  sortParam,
 }: {
   transactions: any[]
   stats: any
@@ -49,6 +50,7 @@ export function TransaksiClient({
   insuranceTypes: any[]
   role?: string
   clinicId?: number | null
+  sortParam?: string
 }) {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -73,6 +75,22 @@ export function TransaksiClient({
     startTransition(() => {
       const params = new URLSearchParams(searchParams.toString())
       params.set('perPage', String(limit))
+      params.set('page', '1')
+      router.push(`/dashboard/transaksi?${params.toString()}`)
+    })
+  }
+
+  const handleSortByTrxNo = () => {
+    startTransition(() => {
+      const params = new URLSearchParams(searchParams.toString())
+      const currentSort = params.get('sort')
+      
+      if (!currentSort || currentSort !== 'trx_no_asc') {
+        params.set('sort', 'trx_no_asc')
+      } else {
+        params.set('sort', 'trx_no_desc')
+      }
+      
       params.set('page', '1')
       router.push(`/dashboard/transaksi?${params.toString()}`)
     })
@@ -209,8 +227,18 @@ export function TransaksiClient({
 
       {/* Transactions Table */}
       <Card>
-        <CardHeader>
+        <CardHeader className="flex flex-row items-center justify-between border-b pb-4">
           <CardTitle>Daftar Transaksi</CardTitle>
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={handleSortByTrxNo} 
+            disabled={isPending}
+            className="flex items-center gap-2"
+          >
+            {sortParam === 'trx_no_asc' ? <ArrowUp className="w-4 h-4" /> : sortParam === 'trx_no_desc' ? <ArrowDown className="w-4 h-4" /> : <ArrowUpDown className="w-4 h-4" />}
+            Urutkan No. Transaksi
+          </Button>
         </CardHeader>
         <CardContent>
           <div className="overflow-x-auto">
