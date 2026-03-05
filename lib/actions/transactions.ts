@@ -457,13 +457,9 @@ export const getTransactionsLegacy = cache(
             limit,
           };
         }
-        const countResult = Array.isArray(countResultRaw)
-          ? countResultRaw[0]
-          : countResultRaw;
-
         return {
-          transactions: Array.isArray(transactions) ? transactions : [],
-          total: Number((countResult as any)?.total || 0),
+          transactions: [],
+          total: 0,
           page,
           limit,
         };
@@ -1361,12 +1357,9 @@ export const getTransactionsLegacy = cache(
               limit,
             };
           }
-          const countResult = Array.isArray(countResultRaw)
-            ? countResultRaw[0]
-            : countResultRaw;
           return {
-            transactions: Array.isArray(transactions) ? transactions : [],
-            total: Number((countResult as any)?.total || 0),
+            transactions: [],
+            total: 0,
             page,
             limit,
           };
@@ -1464,13 +1457,9 @@ export const getTransactionsLegacy = cache(
             limit,
           };
         }
-        const countResult = Array.isArray(countResultRaw)
-          ? countResultRaw[0]
-          : countResultRaw;
-
         return {
-          transactions: Array.isArray(transactions) ? transactions : [],
-          total: Number((countResult as any)?.total || 0),
+          transactions: [],
+          total: 0,
           page,
           limit,
         };
@@ -1602,9 +1591,9 @@ export const getTransactions = cache(
 
       let orderByClause = "ORDER BY t.id ASC";
       if (sort === "trx_no_asc") {
-        orderByClause = "ORDER BY NULLIF(regexp_replace(t.trx_no, '\\\\D', '', 'g'), '')::numeric ASC NULLS LAST, t.id ASC";
+        orderByClause = "ORDER BY NULLIF(regexp_replace(t.trx_no, '[^0-9]', '', 'g'), '')::numeric ASC NULLS LAST, t.id ASC";
       } else if (sort === "trx_no_desc") {
-        orderByClause = "ORDER BY NULLIF(regexp_replace(t.trx_no, '\\\\D', '', 'g'), '')::numeric DESC NULLS LAST, t.id DESC";
+        orderByClause = "ORDER BY NULLIF(regexp_replace(t.trx_no, '[^0-9]', '', 'g'), '')::numeric DESC NULLS LAST, t.id DESC";
       }
 
       const [transactions, countResultRaw] = await Promise.all([
