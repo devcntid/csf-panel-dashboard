@@ -16,14 +16,18 @@ interface PaginationProps {
   total: number
   onPageChange: (page: number) => void
   onLimitChange: (limit: number) => void
+  /** Jumlah item di halaman saat ini (opsional). Jika ada, dipakai untuk teks "X - Y dari Z". */
+  currentPageCount?: number
 }
 
-export function Pagination({ page, limit, total, onPageChange, onLimitChange }: PaginationProps) {
+export function Pagination({ page, limit, total, onPageChange, onLimitChange, currentPageCount }: PaginationProps) {
   // Ensure total is a number, default to 0 if undefined
   const safeTotal = total ?? 0
   const totalPages = Math.ceil(safeTotal / limit)
   const start = safeTotal === 0 ? 0 : (page - 1) * limit + 1
-  const end = Math.min(page * limit, safeTotal)
+  const end = currentPageCount != null
+    ? (page - 1) * limit + currentPageCount
+    : Math.min(page * limit, safeTotal)
 
   const getPageNumbers = () => {
     const pages: (number | string)[] = []
