@@ -16,6 +16,7 @@ async function fetchZainsMonthlyTotal(params: {
   year: number
   onlyCoaDebet: string[]
   onlyCoaKredit: string[]
+  idKantor?: string
 }): Promise<{ monthly: MonthlyItem[]; grandTotal: { sum: number; count: number } }> {
   const { url } = getZainsApiConfig()
   const apiKey = process.env.API_KEY_ZAINS
@@ -38,6 +39,10 @@ async function fetchZainsMonthlyTotal(params: {
 
   if (params.onlyCoaKredit.length > 0) {
     searchParams.set('only_coa_kredit', params.onlyCoaKredit.join(','))
+  }
+
+  if (params.idKantor && params.idKantor.trim()) {
+    searchParams.set('id_kantor', params.idKantor.trim())
   }
 
   const res = await fetch(`${url}/fins/totals?${searchParams.toString()}`, {
@@ -110,7 +115,7 @@ export async function GET(req: NextRequest) {
     const now = new Date()
     const year = yearParam ? Number(yearParam) || now.getFullYear() : now.getFullYear()
 
-    // Ambil data klinik
+    // Ambil data klinik (termasuk id_kantor_zains untuk filter API Zains)
     const clinicResult = await sql`
       SELECT 
         id,
@@ -118,7 +123,8 @@ export async function GET(req: NextRequest) {
         summary_alias,
         kode_coa,
         se_receipt_coa_debet,
-        se_receipt_coa_kredit
+        se_receipt_coa_kredit,
+        id_kantor_zains
       FROM clinics
       WHERE id = ${clinicId} AND is_active = true
       LIMIT 1
@@ -194,11 +200,18 @@ export async function GET(req: NextRequest) {
               .filter(Boolean)
           : []
 
+    const idKantorZains =
+      (clinicRow as any).id_kantor_zains != null &&
+      String((clinicRow as any).id_kantor_zains).trim() !== ''
+        ? String((clinicRow as any).id_kantor_zains).trim()
+        : undefined
+
     const { monthly, grandTotal } = await fetchZainsMonthlyTotal({
       type: 'receipt',
       year,
       onlyCoaDebet: clinicCoaDebet,
       onlyCoaKredit: clinicCoaKredit,
+      idKantor: idKantorZains,
     })
 
     return NextResponse.json(

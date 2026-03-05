@@ -1,6 +1,7 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
+import type { KeyboardEvent } from 'react'
 import { useRouter } from 'next/navigation'
 import { useSession } from 'next-auth/react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -134,36 +135,7 @@ export default function FinsJurnalPage() {
   const [searchTerm, setSearchTerm] = useState<string>('')
   const [exportingExcel, setExportingExcel] = useState<boolean>(false)
 
-  // Filter by search terms (client-side): cari di keterangan, coa, nama_coa, id_jurnal, program, sumber dana, dll.
-  const searchTerms = searchTerm
-    .trim()
-    .toLowerCase()
-    .split(/\s+/)
-    .filter(Boolean)
-  const filteredItems = useMemo(() => {
-    if (searchTerms.length === 0) return items
-    return items.filter((row) => {
-      const haystack = [
-        row.keterangan,
-        row.coa ?? row.coa_display,
-        row.nama_coa ?? row.nama_coa_display,
-        row.id_jurnal,
-        row.id_transaksi,
-        row.id_exre,
-        row.nama_program,
-        row.keterangan_sumber_dana,
-        row.note,
-        row.coa_buku,
-        row.nama_coa_buku,
-        row.nik_input,
-        row.nama_karyawan,
-      ]
-        .filter(Boolean)
-        .join(' ')
-        .toLowerCase()
-      return searchTerms.every((term) => haystack.includes(term))
-    })
-  }, [items, searchTerms])
+  // Pencarian by terms dikirim ke API Zains (server-side). Tabel menampilkan items dari response.
 
   // Proteksi: clinic_manager tidak boleh mengakses halaman ini
   useEffect(() => {
@@ -193,6 +165,7 @@ export default function FinsJurnalPage() {
       params.set('tgl_akhir', endDate)
       params.set('page', String(targetPage))
       params.set('per_page', String(targetPerPage))
+      if (searchTerm.trim()) params.set('terms', searchTerm.trim())
 
       const res = await fetch(`/api/fins/jurnal?${params.toString()}`, {
         cache: 'no-store',
@@ -270,6 +243,14 @@ export default function FinsJurnalPage() {
     fetchData({ page: 1, perPage: limit })
   }
 
+  const handleSearchKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      setPage(1)
+      fetchData({ page: 1, perPage })
+    }
+  }
+
   const handleExportExcel = async () => {
     if (!startDate || !endDate) return
     setExportingExcel(true)
@@ -280,6 +261,7 @@ export default function FinsJurnalPage() {
       params.set('tgl_awal', startDate)
       params.set('tgl_akhir', endDate)
       params.set('per_page', String(perPageExport))
+      if (searchTerm.trim()) params.set('terms', searchTerm.trim())
 
       const allRows: FinsJurnalDisplayRow[] = []
       let currentPage = 1
@@ -309,31 +291,7 @@ export default function FinsJurnalPage() {
         currentPage += 1
       } while (currentPage <= totalPage)
 
-      const toExport = searchTerms.length === 0
-        ? allRows
-        : allRows.filter((row) => {
-            const haystack = [
-              row.keterangan,
-              row.coa ?? row.coa_display,
-              row.nama_coa ?? row.nama_coa_display,
-              row.id_jurnal,
-              row.id_transaksi,
-              row.id_exre,
-              row.nama_program,
-              row.keterangan_sumber_dana,
-              row.note,
-              row.coa_buku,
-              row.nama_coa_buku,
-              row.nik_input,
-              row.nama_karyawan,
-            ]
-              .filter(Boolean)
-              .join(' ')
-              .toLowerCase()
-            return searchTerms.every((term) => haystack.includes(term))
-          })
-
-      const rows = toExport.map((row) => ({
+      const rows = allRows.map((row) => ({
         Tanggal: formatDateShort(row.tgl),
         COA: (row.coa ?? row.coa_display) || '-',
         'Jenis Transaksi': (row.nama_coa ?? row.nama_coa_display ?? row.nama_program) || '-',
@@ -349,6 +307,7 @@ export default function FinsJurnalPage() {
         'Nama COA Buku': row.nama_coa_buku ?? '-',
         Note: row.note || '-',
         Tag: extractTag(row.note),
+        'ID Exre': row.id_exre ?? '-',
         'ID Jurnal': row.id_jurnal,
       }))
       const ws = XLSX.utils.json_to_sheet(rows)
@@ -485,6 +444,7 @@ export default function FinsJurnalPage() {
                 placeholder="Cari (keterangan, COA, program, sumber dana...)"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
+                onKeyDown={handleSearchKeyDown}
                 className="h-9 min-w-[200px] max-w-full sm:max-w-xs"
               />
               <Button
@@ -536,13 +496,14 @@ export default function FinsJurnalPage() {
                   <th className="px-3 py-2 text-left font-semibold text-slate-600">Nama COA Buku</th>
                   <th className="px-3 py-2 text-left font-semibold text-slate-600">Note</th>
                   <th className="px-3 py-2 text-left font-semibold text-slate-600">Tag</th>
+                  <th className="px-3 py-2 text-left font-semibold text-slate-600">ID Exre</th>
                   <th className="px-3 py-2 text-left font-semibold text-slate-600">ID Jurnal</th>
                 </tr>
               </thead>
               <tbody>
                 {loading && (
                   <tr>
-                    <td colSpan={16} className="px-4 py-6 text-center text-slate-500">
+                    <td colSpan={17} className="px-4 py-6 text-center text-slate-500">
                       <div className="flex items-center justify-center gap-2">
                         <Spinner className="size-5 text-emerald-600" />
                         <span>Memuat data jurnal dari Zains...</span>
@@ -551,24 +512,24 @@ export default function FinsJurnalPage() {
                   </tr>
                 )}
 
-                {!loading && items.length === 0 && !error && (
+                {!loading && items.length === 0 && !error && !searchTerm && (
                   <tr>
-                    <td colSpan={16} className="px-4 py-6 text-center text-slate-500">
+                    <td colSpan={17} className="px-4 py-6 text-center text-slate-500">
                       Tidak ada data jurnal untuk periode dan filter yang dipilih.
                     </td>
                   </tr>
                 )}
 
-                {!loading && items.length > 0 && filteredItems.length === 0 && (
+                {!loading && items.length === 0 && searchTerm && !error && (
                   <tr>
-                    <td colSpan={16} className="px-4 py-6 text-center text-slate-500">
+                    <td colSpan={17} className="px-4 py-6 text-center text-slate-500">
                       Tidak ada data yang cocok dengan pencarian &quot;{searchTerm}&quot;.
                     </td>
                   </tr>
                 )}
 
-                {!loading &&
-                  filteredItems.map((row) => (
+                {!loading && items.length > 0 &&
+                  items.map((row) => (
                     <tr
                       key={`${row.id_jurnal}-${row.lineSide}-${row.coa_display}-${row.debet_display}-${row.kredit_display}`}
                       className="border-b border-slate-100"
@@ -633,6 +594,9 @@ export default function FinsJurnalPage() {
                         {extractTag(row.note)}
                       </td>
                       <td className="px-3 py-2 text-[11px] md:text-xs text-slate-700 whitespace-nowrap">
+                        {row.id_exre ?? '-'}
+                      </td>
+                      <td className="px-3 py-2 text-[11px] md:text-xs text-slate-700 whitespace-nowrap">
                         {row.id_jurnal}
                       </td>
                     </tr>
@@ -648,7 +612,7 @@ export default function FinsJurnalPage() {
               total={totalData}
               onPageChange={handlePageChange}
               onLimitChange={handleLimitChange}
-              currentPageCount={filteredItems.length}
+              currentPageCount={items.length}
             />
           )}
         </CardContent>

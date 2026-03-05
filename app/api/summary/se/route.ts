@@ -59,6 +59,7 @@ async function fetchZainsTotal(params: {
   onlyCoaKredit: string[]
   year?: number
   month?: number | null
+  idKantor?: string
 }): Promise<number> {
   const { url } = getZainsApiConfig()
   const apiKey = process.env.API_KEY_ZAINS
@@ -90,6 +91,10 @@ async function fetchZainsTotal(params: {
 
   if (params.onlyCoaKredit.length > 0) {
     searchParams.set('only_coa_kredit', params.onlyCoaKredit.join(','))
+  }
+
+  if (params.idKantor && params.idKantor.trim()) {
+    searchParams.set('id_kantor', params.idKantor.trim())
   }
 
   const res = await fetch(`${url}/fins/totals?${searchParams.toString()}`, {
@@ -166,7 +171,7 @@ export async function GET(req: NextRequest) {
       ORDER BY COALESCE(summary_order, 9999), name
     `
 
-    // Ambil daftar klinik yang ikut di summary SE
+    // Ambil daftar klinik yang ikut di summary SE (termasuk id_kantor_zains untuk filter API Zains)
     const clinics = await sql`
       SELECT 
         id,
@@ -176,7 +181,8 @@ export async function GET(req: NextRequest) {
         kode_coa,
         include_in_se_summary,
         se_receipt_coa_debet,
-        se_receipt_coa_kredit
+        se_receipt_coa_kredit,
+        id_kantor_zains
       FROM clinics
       WHERE is_active = true
       ORDER BY COALESCE(summary_order, 9999), name
@@ -203,6 +209,7 @@ export async function GET(req: NextRequest) {
         type: string
         onlyCoaDebet: string[]
         onlyCoaKredit: string[]
+        idKantorZains?: string
       }
     }> = []
 
@@ -246,6 +253,11 @@ export async function GET(req: NextRequest) {
                 .filter(Boolean)
             : defaultCoaKredit
 
+        const idKantorZains =
+          (c as any).id_kantor_zains != null && String((c as any).id_kantor_zains).trim() !== ''
+            ? String((c as any).id_kantor_zains).trim()
+            : undefined
+
         tasks.push({
           key: `klinik-${c.id}`,
           label: alias,
@@ -255,6 +267,7 @@ export async function GET(req: NextRequest) {
             type: 'receipt',
             onlyCoaDebet: clinicCoaDebet,
             onlyCoaKredit: clinicCoaKredit,
+            idKantorZains,
           },
         })
       }
@@ -367,6 +380,7 @@ export async function GET(req: NextRequest) {
           onlyCoaKredit: t.params.onlyCoaKredit,
           year,
           month,
+          idKantor: t.params.idKantorZains,
         })
         return { ...t, sum }
       }),

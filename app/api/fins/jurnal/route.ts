@@ -56,6 +56,7 @@ export async function GET(req: NextRequest) {
     const type = searchParams.get('type') || ''
     const page = searchParams.get('page') || '1'
     const perPage = searchParams.get('per_page') || '10'
+    const terms = searchParams.get('terms') || ''
 
     const proxiedParams = new URLSearchParams()
     if (type) proxiedParams.set('type', type)
@@ -63,6 +64,7 @@ export async function GET(req: NextRequest) {
     proxiedParams.set('tgl_akhir', tglAkhir)
     proxiedParams.set('page', page)
     proxiedParams.set('per_page', perPage)
+    if (terms.trim()) proxiedParams.set('terms', terms.trim())
 
     const targetUrl = `${baseUrl.replace(/\/+$/, '')}/fins/jurnal?${proxiedParams.toString()}`
 
