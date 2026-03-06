@@ -18,7 +18,7 @@ export function TransaksiHeader({
       <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
         <div>
           <h2 className="text-2xl font-bold text-slate-800">Data Transaksi</h2>
-          <p className="text-slate-500 text-sm">Real-time data hasil scraping dari eClinic</p>
+          <p className="text-slate-500 text-sm">Data transaksi dari eClinic</p>
         </div>
         <div className="flex items-center gap-3">
           <Button 

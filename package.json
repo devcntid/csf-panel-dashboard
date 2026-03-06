@@ -12,19 +12,9 @@
     "migrate:fix-fk": "tsx scripts/fix-master-target-categories-fk.ts",
     "migrate:app-settings": "tsx scripts/add-app-settings-table.ts",
     "migrate:input-type": "tsx scripts/add-input-type-to-transactions.ts",
-    "playwright:install": "npx playwright install chromium",
-    "scrap": "node scripts/scrap.js",
-    "scrap:github": "tsx scripts/scrap-github.ts",
-    "scrap:github:queue": "tsx scripts/scrap-github-queue.ts",
-    "scrap:enqueue-today": "tsx scripts/enqueue-today-scrap-queue.ts",
-    "scrap:queue:table": "tsx scripts/create-scrap-queue-table.ts",
-    "scrap:queue:cleanup": "tsx scripts/cleanup-scrap-queue.ts",
     "seed": "tsx scripts/seed.ts && tsx scripts/add-summary-fields.ts",
     "seed:app-settings": "tsx scripts/seed-app-settings.ts",
-    "start": "next start",
-    "test": "playwright test",
-    "test:headed": "playwright test --headed",
-    "test:ui": "playwright test --ui"
+    "start": "next start"
   },
   "dependencies": {
     "@auth/core": "latest",
@@ -114,7 +104,6 @@
     "node-gyp": "latest",
     "nodemailer": "latest",
     "pg": "latest",
-    "playwright": "^1.49.1",
     "postgres": "latest",
     "prisma": "latest",
     "react": "19.2.0",
@@ -134,7 +123,6 @@
     "zod": "3.25.76"
   },
   "devDependencies": {
-    "@playwright/test": "^1.58.0",
     "@tailwindcss/postcss": "^4.1.9",
     "@types/node": "^22",
     "@types/react": "^19",

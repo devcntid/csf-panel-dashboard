@@ -2,7 +2,7 @@
 	"info": {
 		"_postman_id": "transactions-insert-api",
 		"name": "Transactions Insert API",
-		"description": "API untuk insert transaksi secara manual dengan logika yang sama persis seperti proses scrap",
+		"description": "API untuk insert transaksi secara manual dengan logika yang sama seperti proses insert dari upload",
 		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
 	},
 	"item": [
@@ -37,7 +37,7 @@
 						"insert"
 					]
 				},
-				"description": "Endpoint untuk insert transaksi secara manual. Logika insert sama persis dengan proses scrap:\n- Insert/update patient dengan logika first_visit_at, last_visit_at, visit_count\n- Insert/update transaction dengan semua field\n- Insert ke transactions_to_zains untuk setiap kategori pembayaran yang memiliki nilai > 0\n- Sync patient ke Zains jika diperlukan"
+				"description": "Endpoint untuk insert transaksi secara manual. Logika insert sama dengan proses insert dari upload:\n- Insert/update patient dengan logika first_visit_at, last_visit_at, visit_count\n- Insert/update transaction dengan semua field\n- Insert ke transactions_to_zains untuk setiap kategori pembayaran yang memiliki nilai > 0\n- Sync patient ke Zains jika diperlukan"
 			},
 			"response": [
 				{
@@ -292,7 +292,7 @@
 						"sync-transactions-to-zains"
 					]
 				},
-				"description": "Endpoint GET untuk **testing cron / scheduler**.\n\nBisa dipakai oleh:\n- Cron job eksternal (mis. GitHub Actions, Railway cron, dll)\n- Health-check manual dari Postman untuk memastikan batch sync transaksi ke Zains berjalan.\n\nPerilaku sama seperti POST:\n- Proses batch `transactions_to_zains` di background\n- Response langsung kembali dengan status sukses/gagal memulai proses."
+				"description": "Endpoint GET untuk **testing cron / scheduler**.\n\nBisa dipakai oleh cron job eksternal atau health-check manual dari Postman untuk memastikan batch sync transaksi ke Zains berjalan.\n\nPerilaku sama seperti POST:\n- Proses batch `transactions_to_zains` di background\n- Response langsung kembali dengan status sukses/gagal memulai proses."
 			},
 			"response": []
 		}

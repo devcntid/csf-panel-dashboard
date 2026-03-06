@@ -181,7 +181,7 @@ export function SystemLogs({ clinics, initialData }: SystemLogsProps) {
               <div className="space-y-2">
                 <Label className="text-xs text-slate-600">Process Type</Label>
                 <Input
-                  placeholder="Contoh: scraping, sync, import"
+                  placeholder="Contoh: sync, import"
                   value={filters.process_type}
                   onChange={(e) => {
                     setFilters({ ...filters, process_type: e.target.value })

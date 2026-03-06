@@ -92,7 +92,7 @@ export function ZainsSyncSetting() {
       <CardHeader>
         <CardTitle>Sync Transaksi ke Zains</CardTitle>
         <CardDescription>
-          Toggle global untuk mengirim transaksi dan pasien (donatur) ke Zains. Matikan sementara jika tidak ingin ada POST ke API Zains (cron & workflow tetap jalan tapi tidak memproses data). Nyalakan lagi kapan saja; data baru (manual/upload/scrap) akan mengikuti nilai toggle saat insert.
+          Toggle global untuk mengirim transaksi dan pasien (donatur) ke Zains. Matikan sementara jika tidak ingin ada POST ke API Zains (cron & workflow tetap jalan tapi tidak memproses data). Nyalakan lagi kapan saja; data baru (manual/upload) akan mengikuti nilai toggle saat insert.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
