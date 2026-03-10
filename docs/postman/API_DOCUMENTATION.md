@@ -2,7 +2,7 @@
 
 ## Endpoint: POST `/api/transactions/insert`
 
-Endpoint ini digunakan untuk insert transaksi secara manual dengan logika yang sama persis seperti proses scrap. Endpoint ini akan melakukan:
+Endpoint ini digunakan untuk insert transaksi secara manual dengan logika yang sama seperti proses insert dari upload. Endpoint ini akan melakukan:
 
 1. Insert/update patient dengan logika `first_visit_at`, `last_visit_at`, dan `visit_count`
 2. Insert/update transaction dengan semua field yang diperlukan
@@ -92,7 +92,7 @@ Setiap item dalam `transaction_data` array harus memiliki struktur berikut:
 - `receivable_total` (number): Total Piutang
 
 **Catatan:**
-- Field dapat menggunakan format dari scrap (misalnya `"Jumlah Tagihan ( Rp. ) - Karcis"`) atau format snake_case (misalnya `bill_regist`)
+- Field dapat menggunakan format lengkap (misalnya `"Jumlah Tagihan ( Rp. ) - Karcis"`) atau format snake_case (misalnya `bill_regist`)
 - Jika `paid_discount > 0`, sistem akan otomatis menghitung `paid_action_after_discount = paid_action - paid_discount`
 - Jika `payment_method` mengandung "QRIS", sistem akan otomatis mengisi `id_rekening` di `transactions_to_zains`
 
@@ -259,7 +259,7 @@ atau
 }
 ```
 
-### Contoh 3: Menggunakan Format dari Scrap
+### Contoh 3: Menggunakan Format Lengkap Field
 
 ```json
 {
@@ -299,7 +299,7 @@ atau
 
 - Insert transaction dengan semua field yang diberikan
 - Jika terjadi conflict (berdasarkan `clinic_id`, `erm_no`, `trx_date`, `polyclinic`, `bill_total`), akan melakukan update
-- `input_type` akan diset ke `'manual'` untuk membedakan dengan data dari scrap
+- `input_type` akan diset ke `'manual'` untuk membedakan dengan data dari upload
 
 ### 3. Transactions to Zains
 

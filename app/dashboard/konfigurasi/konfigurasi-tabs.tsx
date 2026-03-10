@@ -52,35 +52,10 @@ export function KonfigurasiTabs({
   }
 }) {
   const [activeTab, setActiveTab] = useState('zains-sync')
-  const [runningQueue, setRunningQueue] = useState(false)
   const router = useRouter()
 
   const handleRefresh = () => {
     router.refresh()
-  }
-
-  const handleRunScrapQueue = async () => {
-    setRunningQueue(true)
-    try {
-      const res = await fetch('/api/scrap/run-queue', { method: 'POST' })
-      let data: any = {}
-      try {
-        data = await res.json()
-      } catch {
-        // ignore json error
-      }
-
-      if (!res.ok || !data?.success) {
-        toast.error(data?.message || 'Gagal men-trigger scrap queue')
-        return
-      }
-
-      toast.success('Scrap queue berhasil dijalankan di background')
-    } catch (error: any) {
-      toast.error(error?.message || 'Gagal men-trigger scrap queue')
-    } finally {
-      setRunningQueue(false)
-    }
   }
 
   return (
@@ -432,17 +407,9 @@ export function KonfigurasiTabs({
                 <div>
                   <CardTitle>System Logs</CardTitle>
                   <CardDescription>
-                    Monitoring proses scraping, sinkronisasi, dan aktivitas sistem per klinik
+                    Monitoring proses sinkronisasi dan aktivitas sistem per klinik
                   </CardDescription>
                 </div>
-                <Button
-                  size="sm"
-                  onClick={handleRunScrapQueue}
-                  disabled={runningQueue}
-                  className="whitespace-nowrap"
-                >
-                  {runningQueue ? 'Menjalankan...' : 'Jalankan Scrap Queue'}
-                </Button>
               </div>
             </CardHeader>
             <CardContent>

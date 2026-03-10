@@ -1059,10 +1059,10 @@ async function seed() {
     console.log('📝 Seeding system_logs...');
     
     const systemLogsData = [
-      { clinic_name: 'Klinik Cita Sehat Surabaya', process_type: 'scraping', status: 'success', message: 'Data scraping berhasil dilakukan', payload: '{"rows_scraped": 150, "duration_ms": 2500}' },
+      { clinic_name: 'Klinik Cita Sehat Surabaya', process_type: 'sync', status: 'success', message: 'Sinkronisasi data berhasil dilakukan', payload: '{"rows_synced": 150, "duration_ms": 2500}' },
       { clinic_name: 'Klinik Cita Sehat Surabaya', process_type: 'zains_sync', status: 'success', message: 'Sinkronisasi ke Zains API berhasil', payload: '{"synced_count": 50, "failed_count": 0}' },
-      { clinic_name: 'Klinik Cita Sehat Semarang', process_type: 'scraping', status: 'success', message: 'Data scraping berhasil dilakukan', payload: '{"rows_scraped": 120, "duration_ms": 2200}' },
-      { clinic_name: 'Klinik Cita Sehat Jakarta', process_type: 'scraping', status: 'error', message: 'Gagal melakukan scraping - timeout', payload: '{"error": "Connection timeout", "retry_count": 3}' },
+      { clinic_name: 'Klinik Cita Sehat Semarang', process_type: 'sync', status: 'success', message: 'Sinkronisasi data berhasil dilakukan', payload: '{"rows_synced": 120, "duration_ms": 2200}' },
+      { clinic_name: 'Klinik Cita Sehat Jakarta', process_type: 'sync', status: 'error', message: 'Gagal sinkronisasi - timeout', payload: '{"error": "Connection timeout", "retry_count": 3}' },
       { clinic_name: null, process_type: 'system', status: 'info', message: 'Sistem startup berhasil', payload: '{"version": "3.0.0", "started_at": "2026-01-20T08:00:00Z"}' },
     ];
 

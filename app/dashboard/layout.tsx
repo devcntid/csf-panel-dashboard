@@ -19,6 +19,7 @@ import {
   LayoutDashboard,
   Building2,
   ClipboardList,
+  ExternalLink,
   Users,
   Settings,
   Menu,
@@ -105,6 +106,7 @@ export default function DashboardLayout({
       ? [
           { href: clinicSummaryHref, label: 'Summary Klinik', icon: LayoutDashboard },
           { href: '/dashboard/transaksi', label: 'Data Transaksi', icon: ClipboardList },
+          { href: '/dashboard/transaksi-zains', label: 'Transaksi ke Zains', icon: ExternalLink },
           { href: '/dashboard/pasien', label: 'Data Pasien', icon: Users },
         ]
       : [
@@ -114,6 +116,7 @@ export default function DashboardLayout({
           { href: '/dashboard/fins-jurnal', label: 'FINS Jurnal', icon: ClipboardList },
           { href: '/dashboard/fins-cashbook', label: 'FINS Cashbook', icon: ClipboardList },
           { href: '/dashboard/transaksi', label: 'Data Transaksi', icon: ClipboardList },
+          { href: '/dashboard/transaksi-zains', label: 'Transaksi ke Zains', icon: ExternalLink },
           { href: '/dashboard/pasien', label: 'Data Pasien', icon: Users },
           { href: '/dashboard/konfigurasi', label: 'Konfigurasi', icon: Settings },
         ]

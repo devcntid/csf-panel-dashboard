@@ -141,7 +141,7 @@ export default async function KlinikPage() {
             </div>
             <h3 className="font-semibold text-slate-700 mb-2">Tambah Klinik Baru</h3>
             <p className="text-sm text-slate-500 mb-4 text-center max-w-md">
-              Tambahkan klinik cabang baru untuk mulai scraping dan monitoring data
+              Tambahkan klinik cabang baru untuk monitoring data
             </p>
             <Button className="bg-teal-600 hover:bg-teal-700">
               <Building2 className="w-4 h-4 mr-2" />

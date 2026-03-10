@@ -11,7 +11,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Search, X, Download, Loader2, FileSpreadsheet } from 'lucide-react'
+import { Search, X, Loader2, FileSpreadsheet } from 'lucide-react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useTransition, useState, useEffect } from 'react'
 import { toast } from 'sonner'
@@ -30,7 +30,6 @@ export function TransaksiSearch({
   const router = useRouter()
   const searchParams = useSearchParams()
   const [isPending, startTransition] = useTransition()
-  const [isScraping, setIsScraping] = useState(false)
   const [isExporting, setIsExporting] = useState(false)
   // Default tanggal awal ke tanggal 1 bulan ini, tanggal akhir ke hari ini
   const getTodayDate = () => {
@@ -183,57 +182,6 @@ export function TransaksiSearch({
 
   const hasFilter =
     dateFrom || dateTo || (!readonlyClinicId && selectedClinic) || selectedPoly || selectedInsurance || (selectedZainsSync && selectedZainsSync !== 'all')
-
-  const handleScrap = async () => {
-    const clinicForScrap = readonlyClinicId ? String(readonlyClinicId) : selectedClinic
-    if (!clinicForScrap || clinicForScrap === 'all') {
-      toast.error('Pilih klinik terlebih dahulu')
-      return
-    }
-    if (!dateFrom || !dateTo) {
-      toast.error('Pilih tanggal awal dan tanggal akhir terlebih dahulu')
-      return
-    }
-
-    setIsScraping(true)
-    toast.loading('Menambahkan request ke queue...', { id: 'scrap' })
-
-    try {
-      const response = await fetch('/api/scrap/queue', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          clinic_id: parseInt(clinicForScrap),
-          tgl_awal: dateFrom,
-          tgl_akhir: dateTo,
-          requested_by: 'UI',
-        }),
-      })
-
-      const data = await response.json()
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Gagal menambahkan request')
-      }
-
-      toast.success(
-        'Scraping request telah ditambahkan ke queue. Data akan diupdate segera melalui GitHub Actions.',
-        { id: 'scrap', duration: 4000 }
-      )
-      
-      // Refresh page setelah 3 detik
-      setTimeout(() => {
-        window.location.reload()
-      }, 3000)
-    } catch (error: any) {
-      console.error('Error queueing scrape:', error)
-      toast.error(error.message || 'Gagal menambahkan request ke queue', { id: 'scrap' })
-    } finally {
-      setIsScraping(false)
-    }
-  }
 
   const handleExport = async () => {
     try {
@@ -423,23 +371,6 @@ export function TransaksiSearch({
             Filter
           </Button>
           <Button 
-            onClick={handleScrap} 
-            disabled={isPending || isScraping || !selectedClinic || selectedClinic === 'all' || !dateFrom || !dateTo}
-            className="bg-blue-600 hover:bg-blue-700 h-9"
-          >
-            {isScraping ? (
-              <>
-                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                Scraping...
-              </>
-            ) : (
-              <>
-                <Download className="w-4 h-4 mr-2" />
-                Scrap
-              </>
-            )}
-          </Button>
-          <Button 
             onClick={handleExport}
             disabled={isPending || isExporting}
             className="bg-green-600 hover:bg-green-700 h-9"
@@ -460,7 +391,7 @@ export function TransaksiSearch({
             <Button 
               variant="outline" 
               onClick={handleResetFilter}
-              disabled={isPending || isScraping}
+              disabled={isPending}
               className="h-9 bg-transparent"
             >
               <X className="w-4 h-4 mr-2" />
