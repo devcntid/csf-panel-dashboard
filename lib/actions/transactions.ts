@@ -1981,6 +1981,256 @@ export async function syncDonaturForTransaction(
   }
 }
 
+/**
+ * List transactions_to_zains dengan filter dan pagination (untuk halaman Transaksi ke Zains).
+ * Filter: clinicId (RBAC), dateFrom/dateTo (tz.tgl_transaksi), search (id_transaksi, id_donatur, nama_pasien, no_erm, clinic name, program name).
+ */
+export const getTransactionsToZainsList = cache(
+  async (
+    search?: string,
+    clinicId?: number,
+    dateFrom?: string,
+    dateTo?: string,
+    page: number = 1,
+    limit: number = 10,
+    zainsSynced?: "all" | "synced" | "pending",
+    paymentMethod?: string
+  ) => {
+    try {
+      const offset = (page - 1) * limit;
+      const client = getSqlClient();
+
+      const trimmedSearch =
+        search && search.trim() !== "" ? search.trim() : undefined;
+      const validDateFrom =
+        dateFrom && dateFrom.trim() !== "" ? dateFrom : undefined;
+      const validDateTo = dateTo && dateTo.trim() !== "" ? dateTo : undefined;
+      const normalizedMethod =
+        paymentMethod && paymentMethod.trim() !== "" && paymentMethod !== "all"
+          ? paymentMethod.trim()
+          : undefined;
+
+      const whereClauses: string[] = [];
+      const params: any[] = [];
+      let paramIndex = 0;
+
+      if (clinicId) {
+        paramIndex++;
+        params.push(clinicId);
+        whereClauses.push(`t.clinic_id = $${paramIndex}`);
+      }
+
+      if (normalizedMethod) {
+        paramIndex++;
+        params.push(`%${normalizedMethod}%`);
+        whereClauses.push(`UPPER(t.payment_method) LIKE UPPER($${paramIndex})`);
+      }
+
+      if (trimmedSearch) {
+        paramIndex++;
+        params.push(`%${trimmedSearch}%`);
+        const idx = paramIndex;
+        whereClauses.push(
+          `(t.trx_no ILIKE $${idx} OR tz.id_transaksi ILIKE $${idx} OR tz.id_program ILIKE $${idx} OR mtc.name ILIKE $${idx} OR tz.id_kantor ILIKE $${idx} OR c.name ILIKE $${idx} OR tz.id_donatur ILIKE $${idx} OR tz.nama_pasien ILIKE $${idx} OR tz.no_erm ILIKE $${idx} OR tz.id_rekening ILIKE $${idx} OR c.id_rekening ILIKE $${idx} OR c.kode_coa ILIKE $${idx} OR CAST(tz.nominal_transaksi AS TEXT) LIKE $${idx})`
+        );
+      }
+
+      if (validDateFrom && validDateTo) {
+        paramIndex++;
+        params.push(validDateFrom);
+        const fromIdx = paramIndex;
+        paramIndex++;
+        params.push(validDateTo);
+        const toIdx = paramIndex;
+        whereClauses.push(
+          `tz.tgl_transaksi >= DATE($${fromIdx}) AND tz.tgl_transaksi <= DATE($${toIdx})`
+        );
+      } else if (validDateFrom) {
+        paramIndex++;
+        params.push(validDateFrom);
+        whereClauses.push(`tz.tgl_transaksi >= DATE($${paramIndex})`);
+      } else if (validDateTo) {
+        paramIndex++;
+        params.push(validDateTo);
+        whereClauses.push(`tz.tgl_transaksi <= DATE($${paramIndex})`);
+      }
+
+      if (zainsSynced === "synced") {
+        whereClauses.push("tz.synced = true");
+      } else if (zainsSynced === "pending") {
+        whereClauses.push("(tz.synced = false OR tz.synced IS NULL)");
+      }
+
+      const whereSql =
+        whereClauses.length > 0 ? whereClauses.join(" AND ") : "TRUE";
+
+      paramIndex++;
+      const limitIdx = paramIndex;
+      params.push(limit);
+      paramIndex++;
+      const offsetIdx = paramIndex;
+      params.push(offset);
+
+      const baseFromWhere = `
+      FROM transactions_to_zains tz
+      JOIN transactions t ON t.id = tz.transaction_id
+      JOIN clinics c ON c.id = t.clinic_id
+      LEFT JOIN master_target_categories mtc ON mtc.id_program_zains = tz.id_program
+      WHERE ${whereSql}
+    `;
+      const filterParams = params.slice(0, limitIdx - 1);
+
+      const [rows, countResultRaw] = await Promise.all([
+        client(
+          `
+        SELECT 
+          tz.*,
+          t.trx_no,
+          t.trx_date,
+          t.payment_method,
+          c.name AS clinic_name,
+          c.id_rekening AS clinic_id_rekening,
+          c.kode_coa AS clinic_kode_coa,
+          mtc.name AS program_name
+        ${baseFromWhere}
+        ORDER BY tz.tgl_transaksi DESC NULLS LAST, tz.id DESC
+        LIMIT $${limitIdx} OFFSET $${offsetIdx}
+        `,
+          params
+        ),
+        client(
+          `
+        SELECT COUNT(*) AS total
+        ${baseFromWhere}
+        `,
+          filterParams
+        ),
+      ]);
+
+      const countResult = Array.isArray(countResultRaw)
+        ? countResultRaw[0]
+        : countResultRaw;
+      return {
+        rows: Array.isArray(rows) ? rows : [],
+        total: Number((countResult as any)?.total || 0),
+        page,
+        limit,
+      };
+    } catch (error) {
+      console.error("Error fetching transactions to zains list:", error);
+      return { rows: [], total: 0, page, limit };
+    }
+  }
+);
+
+/**
+ * Statistik agregat untuk list transactions_to_zains (filter sama dengan getTransactionsToZainsList).
+ */
+export const getTransactionsToZainsStats = cache(
+  async (
+    search?: string,
+    clinicId?: number,
+    dateFrom?: string,
+    dateTo?: string,
+    zainsSynced?: "all" | "synced" | "pending",
+    paymentMethod?: string
+  ) => {
+    try {
+      const client = getSqlClient();
+      const trimmedSearch =
+        search && search.trim() !== "" ? search.trim() : undefined;
+      const validDateFrom =
+        dateFrom && dateFrom.trim() !== "" ? dateFrom : undefined;
+      const validDateTo = dateTo && dateTo.trim() !== "" ? dateTo : undefined;
+      const normalizedMethod =
+        paymentMethod && paymentMethod.trim() !== "" && paymentMethod !== "all"
+          ? paymentMethod.trim()
+          : undefined;
+
+      const whereClauses: string[] = [];
+      const params: any[] = [];
+      let paramIndex = 0;
+
+      if (clinicId) {
+        paramIndex++;
+        params.push(clinicId);
+        whereClauses.push(`t.clinic_id = $${paramIndex}`);
+      }
+      if (normalizedMethod) {
+        paramIndex++;
+        params.push(`%${normalizedMethod}%`);
+        whereClauses.push(`UPPER(t.payment_method) LIKE UPPER($${paramIndex})`);
+      }
+      if (trimmedSearch) {
+        paramIndex++;
+        params.push(`%${trimmedSearch}%`);
+        const idx = paramIndex;
+        whereClauses.push(
+          `(t.trx_no ILIKE $${idx} OR tz.id_transaksi ILIKE $${idx} OR tz.id_program ILIKE $${idx} OR mtc.name ILIKE $${idx} OR tz.id_kantor ILIKE $${idx} OR c.name ILIKE $${idx} OR tz.id_donatur ILIKE $${idx} OR tz.nama_pasien ILIKE $${idx} OR tz.no_erm ILIKE $${idx} OR tz.id_rekening ILIKE $${idx} OR c.id_rekening ILIKE $${idx} OR c.kode_coa ILIKE $${idx} OR CAST(tz.nominal_transaksi AS TEXT) LIKE $${idx})`
+        );
+      }
+      if (validDateFrom && validDateTo) {
+        paramIndex++;
+        params.push(validDateFrom);
+        const fromIdx = paramIndex;
+        paramIndex++;
+        params.push(validDateTo);
+        const toIdx = paramIndex;
+        whereClauses.push(
+          `tz.tgl_transaksi >= DATE($${fromIdx}) AND tz.tgl_transaksi <= DATE($${toIdx})`
+        );
+      } else if (validDateFrom) {
+        paramIndex++;
+        params.push(validDateFrom);
+        whereClauses.push(`tz.tgl_transaksi >= DATE($${paramIndex})`);
+      } else if (validDateTo) {
+        paramIndex++;
+        params.push(validDateTo);
+        whereClauses.push(`tz.tgl_transaksi <= DATE($${paramIndex})`);
+      }
+      if (zainsSynced === "synced") {
+        whereClauses.push("tz.synced = true");
+      } else if (zainsSynced === "pending") {
+        whereClauses.push("(tz.synced = false OR tz.synced IS NULL)");
+      }
+
+      const whereSql =
+        whereClauses.length > 0 ? whereClauses.join(" AND ") : "TRUE";
+
+      const statsRaw = await client(
+        `
+      SELECT 
+        COUNT(*) AS total_records,
+        COUNT(CASE WHEN tz.synced = true THEN 1 END) AS synced_count,
+        COUNT(CASE WHEN tz.synced = false OR tz.synced IS NULL THEN 1 END) AS pending_count,
+        COALESCE(SUM(tz.nominal_transaksi), 0) AS total_nominal
+      FROM transactions_to_zains tz
+      JOIN transactions t ON t.id = tz.transaction_id
+      JOIN clinics c ON c.id = t.clinic_id
+      LEFT JOIN master_target_categories mtc ON mtc.id_program_zains = tz.id_program
+      WHERE ${whereSql}
+      `,
+        params
+      );
+      const stats = Array.isArray(statsRaw) ? statsRaw[0] : statsRaw;
+      return {
+        totalRecords: Number((stats as any)?.total_records || 0),
+        syncedCount: Number((stats as any)?.synced_count || 0),
+        pendingCount: Number((stats as any)?.pending_count || 0),
+        totalNominal: Number((stats as any)?.total_nominal || 0),
+      };
+    } catch (error) {
+      console.error("Error fetching transactions to zains stats:", error);
+      return {
+        totalRecords: 0,
+        syncedCount: 0,
+        pendingCount: 0,
+        totalNominal: 0,
+      };
+    }
+  }
+);
+
 export const getTransactionsToZains = cache(
   async (transactionId: number, dateFrom?: string, dateTo?: string) => {
     try {
