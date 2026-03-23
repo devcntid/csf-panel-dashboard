@@ -46,7 +46,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Validasi clinic exists dan aktif
-    const [clinic] = await sql`
+    const clinicRows = (await sql`
       SELECT 
         id, 
         name, 
@@ -55,7 +55,8 @@ export async function POST(request: NextRequest) {
         is_active
       FROM clinics 
       WHERE id = ${clinic_id} AND is_active = true
-    `
+    `) as any[]
+    const clinic = clinicRows[0]
 
     if (!clinic) {
       return NextResponse.json(
@@ -68,10 +69,10 @@ export async function POST(request: NextRequest) {
     const ID_REKENING = (clinic as any).id_rekening || null
 
     // Ambil master_target_categories untuk mapping
-    const categories = await sql`
+    const categories = (await sql`
       SELECT name, id_program_zains 
       FROM master_target_categories
-    `
+    `) as any[]
     const categoryMap: Record<string, string> = {}
     categories.forEach((cat: any) => {
       categoryMap[cat.name] = cat.id_program_zains
@@ -127,13 +128,14 @@ export async function POST(request: NextRequest) {
         // Fast duplicate check: jika sudah ada transaksi dengan clinic_id + trx_no + erm_no yang sama,
         // anggap transaksi sudah pernah masuk dan skip tanpa melakukan proses berat lainnya.
         if (trxNo && ermNo) {
-          const [existingByTrxNo] = await sql`
+          const existingByTrxNoRows = (await sql`
             SELECT id FROM transactions
             WHERE clinic_id = ${clinic_id}
               AND trx_no = ${trxNo}
               AND erm_no = ${ermNo}
             LIMIT 1
-          `
+          `) as any[]
+          const existingByTrxNo = existingByTrxNoRows[0]
 
           if (existingByTrxNo) {
             skippedCount++
@@ -207,7 +209,7 @@ export async function POST(request: NextRequest) {
         const trxDateFormatted = formatDateToYYYYMMDD(trxDate)
 
         // Cek apakah transaksi sudah ada (untuk menentukan apakah perlu increment visit_count)
-        const [existingTransaction] = await sql`
+        const existingTransactionRows = (await sql`
           SELECT id FROM transactions
           WHERE clinic_id = ${clinic_id} 
             AND erm_no = ${ermNo}
@@ -215,7 +217,8 @@ export async function POST(request: NextRequest) {
             AND polyclinic = ${polyclinic}
             AND bill_total = ${billTotal}
           LIMIT 1
-        `
+        `) as any[]
+        const existingTransaction = existingTransactionRows[0]
 
         const isNewTransaction = !existingTransaction
 
@@ -227,32 +230,34 @@ export async function POST(request: NextRequest) {
         // Cari poly_id dari clinic_poly_mappings berdasarkan raw_poly_name (dari eclinic)
         let polyId: number | null = null
         if (polyclinic) {
-          const [polyMapping] = await sql`
+          const polyRows = (await sql`
             SELECT master_poly_id 
             FROM clinic_poly_mappings
             WHERE clinic_id = ${clinic_id} 
               AND raw_poly_name = ${polyclinic}
             LIMIT 1
-          `
+          `) as any[]
+          const polyMapping = polyRows[0]
           polyId = polyMapping ? (polyMapping as any).master_poly_id : null
         }
 
         // Cari insurance_type_id dari clinic_insurance_mappings berdasarkan raw_insurance_name (dari eclinic)
         let insuranceTypeId: number | null = null
         if (insuranceType) {
-          const [insuranceMapping] = await sql`
+          const insuranceRows = (await sql`
             SELECT master_insurance_id 
             FROM clinic_insurance_mappings
             WHERE clinic_id = ${clinic_id} 
               AND raw_insurance_name = ${insuranceType}
             LIMIT 1
-          `
+          `) as any[]
+          const insuranceMapping = insuranceRows[0]
           insuranceTypeId = insuranceMapping ? (insuranceMapping as any).master_insurance_id : null
         }
 
         // Insert atau update transaction (dengan ON CONFLICT untuk menghindari duplikasi)
         // patient_id sementara NULL; akan di-update setelah patient ter-insert (jika perlu dikirim ke Zains)
-        const [insertedTransaction] = await sql`
+        const insertedTransactionRows = (await sql`
           INSERT INTO transactions (
             clinic_id, patient_id, poly_id, insurance_type_id, trx_date, trx_no, erm_no, nik, patient_name,
             insurance_type, polyclinic, payment_method, voucher_code,
@@ -295,7 +300,8 @@ export async function POST(request: NextRequest) {
             bill_radio_discount = EXCLUDED.bill_radio_discount,
             updated_at = NOW()
           RETURNING id
-        `
+        `) as any[]
+        const insertedTransaction = insertedTransactionRows[0]
 
         const transactionId = (insertedTransaction as any).id
 
@@ -317,66 +323,71 @@ export async function POST(request: NextRequest) {
         ]
 
         // Cari id_donatur dari patient jika ada (hanya dari patient yang SUDAH ada)
-        const [patientData] = await sql`
+        const patientRows = (await sql`
           SELECT id_donatur_zains FROM patients 
           WHERE clinic_id = ${clinic_id} AND erm_no = ${ermNo}
           LIMIT 1
-        `
+        `) as any[]
+        const patientData = patientRows[0]
         const idDonatur = patientData ? (patientData as any).id_donatur_zains : null
 
         // Counter untuk transaction to zains per transaction (untuk workflow integration)
         let transactionZainsInsertedCount = 0
         const todoZains = await getZainsTransactionSyncEnabled()
 
-        // Insert ke transactions_to_zains untuk setiap field yang memiliki nilai > 0
-        for (const field of paidFields) {
-          if (field.value > 0) {
-            const idProgram = categoryMap[field.category]
-            if (idProgram && ID_KANTOR_ZAINS) {
-              const nominalValue = Math.round(field.value)
-              
-              // Cek apakah sudah ada untuk menghindari duplikasi
-              // Gunakan kombinasi transaction_id, id_program, dan nominal untuk uniqueness
-              const [existing] = await sql`
-                SELECT id FROM transactions_to_zains
-                WHERE transaction_id = ${transactionId}
-                  AND id_program = ${idProgram}
-                  AND nominal_transaksi = ${nominalValue}
-                  AND tgl_transaksi = ${formatDateToYYYYMMDD(trxDate)}
-                LIMIT 1
-              `
-
-              if (!existing) {
-                // Hanya isi id_rekening jika payment_method adalah QRIS
-                const idRekening = paymentMethod && paymentMethod.toUpperCase().includes('QRIS') ? ID_REKENING : null
+        // Jika total pembayaran 0, jangan break transaksi ke transactions_to_zains.
+        if (paidTotal > 0) {
+          // Insert ke transactions_to_zains untuk setiap field yang memiliki nilai > 0
+          for (const field of paidFields) {
+            if (field.value > 0) {
+              const idProgram = categoryMap[field.category]
+              if (idProgram && ID_KANTOR_ZAINS) {
+                const nominalValue = Math.round(field.value)
                 
-                await sql`
-                  INSERT INTO transactions_to_zains (
-                    transaction_id, id_transaksi, id_program, id_kantor, tgl_transaksi,
-                    id_donatur, nominal_transaksi, id_rekening, synced, todo_zains, nama_pasien, no_erm, created_at, updated_at
-                  )
-                  VALUES (
-                    ${transactionId},
-                    NULL,
-                    ${idProgram},
-                    ${ID_KANTOR_ZAINS},
-                    ${formatDateToYYYYMMDD(trxDate)},
-                    ${idDonatur},
-                    ${nominalValue},
-                    ${idRekening},
-                    false,
-                    ${todoZains},
-                    ${patientName},
-                    ${ermNo},
-                    NOW(),
-                    NOW()
-                  )
-                `
-                zainsInsertedCount++
-                transactionZainsInsertedCount++
+                // Cek apakah sudah ada untuk menghindari duplikasi
+                // Gunakan kombinasi transaction_id, id_program, dan nominal untuk uniqueness
+                const existingRows = (await sql`
+                  SELECT id FROM transactions_to_zains
+                  WHERE transaction_id = ${transactionId}
+                    AND id_program = ${idProgram}
+                    AND nominal_transaksi = ${nominalValue}
+                    AND tgl_transaksi = ${formatDateToYYYYMMDD(trxDate)}
+                  LIMIT 1
+                `) as any[]
+                const existing = existingRows[0]
+
+                if (!existing) {
+                  // Hanya isi id_rekening jika payment_method adalah QRIS
+                  const idRekening = paymentMethod && paymentMethod.toUpperCase().includes('QRIS') ? ID_REKENING : null
+                  
+                  await sql`
+                    INSERT INTO transactions_to_zains (
+                      transaction_id, id_transaksi, id_program, id_kantor, tgl_transaksi,
+                      id_donatur, nominal_transaksi, id_rekening, synced, todo_zains, nama_pasien, no_erm, created_at, updated_at
+                    )
+                    VALUES (
+                      ${transactionId},
+                      NULL,
+                      ${idProgram},
+                      ${ID_KANTOR_ZAINS},
+                      ${formatDateToYYYYMMDD(trxDate)},
+                      ${idDonatur},
+                      ${nominalValue},
+                      ${idRekening},
+                      false,
+                      ${todoZains},
+                      ${patientName},
+                      ${ermNo},
+                      NOW(),
+                      NOW()
+                    )
+                  `
+                  zainsInsertedCount++
+                  transactionZainsInsertedCount++
+                }
+              } else {
+                console.warn(`⚠️  Category "${field.category}" tidak memiliki id_program_zains atau id_kantor_zains tidak tersedia`)
               }
-            } else {
-              console.warn(`⚠️  Category "${field.category}" tidak memiliki id_program_zains atau id_kantor_zains tidak tersedia`)
             }
           }
         }
@@ -387,7 +398,7 @@ export async function POST(request: NextRequest) {
         const ermNoForZains = `${clinic_id}${ermNo}`
         const defaultIdDonaturZains = hasZainsTransaction ? null : `-${clinic_id}-${ermNoForZains}`
 
-        const [insertedPatient] = await sql`
+        const insertedPatientRows = (await sql`
           INSERT INTO patients (
             clinic_id, 
             erm_no, 
@@ -419,7 +430,8 @@ export async function POST(request: NextRequest) {
             erm_no_for_zains = EXCLUDED.erm_no_for_zains,
             updated_at = NOW()
           RETURNING id, visit_count
-        `
+        `) as any[]
+        const insertedPatient = insertedPatientRows[0]
 
         patientId = insertedPatient ? (insertedPatient as any).id : null
         patientVisitCount = insertedPatient ? (insertedPatient as any).visit_count : 0
@@ -458,10 +470,11 @@ export async function POST(request: NextRequest) {
               { patientId, transactionId },
             )
             if (!idDonatur) {
-              const [patientRow] = await sql`
+              const patientResultRows = (await sql`
                 SELECT id, clinic_id, erm_no, full_name, erm_no_for_zains, nik
                 FROM patients WHERE id = ${patientId} LIMIT 1
-              `
+              `) as any[]
+              const patientRow = patientResultRows[0]
               const patient = patientRow as any
               if (patient) {
                 const patientResult = await syncPatientToZains(patient)

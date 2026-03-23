@@ -5,12 +5,16 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Filter, Loader2 } from 'lucide-react'
+import { Filter, Loader2, Trash2 } from 'lucide-react'
 import { Pagination } from '@/components/ui/pagination'
 import { formatCurrency, formatDate } from '@/lib/db'
 import { TransaksiZainsSearch } from './transaksi-zains-search'
 import { toast } from 'sonner'
-import { syncDonaturForTransaction, syncTransactionsToZainsFromModal } from '@/lib/actions/transactions'
+import {
+  deleteTransaction,
+  syncDonaturForTransaction,
+  syncTransactionsToZainsFromModal,
+} from '@/lib/actions/transactions'
 import {
   AlertDialog,
   AlertDialogCancel,
@@ -53,6 +57,8 @@ export function TransaksiZainsClient({
   const [showFilter, setShowFilter] = useState(false)
   const [syncTarget, setSyncTarget] = useState<{ transactionId: number; trxNo?: string } | null>(null)
   const [isSyncing, setIsSyncing] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState<{ transactionId: number; trxNo?: string } | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
 
   const handlePageChange = (newPage: number) => {
     startTransition(() => {
@@ -109,6 +115,28 @@ export function TransaksiZainsClient({
     } finally {
       setIsSyncing(false)
       setSyncTarget(null)
+    }
+  }
+
+  const handleConfirmDelete = async () => {
+    if (!deleteTarget) return
+    setIsDeleting(true)
+    toast.loading('Menghapus transaksi...', { id: 'zains-delete' })
+    try {
+      const result = await deleteTransaction(deleteTarget.transactionId)
+      toast.dismiss('zains-delete')
+      if (!result.success) {
+        toast.error(result.error || 'Gagal menghapus transaksi')
+        return
+      }
+      toast.success('Transaksi berhasil dihapus')
+      router.refresh()
+    } catch (error) {
+      toast.dismiss('zains-delete')
+      toast.error(error instanceof Error ? error.message : 'Gagal menghapus transaksi')
+    } finally {
+      setIsDeleting(false)
+      setDeleteTarget(null)
     }
   }
 
@@ -296,24 +324,47 @@ export function TransaksiZainsClient({
                         )}
                       </td>
                       <td className="py-3 px-4 text-center">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="text-blue-600 border-blue-200"
-                          onClick={() =>
-                            setSyncTarget({
-                              transactionId: row.transaction_id,
-                              trxNo: row.trx_no,
-                            })
-                          }
-                          disabled={isPending || isSyncing}
-                        >
-                          {isSyncing && syncTarget?.transactionId === row.transaction_id ? (
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                          ) : (
-                            'Sync ke Zains'
-                          )}
-                        </Button>
+                        <div className="flex items-center justify-center gap-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="text-blue-600 border-blue-200"
+                            onClick={() =>
+                              setSyncTarget({
+                                transactionId: row.transaction_id,
+                                trxNo: row.trx_no,
+                              })
+                            }
+                            disabled={isPending || isSyncing || isDeleting}
+                          >
+                            {isSyncing && syncTarget?.transactionId === row.transaction_id ? (
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : (
+                              'Sync ke Zains'
+                            )}
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="text-red-600 border-red-200 hover:bg-red-50"
+                            onClick={() =>
+                              setDeleteTarget({
+                                transactionId: row.transaction_id,
+                                trxNo: row.trx_no,
+                              })
+                            }
+                            disabled={isPending || isSyncing || isDeleting}
+                          >
+                            {isDeleting && deleteTarget?.transactionId === row.transaction_id ? (
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : (
+                              <>
+                                <Trash2 className="w-4 h-4 mr-1" />
+                                Delete
+                              </>
+                            )}
+                          </Button>
+                        </div>
                       </td>
                     </tr>
                   )
@@ -366,6 +417,43 @@ export function TransaksiZainsClient({
                 </>
               ) : (
                 'Ya, Sync'
+              )}
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={!!deleteTarget}
+        onOpenChange={(open) => {
+          if (!open && !isDeleting) setDeleteTarget(null)
+        }}
+      >
+        <AlertDialogContent className="sm:max-w-md">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Hapus transaksi ini?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Transaksi{' '}
+              <strong>
+                {deleteTarget?.trxNo || (deleteTarget ? `TRX-${deleteTarget.transactionId}` : '-')}
+              </strong>{' '}
+              akan dihapus permanen beserta data terkait di Zains queue. Tindakan ini tidak bisa dibatalkan.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeleting}>Batal</AlertDialogCancel>
+            <Button
+              onClick={handleConfirmDelete}
+              disabled={isDeleting}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              {isDeleting ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Menghapus...
+                </>
+              ) : (
+                'Ya, Hapus'
               )}
             </Button>
           </AlertDialogFooter>

@@ -356,38 +356,40 @@ export async function POST(request: NextRequest) {
           let transactionZainsInsertedCount = 0
           const todoZains = await getZainsTransactionSyncEnabled()
   
-          for (const field of paidFields) {
-            if (field.value > 0) {
-              const idProgram = categoryMap[field.category]
-              if (idProgram && ID_KANTOR_ZAINS) {
-                const nominalValue = Math.round(field.value)
-                
-                const [existing] = (await sql`
-                  SELECT id FROM transactions_to_zains
-                  WHERE transaction_id = ${transactionId}
-                    AND id_program = ${idProgram}
-                    AND nominal_transaksi = ${nominalValue}
-                    AND tgl_transaksi = ${trxDateFormatted}
-                  LIMIT 1
-                `) as any[]
-  
-                if (!existing) {
-                  const isQris = paymentMethod && paymentMethod.toUpperCase().includes('QRIS')
-                  const idRekening = isQris ? ID_REKENING_QRIS : KODE_COA_NO_DOT
-  
-                  await sql`
-                    INSERT INTO transactions_to_zains (
-                      transaction_id, id_transaksi, id_program, id_kantor, tgl_transaksi,
-                      id_donatur, nominal_transaksi, id_rekening, synced, todo_zains, nama_pasien, no_erm, created_at, updated_at
-                    )
-                    VALUES (
-                      ${transactionId}, NULL, ${idProgram}, ${ID_KANTOR_ZAINS}, ${trxDateFormatted},
-                      ${idDonatur}, ${nominalValue}, ${idRekening}, false, ${todoZains},
-                      ${patientName}, ${ermNoForZains}, NOW(), NOW()
-                    )
-                  `
-                  zainsInsertedCount++
-                  transactionZainsInsertedCount++
+          if (paidTotal > 0) {
+            for (const field of paidFields) {
+              if (field.value > 0) {
+                const idProgram = categoryMap[field.category]
+                if (idProgram && ID_KANTOR_ZAINS) {
+                  const nominalValue = Math.round(field.value)
+                  
+                  const [existing] = (await sql`
+                    SELECT id FROM transactions_to_zains
+                    WHERE transaction_id = ${transactionId}
+                      AND id_program = ${idProgram}
+                      AND nominal_transaksi = ${nominalValue}
+                      AND tgl_transaksi = ${trxDateFormatted}
+                    LIMIT 1
+                  `) as any[]
+    
+                  if (!existing) {
+                    const isQris = paymentMethod && paymentMethod.toUpperCase().includes('QRIS')
+                    const idRekening = isQris ? ID_REKENING_QRIS : KODE_COA_NO_DOT
+    
+                    await sql`
+                      INSERT INTO transactions_to_zains (
+                        transaction_id, id_transaksi, id_program, id_kantor, tgl_transaksi,
+                        id_donatur, nominal_transaksi, id_rekening, synced, todo_zains, nama_pasien, no_erm, created_at, updated_at
+                      )
+                      VALUES (
+                        ${transactionId}, NULL, ${idProgram}, ${ID_KANTOR_ZAINS}, ${trxDateFormatted},
+                        ${idDonatur}, ${nominalValue}, ${idRekening}, false, ${todoZains},
+                        ${patientName}, ${ermNoForZains}, NOW(), NOW()
+                      )
+                    `
+                    zainsInsertedCount++
+                    transactionZainsInsertedCount++
+                  }
                 }
               }
             }
