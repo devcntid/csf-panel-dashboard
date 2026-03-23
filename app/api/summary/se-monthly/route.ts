@@ -1,8 +1,13 @@
-'use server'
-
 import { NextRequest, NextResponse } from 'next/server'
 import { sql } from '@/lib/db'
 import { getZainsApiConfig } from '@/lib/zains-api-config'
+import {
+  applyZainsFinsTotalsContactFilters,
+  parseCommaSeparatedIds,
+  resolveZainsFinsTotalsUrl,
+} from '@/lib/zains-fins-totals'
+
+export const dynamic = 'force-dynamic'
 
 type MonthlyItem = {
   month: number
@@ -16,6 +21,8 @@ async function fetchZainsMonthlyTotal(params: {
   year: number
   onlyCoaDebet: string[]
   onlyCoaKredit: string[]
+  onlyIdContact?: string[]
+  excludeIdContact?: string[]
   idKantor?: string
 }): Promise<{ monthly: MonthlyItem[]; grandTotal: { sum: number; count: number } }> {
   const { url } = getZainsApiConfig()
@@ -45,9 +52,18 @@ async function fetchZainsMonthlyTotal(params: {
     searchParams.set('id_kantor', params.idKantor.trim())
   }
 
-  const res = await fetch(`${url}/fins/totals?${searchParams.toString()}`, {
+  applyZainsFinsTotalsContactFilters(
+    searchParams,
+    params.onlyIdContact ?? [],
+    params.excludeIdContact ?? [],
+  )
+
+  const targetUrl = resolveZainsFinsTotalsUrl(url, searchParams)
+
+  const res = await fetch(targetUrl, {
     method: 'GET',
     cache: 'no-store',
+    next: { revalidate: 0 },
     headers: {
       'Content-Type': 'application/json',
       Authorization: apiKey,
@@ -153,7 +169,9 @@ export async function GET(req: NextRequest) {
         name,
         slug,
         coa_debet,
-        coa_kredit
+        coa_kredit,
+        only_id_contact,
+        exclude_id_contact
       FROM sources
       WHERE slug = 'se_klinik' OR name = 'SE Klinik'
       LIMIT 1
@@ -206,11 +224,16 @@ export async function GET(req: NextRequest) {
         ? String((clinicRow as any).id_kantor_zains).trim()
         : undefined
 
+    const onlyIdContact = parseCommaSeparatedIds((seSource as any).only_id_contact)
+    const excludeIdContact = parseCommaSeparatedIds((seSource as any).exclude_id_contact)
+
     const { monthly, grandTotal } = await fetchZainsMonthlyTotal({
       type: 'receipt',
       year,
       onlyCoaDebet: clinicCoaDebet,
       onlyCoaKredit: clinicCoaKredit,
+      onlyIdContact,
+      excludeIdContact,
       idKantor: idKantorZains,
     })
 

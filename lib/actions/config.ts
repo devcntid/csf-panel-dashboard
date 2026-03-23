@@ -90,6 +90,8 @@ export const getSources = cache(async () => {
         mode,
         coa_debet,
         coa_kredit,
+        only_id_contact,
+        exclude_id_contact,
         summary_order
       FROM sources
       ORDER BY COALESCE(summary_order, 9999), name

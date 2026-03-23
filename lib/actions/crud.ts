@@ -1338,11 +1338,13 @@ export async function createSource(data: {
   mode?: string | null
   coa_debet?: string | null
   coa_kredit?: string | null
+  only_id_contact?: string | null
+  exclude_id_contact?: string | null
   summary_order?: number | null
 }) {
   try {
     const result = await sql`
-      INSERT INTO sources (name, slug, category, mode, coa_debet, coa_kredit, summary_order)
+      INSERT INTO sources (name, slug, category, mode, coa_debet, coa_kredit, only_id_contact, exclude_id_contact, summary_order)
       VALUES (
         ${data.name},
         ${data.slug || null},
@@ -1350,6 +1352,8 @@ export async function createSource(data: {
         ${data.mode || null},
         ${data.coa_debet || null},
         ${data.coa_kredit || null},
+        ${data.only_id_contact || null},
+        ${data.exclude_id_contact || null},
         ${data.summary_order ?? null}
       )
       ON CONFLICT (name) DO NOTHING
@@ -1371,6 +1375,8 @@ export async function updateSource(id: number, data: {
   mode?: string | null
   coa_debet?: string | null
   coa_kredit?: string | null
+  only_id_contact?: string | null
+  exclude_id_contact?: string | null
   summary_order?: number | null
 }) {
   try {
@@ -1391,6 +1397,12 @@ export async function updateSource(id: number, data: {
     }
     if (data.coa_kredit !== undefined) {
       await sql`UPDATE sources SET coa_kredit = ${data.coa_kredit}, created_at = created_at WHERE id = ${id}`
+    }
+    if (data.only_id_contact !== undefined) {
+      await sql`UPDATE sources SET only_id_contact = ${data.only_id_contact}, created_at = created_at WHERE id = ${id}`
+    }
+    if (data.exclude_id_contact !== undefined) {
+      await sql`UPDATE sources SET exclude_id_contact = ${data.exclude_id_contact}, created_at = created_at WHERE id = ${id}`
     }
     if (data.summary_order !== undefined) {
       await sql`UPDATE sources SET summary_order = ${data.summary_order}, created_at = created_at WHERE id = ${id}`
