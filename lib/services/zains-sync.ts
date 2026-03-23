@@ -678,6 +678,7 @@ export async function getPendingTransactionsToZains(limit: number = 10): Promise
         AND tz.id_donatur != ''
         AND tz.synced = false
         AND tz.todo_zains = true
+        AND COALESCE(t.paid_total, 0) > 0
       ORDER BY tz.id ASC
       LIMIT ${limit}
     `
@@ -728,6 +729,7 @@ export async function getPendingTransactionsToZainsByTransactionId(
         AND tz.id_donatur != ''
         AND tz.synced = false
         AND tz.todo_zains = true
+        AND COALESCE(t.paid_total, 0) > 0
       ORDER BY tz.id ASC
     `
     return Array.isArray(rows) ? rows : []
