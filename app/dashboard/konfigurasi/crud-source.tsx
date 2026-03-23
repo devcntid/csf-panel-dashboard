@@ -26,6 +26,8 @@ export function CRUDSource({
     mode: '',
     coaDebet: '',
     coaKredit: '',
+    onlyIdContact: '',
+    excludeIdContact: '',
     summaryOrder: '',
   })
 
@@ -44,6 +46,8 @@ export function CRUDSource({
       mode: formData.mode.trim() || null,
       coa_debet: formData.coaDebet.trim() || null,
       coa_kredit: formData.coaKredit.trim() || null,
+      only_id_contact: formData.onlyIdContact.trim() || null,
+      exclude_id_contact: formData.excludeIdContact.trim() || null,
       summary_order: formData.summaryOrder ? Number(formData.summaryOrder) : null,
     }
     if (!payload.name) {
@@ -66,6 +70,8 @@ export function CRUDSource({
         mode: '',
         coaDebet: '',
         coaKredit: '',
+        onlyIdContact: '',
+        excludeIdContact: '',
         summaryOrder: '',
       })
       onRefresh()
@@ -83,6 +89,8 @@ export function CRUDSource({
       mode: source.mode || '',
       coaDebet: source.coa_debet || '',
       coaKredit: source.coa_kredit || '',
+      onlyIdContact: source.only_id_contact || '',
+      excludeIdContact: source.exclude_id_contact || '',
       summaryOrder: source.summary_order != null ? String(source.summary_order) : '',
     })
     setIsOpen(true)
@@ -127,6 +135,8 @@ export function CRUDSource({
                     mode: '',
                     coaDebet: '',
                     coaKredit: '',
+                    onlyIdContact: '',
+                    excludeIdContact: '',
                     summaryOrder: '',
                   })
                 }}
@@ -187,6 +197,22 @@ export function CRUDSource({
                     placeholder="Contoh: 401.04.002.020,401.04.002.021,..."
                   />
                 </div>
+                <div className="space-y-2 md:col-span-2">
+                  <Label>only_id_contact (Zains /fins/totals, pisahkan dengan koma)</Label>
+                  <Input
+                    value={formData.onlyIdContact}
+                    onChange={(e) => setFormData((prev) => ({ ...prev, onlyIdContact: e.target.value }))}
+                    placeholder="Contoh: id1,id2"
+                  />
+                </div>
+                <div className="space-y-2 md:col-span-2">
+                  <Label>exclude_id_contact (Zains /fins/totals, pisahkan dengan koma)</Label>
+                  <Input
+                    value={formData.excludeIdContact}
+                    onChange={(e) => setFormData((prev) => ({ ...prev, excludeIdContact: e.target.value }))}
+                    placeholder="Contoh: id3,id4"
+                  />
+                </div>
                 <div className="space-y-2">
                   <Label>Urutan Summary</Label>
                   <Input
@@ -231,6 +257,8 @@ export function CRUDSource({
                   <th className="text-left py-3 px-4 text-xs font-semibold text-slate-600">Mode</th>
                   <th className="text-left py-3 px-4 text-xs font-semibold text-slate-600">COA Debet</th>
                   <th className="text-left py-3 px-4 text-xs font-semibold text-slate-600">COA Kredit</th>
+                  <th className="text-left py-3 px-4 text-xs font-semibold text-slate-600">only_id_contact</th>
+                  <th className="text-left py-3 px-4 text-xs font-semibold text-slate-600">exclude_id_contact</th>
                   <th className="text-center py-3 px-4 text-xs font-semibold text-slate-600">Order</th>
                   <th className="text-center py-3 px-4 text-xs font-semibold text-slate-600">Aksi</th>
                 </tr>
@@ -238,7 +266,7 @@ export function CRUDSource({
               <tbody>
                 {sources.length === 0 ? (
                   <tr>
-                    <td colSpan={3} className="text-center py-8 text-slate-500">
+                    <td colSpan={11} className="text-center py-8 text-slate-500">
                       Tidak ada data
                     </td>
                   </tr>
@@ -258,6 +286,12 @@ export function CRUDSource({
                       </td>
                       <td className="py-3 px-4 text-xs text-slate-600 max-w-[220px] truncate" title={source.coa_kredit || ''}>
                         {source.coa_kredit || '-'}
+                      </td>
+                      <td className="py-3 px-4 text-xs text-slate-600 max-w-[160px] truncate" title={source.only_id_contact || ''}>
+                        {source.only_id_contact || '-'}
+                      </td>
+                      <td className="py-3 px-4 text-xs text-slate-600 max-w-[160px] truncate" title={source.exclude_id_contact || ''}>
+                        {source.exclude_id_contact || '-'}
                       </td>
                       <td className="py-3 px-4 text-xs text-center text-slate-600">
                         {source.summary_order ?? '-'}

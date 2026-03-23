@@ -155,6 +155,8 @@ CREATE TABLE clinic_insurance_mappings (
 CREATE TABLE sources (
     id BIGSERIAL PRIMARY KEY,
     name VARCHAR(100) NOT NULL UNIQUE,
+    only_id_contact TEXT,
+    exclude_id_contact TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 

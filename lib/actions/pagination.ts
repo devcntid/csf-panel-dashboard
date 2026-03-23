@@ -1032,163 +1032,71 @@ export const getDailyTargetsPaginated = cache(async (
   startDate?: string,
   endDate?: string,
   page: number = 1,
-  limit: number = 10
+  limit: number = 10,
+  targetMonth?: number,
+  targetYear?: number,
+  sourceId?: number,
+  donorType?: 'retail' | 'corporate' | 'community'
 ) => {
   try {
     const offset = (page - 1) * limit
-    
-    // Build query dengan kondisi dinamis - menggunakan parallel fetching
-    if (clinicId && polyId && startDate && endDate) {
-      const [targets, countResultRaw] = await Promise.all([
-        sql`
-          SELECT 
-            cdt.*,
-            c.name as clinic_name,
-            mp.name as poly_name,
-            s.name as source_name,
-            mit.name as insurance_type_name,
-            COALESCE(ctc.base_rate, 0) as base_rate
-          FROM clinic_daily_targets cdt
-          JOIN clinics c ON c.id = cdt.clinic_id
-          JOIN master_polies mp ON mp.id = cdt.master_poly_id
-          JOIN sources s ON s.id = cdt.source_id
-          LEFT JOIN master_insurance_types mit ON mit.id = cdt.insurance_type_id
-          LEFT JOIN clinic_target_configs ctc ON ctc.clinic_id = cdt.clinic_id
-            AND ctc.master_poly_id = cdt.master_poly_id
-            AND ctc.target_year = COALESCE(EXTRACT(YEAR FROM cdt.target_date), cdt.target_year)
-            AND ctc.is_active = true
-          WHERE cdt.clinic_id = ${clinicId} 
-            AND cdt.master_poly_id = ${polyId}
-            AND cdt.target_date >= ${startDate} 
-            AND cdt.target_date <= ${endDate}
-          ORDER BY cdt.id ASC
-          LIMIT ${limit} OFFSET ${offset}
-        `,
-        sql`
-          SELECT COUNT(*) as total
-          FROM clinic_daily_targets cdt
-          WHERE cdt.clinic_id = ${clinicId} 
-            AND cdt.master_poly_id = ${polyId}
-            AND cdt.target_date >= ${startDate} 
-            AND cdt.target_date <= ${endDate}
-        `
-      ])
-      const countResult = Array.isArray(countResultRaw) ? countResultRaw[0] : countResultRaw
-      return {
-        targets: Array.isArray(targets) ? targets : [],
-        total: Number((countResult as any)?.total || 0),
-        page,
-        limit,
-      }
-    } else if (clinicId && startDate && endDate) {
-      const [targets, countResultRaw] = await Promise.all([
-        sql`
-          SELECT 
-            cdt.*,
-            c.name as clinic_name,
-            mp.name as poly_name,
-            s.name as source_name,
-            mit.name as insurance_type_name,
-            COALESCE(ctc.base_rate, 0) as base_rate
-          FROM clinic_daily_targets cdt
-          JOIN clinics c ON c.id = cdt.clinic_id
-          JOIN master_polies mp ON mp.id = cdt.master_poly_id
-          JOIN sources s ON s.id = cdt.source_id
-          LEFT JOIN master_insurance_types mit ON mit.id = cdt.insurance_type_id
-          LEFT JOIN clinic_target_configs ctc ON ctc.clinic_id = cdt.clinic_id
-            AND ctc.master_poly_id = cdt.master_poly_id
-            AND ctc.target_year = COALESCE(EXTRACT(YEAR FROM cdt.target_date), cdt.target_year)
-            AND ctc.is_active = true
-          WHERE cdt.clinic_id = ${clinicId} 
-            AND cdt.target_date >= ${startDate} 
-            AND cdt.target_date <= ${endDate}
-          ORDER BY cdt.id ASC
-          LIMIT ${limit} OFFSET ${offset}
-        `,
-        sql`
-          SELECT COUNT(*) as total
-          FROM clinic_daily_targets cdt
-          WHERE cdt.clinic_id = ${clinicId} 
-            AND cdt.target_date >= ${startDate} 
-            AND cdt.target_date <= ${endDate}
-        `
-      ])
-      const countResult = Array.isArray(countResultRaw) ? countResultRaw[0] : countResultRaw
-      return {
-        targets: Array.isArray(targets) ? targets : [],
-        total: Number((countResult as any)?.total || 0),
-        page,
-        limit,
-      }
-    } else if (clinicId) {
-      const [targets, countResultRaw] = await Promise.all([
-        sql`
-          SELECT 
-            cdt.*,
-            c.name as clinic_name,
-            mp.name as poly_name,
-            s.name as source_name,
-            mit.name as insurance_type_name,
-            COALESCE(ctc.base_rate, 0) as base_rate
-          FROM clinic_daily_targets cdt
-          JOIN clinics c ON c.id = cdt.clinic_id
-          JOIN master_polies mp ON mp.id = cdt.master_poly_id
-          JOIN sources s ON s.id = cdt.source_id
-          LEFT JOIN master_insurance_types mit ON mit.id = cdt.insurance_type_id
-          LEFT JOIN clinic_target_configs ctc ON ctc.clinic_id = cdt.clinic_id
-            AND ctc.master_poly_id = cdt.master_poly_id
-            AND ctc.target_year = COALESCE(EXTRACT(YEAR FROM cdt.target_date), cdt.target_year)
-            AND ctc.is_active = true
-          WHERE cdt.clinic_id = ${clinicId}
-          ORDER BY cdt.id ASC
-          LIMIT ${limit} OFFSET ${offset}
-        `,
-        sql`
-          SELECT COUNT(*) as total
-          FROM clinic_daily_targets cdt
-          WHERE cdt.clinic_id = ${clinicId}
-        `
-      ])
-      const countResult = Array.isArray(countResultRaw) ? countResultRaw[0] : countResultRaw
-      return {
-        targets: Array.isArray(targets) ? targets : [],
-        total: Number((countResult as any)?.total || 0),
-        page,
-        limit,
-      }
-    } else {
-      const [targets, countResultRaw] = await Promise.all([
-        sql`
-          SELECT 
-            cdt.*,
-            c.name as clinic_name,
-            mp.name as poly_name,
-            s.name as source_name,
-            mit.name as insurance_type_name,
-            COALESCE(ctc.base_rate, 0) as base_rate
-          FROM clinic_daily_targets cdt
-          JOIN clinics c ON c.id = cdt.clinic_id
-          JOIN master_polies mp ON mp.id = cdt.master_poly_id
-          JOIN sources s ON s.id = cdt.source_id
-          LEFT JOIN master_insurance_types mit ON mit.id = cdt.insurance_type_id
-          LEFT JOIN clinic_target_configs ctc ON ctc.clinic_id = cdt.clinic_id
-            AND ctc.master_poly_id = cdt.master_poly_id
-            AND ctc.target_year = COALESCE(EXTRACT(YEAR FROM cdt.target_date), cdt.target_year)
-            AND ctc.is_active = true
-          ORDER BY cdt.id ASC
-          LIMIT ${limit} OFFSET ${offset}
-        `,
-        sql`
-          SELECT COUNT(*) as total FROM clinic_daily_targets
-        `
-      ])
-      const countResult = Array.isArray(countResultRaw) ? countResultRaw[0] : countResultRaw
-      return {
-        targets: Array.isArray(targets) ? targets : [],
-        total: Number((countResult as any)?.total || 0),
-        page,
-        limit,
-      }
+    const normalizedClinicId = clinicId != null && !Number.isNaN(clinicId) ? clinicId : null
+    const normalizedPolyId = polyId != null && !Number.isNaN(polyId) ? polyId : null
+    const normalizedSourceId = sourceId != null && !Number.isNaN(sourceId) ? sourceId : null
+    const normalizedStartDate = startDate && endDate ? startDate : null
+    const normalizedEndDate = startDate && endDate ? endDate : null
+    const normalizedMonth = targetMonth != null && !Number.isNaN(targetMonth) ? targetMonth : null
+    const normalizedYear = targetYear != null && !Number.isNaN(targetYear) ? targetYear : null
+    const normalizedDonorType = donorType || null
+
+    const [targets, countResultRaw] = await Promise.all([
+      sql`
+        SELECT 
+          cdt.*,
+          c.name as clinic_name,
+          mp.name as poly_name,
+          s.name as source_name,
+          mit.name as insurance_type_name,
+          COALESCE(ctc.base_rate, 0) as base_rate
+        FROM clinic_daily_targets cdt
+        JOIN clinics c ON c.id = cdt.clinic_id
+        LEFT JOIN master_polies mp ON mp.id = cdt.master_poly_id
+        JOIN sources s ON s.id = cdt.source_id
+        LEFT JOIN master_insurance_types mit ON mit.id = cdt.insurance_type_id
+        LEFT JOIN clinic_target_configs ctc ON ctc.clinic_id = cdt.clinic_id
+          AND ctc.master_poly_id = cdt.master_poly_id
+          AND ctc.target_year = COALESCE(EXTRACT(YEAR FROM cdt.target_date), cdt.target_year)
+          AND ctc.is_active = true
+        WHERE
+          (${normalizedClinicId}::int IS NULL OR cdt.clinic_id = ${normalizedClinicId})
+          AND (${normalizedPolyId}::int IS NULL OR cdt.master_poly_id = ${normalizedPolyId})
+          AND (${normalizedSourceId}::int IS NULL OR cdt.source_id = ${normalizedSourceId})
+          AND (${normalizedStartDate}::date IS NULL OR (cdt.target_date >= ${normalizedStartDate} AND cdt.target_date <= ${normalizedEndDate}))
+          AND (${normalizedMonth}::int IS NULL OR cdt.target_month = ${normalizedMonth})
+          AND (${normalizedYear}::int IS NULL OR cdt.target_year = ${normalizedYear})
+          AND (${normalizedDonorType}::text IS NULL OR cdt.tipe_donatur = ${normalizedDonorType})
+        ORDER BY cdt.id ASC
+        LIMIT ${limit} OFFSET ${offset}
+      `,
+      sql`
+        SELECT COUNT(*)::int as total
+        FROM clinic_daily_targets cdt
+        WHERE
+          (${normalizedClinicId}::int IS NULL OR cdt.clinic_id = ${normalizedClinicId})
+          AND (${normalizedPolyId}::int IS NULL OR cdt.master_poly_id = ${normalizedPolyId})
+          AND (${normalizedSourceId}::int IS NULL OR cdt.source_id = ${normalizedSourceId})
+          AND (${normalizedStartDate}::date IS NULL OR (cdt.target_date >= ${normalizedStartDate} AND cdt.target_date <= ${normalizedEndDate}))
+          AND (${normalizedMonth}::int IS NULL OR cdt.target_month = ${normalizedMonth})
+          AND (${normalizedYear}::int IS NULL OR cdt.target_year = ${normalizedYear})
+          AND (${normalizedDonorType}::text IS NULL OR cdt.tipe_donatur = ${normalizedDonorType})
+      `,
+    ])
+    const countResult = Array.isArray(countResultRaw) ? countResultRaw[0] : countResultRaw
+    return {
+      targets: Array.isArray(targets) ? targets : [],
+      total: Number((countResult as any)?.total || 0),
+      page,
+      limit,
     }
   } catch (error) {
     console.error('Error fetching daily targets:', error)

@@ -1,8 +1,13 @@
-'use server'
-
 import { NextRequest, NextResponse } from 'next/server'
 import { sql } from '@/lib/db'
 import { getZainsApiConfig } from '@/lib/zains-api-config'
+import {
+  applyZainsFinsTotalsContactFilters,
+  parseCommaSeparatedIds,
+  resolveZainsFinsTotalsUrl,
+} from '@/lib/zains-fins-totals'
+
+export const dynamic = 'force-dynamic'
 
 type MonthlyPoint = {
   month: number
@@ -44,6 +49,8 @@ async function fetchZainsMonthlySeries(params: {
   year: number
   onlyCoaDebet: string[]
   onlyCoaKredit: string[]
+  onlyIdContact?: string[]
+  excludeIdContact?: string[]
   idKantor?: string
 }): Promise<MonthlyPoint[]> {
   const { url } = getZainsApiConfig()
@@ -73,9 +80,18 @@ async function fetchZainsMonthlySeries(params: {
     searchParams.set('id_kantor', params.idKantor.trim())
   }
 
-  const res = await fetch(`${url}/fins/totals?${searchParams.toString()}`, {
+  applyZainsFinsTotalsContactFilters(
+    searchParams,
+    params.onlyIdContact ?? [],
+    params.excludeIdContact ?? [],
+  )
+
+  const targetUrl = resolveZainsFinsTotalsUrl(url, searchParams)
+
+  const res = await fetch(targetUrl, {
     method: 'GET',
     cache: 'no-store',
+    next: { revalidate: 0 },
     headers: {
       'Content-Type': 'application/json',
       Authorization: apiKey,
@@ -106,6 +122,26 @@ async function fetchZainsMonthlySeries(params: {
   }))
 }
 
+function netMonthlySeries(receipt: MonthlyPoint[], expend: MonthlyPoint[]): MonthlyPoint[] {
+  const rMap = new Map<number, number>()
+  for (const p of receipt) {
+    if (!p.month) continue
+    rMap.set(p.month, (rMap.get(p.month) || 0) + p.sum)
+  }
+  const eMap = new Map<number, number>()
+  for (const p of expend) {
+    if (!p.month) continue
+    eMap.set(p.month, (eMap.get(p.month) || 0) + p.sum)
+  }
+  const monthNums = new Set<number>([...rMap.keys(), ...eMap.keys()])
+  return Array.from(monthNums)
+    .sort((a, b) => a - b)
+    .map((m) => ({
+      month: m,
+      sum: (rMap.get(m) || 0) - (eMap.get(m) || 0),
+    }))
+}
+
 export async function GET(req: NextRequest) {
   try {
     const url = new URL(req.url)
@@ -123,6 +159,8 @@ export async function GET(req: NextRequest) {
         mode,
         coa_debet,
         coa_kredit,
+        only_id_contact,
+        exclude_id_contact,
         summary_order
       FROM sources
       ORDER BY COALESCE(summary_order, 9999), name
@@ -158,16 +196,22 @@ export async function GET(req: NextRequest) {
     const fundraisingDigitalSource = sourceRows.find(
       (s: any) => s.slug === 'fundraising_digital' || s.name === 'Fundraising Digital',
     ) as any
+    const penerimaanLainnyaSource = sourceRows.find(
+      (s: any) => s.slug === 'penerimaan_lainnya' || s.name === 'Penerimaan Lainnya',
+    ) as any
 
     type Task = {
       key: string
       label: string
       section: 'SE' | 'FUNDRAISING'
-      group: 'KLINIK' | 'AMBULAN' | 'FUNDRAISING'
+      group: 'KLINIK' | 'AMBULAN' | 'FUNDRAISING' | 'PENERIMAAN_LAINNYA'
       params: {
         type: string
+        subtractType?: string
         onlyCoaDebet: string[]
         onlyCoaKredit: string[]
+        onlyIdContact: string[]
+        excludeIdContact: string[]
         idKantorZains?: string
       }
     }
@@ -183,6 +227,9 @@ export async function GET(req: NextRequest) {
               .map((s) => s.trim())
               .filter(Boolean)
           : []
+
+      const clinicOnlyIdContact = parseCommaSeparatedIds(seClinicSource.only_id_contact)
+      const clinicExcludeIdContact = parseCommaSeparatedIds(seClinicSource.exclude_id_contact)
 
       for (const c of clinicRows as any[]) {
         if (c.include_in_se_summary === false) continue
@@ -221,8 +268,11 @@ export async function GET(req: NextRequest) {
           group: 'KLINIK',
           params: {
             type: 'receipt',
+            subtractType: 'expend',
             onlyCoaDebet: clinicCoaDebet,
             onlyCoaKredit: clinicCoaKredit,
+            onlyIdContact: clinicOnlyIdContact,
+            excludeIdContact: clinicExcludeIdContact,
             idKantorZains,
           },
         })
@@ -247,6 +297,9 @@ export async function GET(req: NextRequest) {
               .filter(Boolean)
           : []
 
+      const ambOnlyId = parseCommaSeparatedIds(seAmbulanceSource.only_id_contact)
+      const ambExcludeId = parseCommaSeparatedIds(seAmbulanceSource.exclude_id_contact)
+
       tasks.push({
         key: 'ambulance',
         label: 'TOTAL AMBULAN',
@@ -256,6 +309,8 @@ export async function GET(req: NextRequest) {
           type: 'receipt',
           onlyCoaDebet: debet,
           onlyCoaKredit: kredit,
+          onlyIdContact: ambOnlyId,
+          excludeIdContact: ambExcludeId,
         },
       })
     }
@@ -280,6 +335,9 @@ export async function GET(req: NextRequest) {
               .filter(Boolean)
           : []
 
+      const fpOnlyId = parseCommaSeparatedIds(fundraisingProjectSource.only_id_contact)
+      const fpExcludeId = parseCommaSeparatedIds(fundraisingProjectSource.exclude_id_contact)
+
       tasks.push({
         key: 'funding',
         label: 'Funding',
@@ -289,6 +347,8 @@ export async function GET(req: NextRequest) {
           type: 'receipt',
           onlyCoaDebet: debet,
           onlyCoaKredit: kredit,
+          onlyIdContact: fpOnlyId,
+          excludeIdContact: fpExcludeId,
         },
       })
     }
@@ -312,6 +372,9 @@ export async function GET(req: NextRequest) {
               .filter(Boolean)
           : []
 
+      const fdOnlyId = parseCommaSeparatedIds(fundraisingDigitalSource.only_id_contact)
+      const fdExcludeId = parseCommaSeparatedIds(fundraisingDigitalSource.exclude_id_contact)
+
       tasks.push({
         key: 'dm',
         label: 'DM',
@@ -321,6 +384,46 @@ export async function GET(req: NextRequest) {
           type: 'receipt',
           onlyCoaDebet: debet,
           onlyCoaKredit: kredit,
+          onlyIdContact: fdOnlyId,
+          excludeIdContact: fdExcludeId,
+        },
+      })
+    }
+
+    // === PENERIMAAN LAINNYA (konfigurasi dari sources) ===
+    if (penerimaanLainnyaSource) {
+      const debet =
+        typeof penerimaanLainnyaSource.coa_debet === 'string' &&
+        penerimaanLainnyaSource.coa_debet.trim().length > 0
+          ? String(penerimaanLainnyaSource.coa_debet)
+              .split(',')
+              .map((s) => s.trim())
+              .filter(Boolean)
+          : []
+
+      const kredit =
+        typeof penerimaanLainnyaSource.coa_kredit === 'string' &&
+        penerimaanLainnyaSource.coa_kredit.trim().length > 0
+          ? String(penerimaanLainnyaSource.coa_kredit)
+              .split(',')
+              .map((s) => s.trim())
+              .filter(Boolean)
+          : []
+
+      const plOnlyId = parseCommaSeparatedIds(penerimaanLainnyaSource.only_id_contact)
+      const plExcludeId = parseCommaSeparatedIds(penerimaanLainnyaSource.exclude_id_contact)
+
+      tasks.push({
+        key: 'penerimaan_lainnya',
+        label: 'PENERIMAAN LAINNYA',
+        section: 'FUNDRAISING',
+        group: 'PENERIMAAN_LAINNYA',
+        params: {
+          type: 'receipt',
+          onlyCoaDebet: debet,
+          onlyCoaKredit: kredit,
+          onlyIdContact: plOnlyId,
+          excludeIdContact: plExcludeId,
         },
       })
     }
@@ -328,13 +431,36 @@ export async function GET(req: NextRequest) {
     // Jalankan semua call ke Zains secara paralel
     const taskResults = await Promise.all(
       tasks.map(async (t) => {
-        const monthly = await fetchZainsMonthlySeries({
-          type: t.params.type,
+        const base = {
           year,
           onlyCoaDebet: t.params.onlyCoaDebet,
           onlyCoaKredit: t.params.onlyCoaKredit,
+          onlyIdContact: t.params.onlyIdContact,
+          excludeIdContact: t.params.excludeIdContact,
           idKantor: t.params.idKantorZains,
-        })
+        }
+        let monthly: MonthlyPoint[]
+        if (t.params.subtractType) {
+          // Expend di Zains memakai filter COA terbalik vs receipt (debet/kredit ditukar).
+          const [receiptPts, expendPts] = await Promise.all([
+            fetchZainsMonthlySeries({ ...base, type: t.params.type }),
+            fetchZainsMonthlySeries({
+              year,
+              onlyCoaDebet: t.params.onlyCoaKredit,
+              onlyCoaKredit: t.params.onlyCoaDebet,
+              onlyIdContact: t.params.onlyIdContact,
+              excludeIdContact: t.params.excludeIdContact,
+              idKantor: t.params.idKantorZains,
+              type: t.params.subtractType,
+            }),
+          ])
+          monthly = netMonthlySeries(receiptPts, expendPts)
+        } else {
+          monthly = await fetchZainsMonthlySeries({
+            ...base,
+            type: t.params.type,
+          })
+        }
         return { ...t, monthly }
       }),
     )
@@ -343,7 +469,8 @@ export async function GET(req: NextRequest) {
     const monthSet = new Set<number>()
     for (const r of taskResults) {
       for (const p of r.monthly) {
-        if (p.month && p.sum) {
+        if (!p.month) continue
+        if (p.sum !== 0 || r.params.subtractType || r.group === 'PENERIMAAN_LAINNYA') {
           monthSet.add(p.month)
         }
       }
@@ -367,6 +494,7 @@ export async function GET(req: NextRequest) {
     const klinikRows: { label: string; monthly: MonthlyPoint[] }[] = []
     const ambulanRows: { label: string; monthly: MonthlyPoint[] }[] = []
     const fundraisingRows: { label: string; monthly: MonthlyPoint[] }[] = []
+    let penerimaanLainnyaMonthly: MonthlyPoint[] | null = null
 
     for (const r of taskResults) {
       const vector = toMonthlyVector(r.monthly)
@@ -374,8 +502,10 @@ export async function GET(req: NextRequest) {
         klinikRows.push({ label: r.label, monthly: vector })
       } else if (r.section === 'SE' && r.group === 'AMBULAN') {
         ambulanRows.push({ label: r.label, monthly: vector })
-      } else if (r.section === 'FUNDRAISING') {
+      } else if (r.section === 'FUNDRAISING' && r.group === 'FUNDRAISING') {
         fundraisingRows.push({ label: r.label, monthly: vector })
+      } else if (r.section === 'FUNDRAISING' && r.group === 'PENERIMAAN_LAINNYA') {
+        penerimaanLainnyaMonthly = r.monthly
       }
     }
 
@@ -394,7 +524,9 @@ export async function GET(req: NextRequest) {
     const totalAmbulanVector = sumVectors(ambulanRows.map((r) => r.monthly))
     const totalSEVector = sumVectors([totalKlinikVector, totalAmbulanVector])
     const totalFundraisingVector = sumVectors(fundraisingRows.map((r) => r.monthly))
-    const penerimaanLainnyaVector = months.map((m) => ({ month: m, sum: 0 }))
+    const penerimaanLainnyaVector = penerimaanLainnyaMonthly
+      ? toMonthlyVector(penerimaanLainnyaMonthly)
+      : months.map((m) => ({ month: m, sum: 0 }))
     const grandTotalVector = sumVectors([totalSEVector, totalFundraisingVector, penerimaanLainnyaVector])
 
     const sections: PivotSection[] = [

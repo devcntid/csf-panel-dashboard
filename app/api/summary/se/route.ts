@@ -1,8 +1,13 @@
-'use server'
-
 import { NextRequest, NextResponse } from 'next/server'
 import { sql } from '@/lib/db'
 import { getZainsApiConfig } from '@/lib/zains-api-config'
+import {
+  applyZainsFinsTotalsContactFilters,
+  parseCommaSeparatedIds,
+  resolveZainsFinsTotalsUrl,
+} from '@/lib/zains-fins-totals'
+
+export const dynamic = 'force-dynamic'
 
 type SummaryRow = {
   label: string
@@ -57,6 +62,8 @@ async function fetchZainsTotal(params: {
   tgl_akhir: string
   onlyCoaDebet: string[]
   onlyCoaKredit: string[]
+  onlyIdContact?: string[]
+  excludeIdContact?: string[]
   year?: number
   month?: number | null
   idKantor?: string
@@ -97,9 +104,18 @@ async function fetchZainsTotal(params: {
     searchParams.set('id_kantor', params.idKantor.trim())
   }
 
-  const res = await fetch(`${url}/fins/totals?${searchParams.toString()}`, {
+  applyZainsFinsTotalsContactFilters(
+    searchParams,
+    params.onlyIdContact ?? [],
+    params.excludeIdContact ?? [],
+  )
+
+  const targetUrl = resolveZainsFinsTotalsUrl(url, searchParams)
+
+  const res = await fetch(targetUrl, {
     method: 'GET',
     cache: 'no-store',
+    next: { revalidate: 0 },
     headers: {
       'Content-Type': 'application/json',
       Authorization: apiKey,
@@ -166,6 +182,8 @@ export async function GET(req: NextRequest) {
         mode,
         coa_debet,
         coa_kredit,
+        only_id_contact,
+        exclude_id_contact,
         summary_order
       FROM sources
       ORDER BY COALESCE(summary_order, 9999), name
@@ -199,16 +217,21 @@ export async function GET(req: NextRequest) {
     const fundraisingDigitalSource = sourceRows.find(
       (s: any) => s.slug === 'fundraising_digital' || s.name === 'Fundraising Digital',
     )
+    const penerimaanLainnyaSource = sourceRows.find(
+      (s: any) => s.slug === 'penerimaan_lainnya' || s.name === 'Penerimaan Lainnya',
+    )
 
     const tasks: Array<{
       key: string
       label: string
       section: 'SE' | 'FUNDRAISING'
-      group: 'KLINIK' | 'AMBULAN' | 'FUNDRAISING'
+      group: 'KLINIK' | 'AMBULAN' | 'FUNDRAISING' | 'PENERIMAAN_LAINNYA'
       params: {
         type: string
         onlyCoaDebet: string[]
         onlyCoaKredit: string[]
+        onlyIdContact: string[]
+        excludeIdContact: string[]
         idKantorZains?: string
       }
     }> = []
@@ -222,6 +245,9 @@ export async function GET(req: NextRequest) {
               .map((s) => s.trim())
               .filter(Boolean)
           : []
+
+      const clinicOnlyIdContact = parseCommaSeparatedIds((seClinicSource as any).only_id_contact)
+      const clinicExcludeIdContact = parseCommaSeparatedIds((seClinicSource as any).exclude_id_contact)
 
       for (const c of clinicRows) {
         if (c.include_in_se_summary === false) continue
@@ -267,6 +293,8 @@ export async function GET(req: NextRequest) {
             type: 'receipt',
             onlyCoaDebet: clinicCoaDebet,
             onlyCoaKredit: clinicCoaKredit,
+            onlyIdContact: clinicOnlyIdContact,
+            excludeIdContact: clinicExcludeIdContact,
             idKantorZains,
           },
         })
@@ -291,6 +319,9 @@ export async function GET(req: NextRequest) {
               .filter(Boolean)
           : []
 
+      const ambOnlyId = parseCommaSeparatedIds((seAmbulanceSource as any).only_id_contact)
+      const ambExcludeId = parseCommaSeparatedIds((seAmbulanceSource as any).exclude_id_contact)
+
       tasks.push({
         key: 'ambulance',
         label: 'TOTAL AMBULAN',
@@ -300,6 +331,8 @@ export async function GET(req: NextRequest) {
           type: 'receipt',
           onlyCoaDebet: debet,
           onlyCoaKredit: kredit,
+          onlyIdContact: ambOnlyId,
+          excludeIdContact: ambExcludeId,
         },
       })
     }
@@ -324,6 +357,9 @@ export async function GET(req: NextRequest) {
               .filter(Boolean)
           : []
 
+      const fpOnlyId = parseCommaSeparatedIds((fundraisingProjectSource as any).only_id_contact)
+      const fpExcludeId = parseCommaSeparatedIds((fundraisingProjectSource as any).exclude_id_contact)
+
       tasks.push({
         key: 'funding',
         label: 'Funding',
@@ -333,6 +369,8 @@ export async function GET(req: NextRequest) {
           type: 'receipt',
           onlyCoaDebet: debet,
           onlyCoaKredit: kredit,
+          onlyIdContact: fpOnlyId,
+          excludeIdContact: fpExcludeId,
         },
       })
     }
@@ -356,6 +394,9 @@ export async function GET(req: NextRequest) {
               .filter(Boolean)
           : []
 
+      const fdOnlyId = parseCommaSeparatedIds((fundraisingDigitalSource as any).only_id_contact)
+      const fdExcludeId = parseCommaSeparatedIds((fundraisingDigitalSource as any).exclude_id_contact)
+
       tasks.push({
         key: 'dm',
         label: 'DM',
@@ -365,6 +406,45 @@ export async function GET(req: NextRequest) {
           type: 'receipt',
           onlyCoaDebet: debet,
           onlyCoaKredit: kredit,
+          onlyIdContact: fdOnlyId,
+          excludeIdContact: fdExcludeId,
+        },
+      })
+    }
+
+    if (penerimaanLainnyaSource) {
+      const debet =
+        typeof (penerimaanLainnyaSource as any).coa_debet === 'string' &&
+        (penerimaanLainnyaSource as any).coa_debet.trim().length > 0
+          ? String((penerimaanLainnyaSource as any).coa_debet)
+              .split(',')
+              .map((s) => s.trim())
+              .filter(Boolean)
+          : []
+
+      const kredit =
+        typeof (penerimaanLainnyaSource as any).coa_kredit === 'string' &&
+        (penerimaanLainnyaSource as any).coa_kredit.trim().length > 0
+          ? String((penerimaanLainnyaSource as any).coa_kredit)
+              .split(',')
+              .map((s) => s.trim())
+              .filter(Boolean)
+          : []
+
+      const plOnlyId = parseCommaSeparatedIds((penerimaanLainnyaSource as any).only_id_contact)
+      const plExcludeId = parseCommaSeparatedIds((penerimaanLainnyaSource as any).exclude_id_contact)
+
+      tasks.push({
+        key: 'penerimaan_lainnya',
+        label: 'PENERIMAAN LAINNYA',
+        section: 'FUNDRAISING',
+        group: 'PENERIMAAN_LAINNYA',
+        params: {
+          type: 'receipt',
+          onlyCoaDebet: debet,
+          onlyCoaKredit: kredit,
+          onlyIdContact: plOnlyId,
+          excludeIdContact: plExcludeId,
         },
       })
     }
@@ -378,6 +458,8 @@ export async function GET(req: NextRequest) {
           tgl_akhir,
           onlyCoaDebet: t.params.onlyCoaDebet,
           onlyCoaKredit: t.params.onlyCoaKredit,
+          onlyIdContact: t.params.onlyIdContact,
+          excludeIdContact: t.params.excludeIdContact,
           year,
           month,
           idKantor: t.params.idKantorZains,
@@ -404,8 +486,8 @@ export async function GET(req: NextRequest) {
 
     const totalSE = totalKlinik + totalAmbulan
 
-    // Placeholder: penerimaan lainnya bisa diisi nanti
-    const penerimaanLainnya = 0
+    const penerimaanLainnyaRow = results.find((r) => r.group === 'PENERIMAAN_LAINNYA')
+    const penerimaanLainnya = penerimaanLainnyaRow?.sum ?? 0
     const grandTotal = totalSE + totalFundraising + penerimaanLainnya
 
     const sections: SectionSummary[] = [

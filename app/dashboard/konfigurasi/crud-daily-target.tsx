@@ -26,6 +26,22 @@ import { formatCurrency, formatDate } from '@/lib/db'
 import { Pagination } from '@/components/ui/pagination'
 import { toast } from 'sonner'
 
+const TIPE_DONATUR_LABEL: Record<string, string> = {
+  retail: 'Retail',
+  corporate: 'Corporate',
+  community: 'Community',
+}
+
+const YEAR_OPTIONS = Array.from({ length: 11 }, (_, idx) => {
+  const year = new Date().getFullYear() - idx
+  return { value: String(year), label: String(year) }
+})
+
+function displayTipeDonatur(v: string | null | undefined) {
+  if (v == null || v === '') return '-'
+  return TIPE_DONATUR_LABEL[v] ?? v
+}
+
 export function CRUDDailyTarget({ 
   onRefresh,
   initialData,
@@ -57,8 +73,11 @@ export function CRUDDailyTarget({
     clinic_id: '',
     poly_id: '',
     source_id: '',
+    tipe_donatur: '',
     start_date: '',
     end_date: '',
+    target_month: '',
+    target_year: '',
   })
   const [formData, setFormData] = useState({
     clinic_id: '',
@@ -85,7 +104,11 @@ export function CRUDDailyTarget({
           filters.start_date || undefined,
           filters.end_date || undefined,
           page,
-          limit
+          limit,
+          filters.target_month ? parseInt(filters.target_month, 10) : undefined,
+          filters.target_year ? parseInt(filters.target_year, 10) : undefined,
+          filters.source_id ? parseInt(filters.source_id, 10) : undefined,
+          filters.tipe_donatur ? (filters.tipe_donatur as 'retail' | 'corporate' | 'community') : undefined
         ),
         getMasterPolies(),
         getAllClinics(),
@@ -112,7 +135,7 @@ export function CRUDDailyTarget({
     if (initialPolies) setPolies(initialPolies)
     if (initialClinics) setClinics(initialClinics)
     if (initialSources) setSources(initialSources)
-  }, [page, limit, filters.clinic_id, filters.poly_id, filters.source_id, filters.start_date, filters.end_date])
+  }, [page, limit, filters.clinic_id, filters.poly_id, filters.source_id, filters.tipe_donatur, filters.start_date, filters.end_date, filters.target_month, filters.target_year])
 
   // Load base rate when clinic, poly, or year changes
   useEffect(() => {
@@ -298,13 +321,27 @@ export function CRUDDailyTarget({
       clinic_id: '',
       poly_id: '',
       source_id: '',
+      tipe_donatur: '',
       start_date: '',
       end_date: '',
+      target_month: '',
+      target_year: '',
     })
     setPage(1)
   }
 
-  const hasActiveFilters = filters.clinic_id || filters.poly_id || filters.source_id || filters.start_date || filters.end_date
+  const hasActiveFilters =
+    filters.clinic_id ||
+    filters.poly_id ||
+    filters.source_id ||
+    filters.tipe_donatur ||
+    filters.start_date ||
+    filters.end_date ||
+    filters.target_month ||
+    filters.target_year
+
+  const grandTotalVisits = targets.reduce((sum, target) => sum + (Number(target.target_visits) || 0), 0)
+  const grandTotalRevenue = targets.reduce((sum, target) => sum + (Number(target.target_revenue) || 0), 0)
 
   const handleDownloadTemplate = async () => {
     try {
@@ -465,7 +502,7 @@ export function CRUDDailyTarget({
             </div>
           </CardHeader>
           <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-8 gap-4">
               <div className="space-y-2">
                 <Label>Filter by Klinik</Label>
                 <Select
@@ -554,6 +591,70 @@ export function CRUDDailyTarget({
                   }}
                 />
               </div>
+              <div className="space-y-2">
+                <Label>Bulan</Label>
+                <Select
+                  value={filters.target_month || 'all'}
+                  onValueChange={(value) => {
+                    setFilters({ ...filters, target_month: value === 'all' ? '' : value })
+                    setPage(1)
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Semua bulan" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Semua bulan</SelectItem>
+                    {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
+                      <SelectItem key={m} value={String(m)}>
+                        {new Date(2000, m - 1).toLocaleString('id-ID', { month: 'long' })}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Tahun</Label>
+                <Select
+                  value={filters.target_year || 'all'}
+                  onValueChange={(value) => {
+                    setFilters({ ...filters, target_year: value === 'all' ? '' : value })
+                    setPage(1)
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Semua tahun" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Semua tahun</SelectItem>
+                    {YEAR_OPTIONS.map((year) => (
+                      <SelectItem key={year.value} value={year.value}>
+                        {year.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Tipe Donatur</Label>
+                <Select
+                  value={filters.tipe_donatur || 'all'}
+                  onValueChange={(value) => {
+                    setFilters({ ...filters, tipe_donatur: value === 'all' ? '' : value })
+                    setPage(1)
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Semua donatur" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Semua donatur</SelectItem>
+                    <SelectItem value="retail">Retail</SelectItem>
+                    <SelectItem value="corporate">Corporate</SelectItem>
+                    <SelectItem value="community">Community</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -571,6 +672,7 @@ export function CRUDDailyTarget({
                   clinic_id: '',
                   master_poly_id: '',
                   source_id: '',
+                  insurance_type_id: '',
                   target_type: 'daily',
                   target_date: new Date().toISOString().split('T')[0],
                   target_month: new Date().getMonth() + 1,
@@ -742,15 +844,23 @@ export function CRUDDailyTarget({
                 </div>
                 <div className="space-y-2">
                   <Label>Tahun *</Label>
-                  <Input
-                    type="number"
+                  <Select
                     required
-                    min="2000"
-                    max="2100"
-                    value={formData.target_year}
-                    onChange={(e) => setFormData(prev => ({ ...prev, target_year: parseInt(e.target.value) || new Date().getFullYear() }))}
+                    value={String(formData.target_year)}
+                    onValueChange={(value) => setFormData(prev => ({ ...prev, target_year: parseInt(value, 10) }))}
                     disabled={!!editingId}
-                  />
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Pilih Tahun" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {YEAR_OPTIONS.map((year) => (
+                        <SelectItem key={year.value} value={year.value}>
+                          {year.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div className="space-y-2">
                   <Label>Tarif (Rp) *</Label>
@@ -834,12 +944,13 @@ export function CRUDDailyTarget({
               <CardContent className="p-4">
                 <div className="flex justify-between items-start">
                   <div className="flex-1">
-                    <h4 className="font-semibold">{target.clinic_name} - {target.poly_name}</h4>
+                    <h4 className="font-semibold">{target.clinic_name} - {target.poly_name || '-'}</h4>
                     <p className="text-sm text-slate-500 mt-1">{formatDate(target.target_date)}</p>
                     <div className="flex gap-2 mt-2 flex-wrap">
                       {target.insurance_type_name && (
                         <Badge variant="outline">{target.insurance_type_name}</Badge>
                       )}
+                      <Badge variant="outline">Donatur: {displayTipeDonatur(target.tipe_donatur)}</Badge>
                       <Badge variant="outline">Tarif: {formatCurrency(target.base_rate || 0)}</Badge>
                       <Badge variant="outline">Kunjungan: {target.target_visits || 0}</Badge>
                       <Badge variant="outline">Pendapatan: {formatCurrency(target.target_revenue)}</Badge>
@@ -874,6 +985,7 @@ export function CRUDDailyTarget({
                     <th className="text-left py-3 px-4 text-xs font-semibold text-slate-600">Source</th>
                     <th className="text-left py-3 px-4 text-xs font-semibold text-slate-600">Insurance Type</th>
                     <th className="text-left py-3 px-4 text-xs font-semibold text-slate-600">Tipe</th>
+                    <th className="text-left py-3 px-4 text-xs font-semibold text-slate-600">Tipe Donatur</th>
                     <th className="text-left py-3 px-4 text-xs font-semibold text-slate-600">Tanggal/Bulan/Tahun</th>
                     <th className="text-right py-3 px-4 text-xs font-semibold text-slate-600">Tarif</th>
                     <th className="text-right py-3 px-4 text-xs font-semibold text-slate-600">Target Kunjungan</th>
@@ -884,7 +996,7 @@ export function CRUDDailyTarget({
                 <tbody>
                   {targets.length === 0 && !loading ? (
                     <tr>
-                      <td colSpan={9} className="text-center py-8 text-slate-500">Tidak ada data</td>
+                      <td colSpan={12} className="text-center py-8 text-slate-500">Tidak ada data</td>
                     </tr>
                   ) : (
                     targets.map((target, index) => {
@@ -904,6 +1016,7 @@ export function CRUDDailyTarget({
                               {target.target_type === 'daily' ? 'Harian' : 'Kumulatif'}
                             </Badge>
                           </td>
+                          <td className="py-3 px-4 text-sm text-slate-600">{displayTipeDonatur(target.tipe_donatur)}</td>
                           <td className="py-3 px-4 text-sm text-slate-600">{dateDisplay}</td>
                         <td className="py-3 px-4 text-sm text-right font-medium text-slate-800">{formatCurrency(target.base_rate || 0)}</td>
                         <td className="py-3 px-4 text-sm text-right font-medium text-slate-800">{target.target_visits || 0}</td>
@@ -925,6 +1038,20 @@ export function CRUDDailyTarget({
                     })
                   )}
                 </tbody>
+                <tfoot>
+                  <tr className="border-t-2 border-slate-300 bg-slate-50">
+                    <td colSpan={9} className="py-3 px-4 text-sm font-semibold text-right text-slate-700">
+                      Grand Total (Halaman Ini)
+                    </td>
+                    <td className="py-3 px-4 text-sm text-right font-semibold text-slate-800">
+                      {grandTotalVisits}
+                    </td>
+                    <td className="py-3 px-4 text-sm text-right font-semibold text-slate-800">
+                      {formatCurrency(grandTotalRevenue)}
+                    </td>
+                    <td className="py-3 px-4" />
+                  </tr>
+                </tfoot>
               </table>
             </div>
             
