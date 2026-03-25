@@ -324,6 +324,7 @@ export async function POST(request: NextRequest) {
   
           const usePaidDiscountForTindakanOnly = allBillDiscountsEmpty && paidDiscount > 0
   
+          // Jika ada bill_*_discount terisi: paid_* sudah neto — jangan kurangi lagi (double diskon).
           const paidFields = usePaidDiscountForTindakanOnly
             ? [
                 { key: 'Jumlah Pembayaran ( Rp. ) - Karcis', category: 'Karcis', value: paidRegist },
@@ -336,13 +337,13 @@ export async function POST(request: NextRequest) {
                 { key: 'Jumlah Pembayaran ( Rp. ) - Pembulatan', category: 'Pembulatan', value: paidRounding },
               ]
             : [
-                { key: 'Jumlah Pembayaran ( Rp. ) - Karcis', category: 'Karcis', value: Math.max(0, paidRegist - billRegistDiscount) },
-                { key: 'Jumlah Pembayaran ( Rp. ) - Tindakan', category: 'Tindakan', value: Math.max(0, paidAction - billActionDiscount) },
-                { key: 'Jumlah Pembayaran ( Rp. ) - Laboratorium', category: 'Laboratorium', value: Math.max(0, paidLab - billLabDiscount) },
-                { key: 'Jumlah Pembayaran ( Rp. ) - Obat', category: 'Obat-obatan', value: Math.max(0, paidDrug - billDrugDiscount) },
-                { key: 'Jumlah Pembayaran ( Rp. ) - Alkes', category: 'Alat Kesehatan', value: Math.max(0, paidAlkes - billAlkesDiscount) },
-                { key: 'Jumlah Pembayaran ( Rp. ) - MCU', category: 'MCU', value: Math.max(0, paidMcu - billMcuDiscount) },
-                { key: 'Jumlah Pembayaran ( Rp. ) - Radiologi', category: 'Radiologi', value: Math.max(0, paidRadio - billRadioDiscount) },
+                { key: 'Jumlah Pembayaran ( Rp. ) - Karcis', category: 'Karcis', value: paidRegist },
+                { key: 'Jumlah Pembayaran ( Rp. ) - Tindakan', category: 'Tindakan', value: paidAction },
+                { key: 'Jumlah Pembayaran ( Rp. ) - Laboratorium', category: 'Laboratorium', value: paidLab },
+                { key: 'Jumlah Pembayaran ( Rp. ) - Obat', category: 'Obat-obatan', value: paidDrug },
+                { key: 'Jumlah Pembayaran ( Rp. ) - Alkes', category: 'Alat Kesehatan', value: paidAlkes },
+                { key: 'Jumlah Pembayaran ( Rp. ) - MCU', category: 'MCU', value: paidMcu },
+                { key: 'Jumlah Pembayaran ( Rp. ) - Radiologi', category: 'Radiologi', value: paidRadio },
                 { key: 'Jumlah Pembayaran ( Rp. ) - Pembulatan', category: 'Pembulatan', value: paidRounding },
               ]
   
