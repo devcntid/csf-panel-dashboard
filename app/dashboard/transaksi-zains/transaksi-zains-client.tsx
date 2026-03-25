@@ -57,6 +57,7 @@ export function TransaksiZainsClient({
   const [showFilter, setShowFilter] = useState(false)
   const [syncTarget, setSyncTarget] = useState<{ transactionId: number; trxNo?: string } | null>(null)
   const [isSyncing, setIsSyncing] = useState(false)
+  const [isGlobalSyncing, setIsGlobalSyncing] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<{ transactionId: number; trxNo?: string } | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
 
@@ -78,6 +79,59 @@ export function TransaksiZainsClient({
   }
 
   const readonlyClinicId = role === 'clinic_manager' ? clinicId ?? undefined : undefined
+  const canRunGlobalSync = role === 'super_admin'
+
+  const handleGlobalSync = async () => {
+    if (!canRunGlobalSync) {
+      toast.error('Akses ditolak')
+      return
+    }
+    if (isGlobalSyncing || isSyncing || isDeleting || isPending) return
+
+    setIsGlobalSyncing(true)
+    toast.loading('Sync global dimulai...', { id: 'zains-global-sync' })
+    try {
+      const r = await fetch('/api/zains-sync/manual', { method: 'POST' })
+      const j = await r.json().catch(() => ({}))
+      if (!r.ok) {
+        throw new Error(j?.error || `HTTP ${r.status}`)
+      }
+      if (j?.started === false && j?.reason === 'already_running') {
+        toast.info('Sync global sedang berjalan (sudah ada proses yang aktif).', { id: 'zains-global-sync' })
+        return
+      }
+      const jobId = String(j?.jobId || '')
+      if (!jobId) {
+        throw new Error('jobId tidak ditemukan')
+      }
+
+      toast.loading('Sync global berjalan di background...', { id: 'zains-global-sync' })
+
+      // Poll status sampai selesai (max ~5 menit)
+      const startedAt = Date.now()
+      while (Date.now() - startedAt < 5 * 60 * 1000) {
+        await new Promise((res) => setTimeout(res, 2500))
+        const sr = await fetch(`/api/zains-sync/manual?jobId=${encodeURIComponent(jobId)}`, { method: 'GET' })
+        const sj = await sr.json().catch(() => ({}))
+        const status = String(sj?.status || 'unknown')
+        if (status === 'success') {
+          toast.success('Sync global selesai.', { id: 'zains-global-sync' })
+          router.refresh()
+          return
+        }
+        if (status === 'error') {
+          toast.error(sj?.message || 'Sync global gagal.', { id: 'zains-global-sync' })
+          return
+        }
+      }
+
+      toast.info('Sync global masih berjalan. Silakan cek lagi beberapa saat.', { id: 'zains-global-sync' })
+    } catch (e: any) {
+      toast.error(e?.message || 'Gagal memulai sync global', { id: 'zains-global-sync' })
+    } finally {
+      setIsGlobalSyncing(false)
+    }
+  }
 
   const handleConfirmSync = async () => {
     if (!syncTarget) return
@@ -151,6 +205,23 @@ export function TransaksiZainsClient({
             </p>
           </div>
           <div className="flex items-center gap-3">
+            {canRunGlobalSync && (
+              <Button
+                variant="default"
+                className="bg-teal-600 hover:bg-teal-700"
+                onClick={handleGlobalSync}
+                disabled={isPending || isSyncing || isDeleting || isGlobalSyncing}
+              >
+                {isGlobalSyncing ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Sync Global...
+                  </>
+                ) : (
+                  'Sync Global'
+                )}
+              </Button>
+            )}
             <Button
               variant="outline"
               className={`border-slate-300 bg-transparent ${showFilter ? 'bg-teal-50 border-teal-300' : ''}`}
