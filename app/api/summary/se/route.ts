@@ -1,11 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { sql } from '@/lib/db'
-import { getZainsApiConfig } from '@/lib/zains-api-config'
 import {
   applyZainsFinsTotalsContactFilters,
   parseCommaSeparatedIds,
-  resolveZainsFinsTotalsUrl,
 } from '@/lib/zains-fins-totals'
+import { queryFinsTotals } from '@/lib/fins-totals'
 
 export const dynamic = 'force-dynamic'
 
@@ -68,15 +67,6 @@ async function fetchZainsTotal(params: {
   month?: number | null
   idKantor?: string
 }): Promise<number> {
-  const { url } = getZainsApiConfig()
-  const apiKey = process.env.API_KEY_ZAINS
-  if (!url) {
-    throw new Error('URL_API_ZAINS belum dikonfigurasi')
-  }
-  if (!apiKey) {
-    throw new Error('API_KEY_ZAINS tidak dikonfigurasi')
-  }
-
   const useMonthlyGrouping = params.year != null && params.month != null
 
   const searchParams = new URLSearchParams()
@@ -110,27 +100,22 @@ async function fetchZainsTotal(params: {
     params.excludeIdContact ?? [],
   )
 
-  const targetUrl = resolveZainsFinsTotalsUrl(url, searchParams)
-
-  const res = await fetch(targetUrl, {
-    method: 'GET',
-    cache: 'no-store',
-    next: { revalidate: 0 },
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: apiKey,
-    },
+  const json: any = await queryFinsTotals({
+    type: params.type === 'expend' ? 'expend' : 'receipt',
+    group_by: useMonthlyGrouping ? 'monthly' : null,
+    year: useMonthlyGrouping ? params.year : undefined,
+    tgl_awal: useMonthlyGrouping ? undefined : params.tgl_awal,
+    tgl_akhir: useMonthlyGrouping ? undefined : params.tgl_akhir,
+    approve: searchParams.get('approve') || undefined,
+    id_kantor: searchParams.get('id_kantor') || undefined,
+    id_program: searchParams.get('id_program') || undefined,
+    only_coa_debet: searchParams.get('only_coa_debet') || undefined,
+    only_coa_kredit: searchParams.get('only_coa_kredit') || undefined,
+    exclude_coa_debet: searchParams.get('exclude_coa_debet') || undefined,
+    exclude_coa_kredit: searchParams.get('exclude_coa_kredit') || undefined,
+    only_id_contact: searchParams.get('only_id_contact') || undefined,
+    exclude_id_contact: searchParams.get('exclude_id_contact') || undefined,
   })
-
-  if (!res.ok) {
-    const text = await res.text()
-    throw new Error(`Gagal call API Zains: ${res.status} ${text}`)
-  }
-
-  const json: any = await res.json()
-  if (!json || typeof json !== 'object') {
-    throw new Error('Respons API Zains tidak valid (bukan JSON)')
-  }
 
   // Jika kita pakai group_by=monthly untuk satu tahun,
   // ambil sum khusus untuk bulan yang diminta.
@@ -173,7 +158,7 @@ export async function GET(req: NextRequest) {
     const { tgl_awal, tgl_akhir, year, month } = parseDateRange(req)
 
     // Ambil konfigurasi sources
-    const sources = await sql`
+    const sources = (await sql`
       SELECT 
         id,
         name,
@@ -187,10 +172,10 @@ export async function GET(req: NextRequest) {
         summary_order
       FROM sources
       ORDER BY COALESCE(summary_order, 9999), name
-    `
+    `) as any[]
 
     // Ambil daftar klinik yang ikut di summary SE (termasuk id_kantor_zains untuk filter API Zains)
-    const clinics = await sql`
+    const clinics = (await sql`
       SELECT 
         id,
         name,
@@ -204,7 +189,7 @@ export async function GET(req: NextRequest) {
       FROM clinics
       WHERE is_active = true
       ORDER BY COALESCE(summary_order, 9999), name
-    `
+    `) as any[]
 
     const clinicRows = Array.isArray(clinics) ? clinics : []
     const sourceRows = Array.isArray(sources) ? sources : []
