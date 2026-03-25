@@ -1,9 +1,45 @@
-'use server'
-
 import { sql } from '@/lib/db'
 import { getZainsTransactionSyncEnabled } from '@/lib/settings'
-import { Client } from '@upstash/qstash'
+import { Client as WorkflowTriggerClient } from '@upstash/workflow'
 import { getZainsApiConfig } from '@/lib/zains-api-config'
+
+/** Minimal percobaan HTTP ke API Zains (cold start / 5xx / rate limit) */
+export const ZAINS_API_MAX_ATTEMPTS = 5
+/** Retry trigger Upstash Workflow (delivery ke endpoint) */
+const WORKFLOW_TRIGGER_MAX_ATTEMPTS = 5
+const WORKFLOW_TRIGGER_RETRY_DELAY_MS = 800
+/** Trigger banyak workflow sekaligus (upload): konkurensi terbatas */
+export const ZAINS_WORKFLOW_TRIGGER_CONCURRENCY = 5
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((r) => setTimeout(r, ms))
+}
+
+function getBackoffMs(attemptIndex: number): number {
+  return Math.min(800 * Math.pow(2, attemptIndex - 1), 15_000)
+}
+
+/**
+ * Fetch ke Zains dengan retry untuk kegagalan jaringan, 5xx, dan 429.
+ * Response selain itu dikembalikan langsung (termasuk 4xx bisnis).
+ */
+async function fetchZainsWithRetry(url: string, init: RequestInit): Promise<Response> {
+  for (let attempt = 1; attempt <= ZAINS_API_MAX_ATTEMPTS; attempt++) {
+    try {
+      const response = await fetch(url, init)
+      if ((response.status >= 500 || response.status === 429) && attempt < ZAINS_API_MAX_ATTEMPTS) {
+        await response.text().catch(() => {})
+        await sleep(getBackoffMs(attempt))
+        continue
+      }
+      return response
+    } catch (err) {
+      if (attempt === ZAINS_API_MAX_ATTEMPTS) throw err
+      await sleep(getBackoffMs(attempt))
+    }
+  }
+  throw new Error('fetchZainsWithRetry: unreachable')
+}
 
 interface ZainsSyncPayload {
   nama: string
@@ -101,13 +137,13 @@ export async function syncPatientToZains(patient: any): Promise<{
   }
 
   try {
-    const response = await fetch(`${apiUrl}/corez/mitra/save`, {
+    const response = await fetchZainsWithRetry(`${apiUrl}/corez/mitra/save`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': apiKey,
       },
-      body: JSON.stringify(payload)
+      body: JSON.stringify(payload),
     })
 
     if (!response.ok) {
@@ -420,22 +456,20 @@ export async function syncPatientsBatchToZains(): Promise<{
 }
 
 /**
- * Get Upstash QStash client untuk trigger workflow
+ * Client Upstash Workflow (QStash-backed) untuk trigger workflow run
  */
-function getQStashClient(): Client | null {
+function getWorkflowTriggerClient(): WorkflowTriggerClient | null {
   try {
-    const qstashToken = process.env.QSTASH_TOKEN || process.env.UPSTASH_QSTASH_TOKEN
+    const token = process.env.QSTASH_TOKEN || process.env.UPSTASH_QSTASH_TOKEN
 
-    if (!qstashToken) {
+    if (!token) {
       console.warn('⚠️  [Workflow] QSTASH_TOKEN atau UPSTASH_QSTASH_TOKEN tidak dikonfigurasi')
       return null
     }
 
-    return new Client({
-      token: qstashToken,
-    })
+    return new WorkflowTriggerClient({ token })
   } catch (error) {
-    console.error('❌ [Workflow] Error membuat QStash client:', error)
+    console.error('❌ [Workflow] Error membuat Workflow client:', error)
     return null
   }
 }
@@ -443,8 +477,8 @@ function getQStashClient(): Client | null {
 /**
  * Skema alur sync (workflow) — tetap selesai dari awal hingga akhir meskipun Upstash gagal:
  *
- * 1. Coba trigger workflow via Upstash QStash (dengan retry 2x untuk limit/error sementara).
- * 2. Jika QStash tidak tersedia / gagal setelah retry:
+ * 1. Coba trigger via @upstash/workflow Client.trigger (retry untuk delivery).
+ * 2. Jika token tidak tersedia / gagal setelah retry:
  *    → Fallback: jalankan alur yang sama secara lokal (await sampai selesai):
  *    a. Sync patient ke Zains (syncPatientToZains)
  *    b. Jika ada transactionId: sync transactions_to_zains untuk transaksi tersebut (syncTransactionsToZainsByTransactionId)
@@ -452,9 +486,6 @@ function getQStashClient(): Client | null {
  * Dengan ini, insert/upload transaksi tetap menghasilkan donatur + transaksi ter-sync ke Zains
  * walaupun QStash limit, timeout, atau error lainnya.
  */
-
-const QSTASH_RETRY_ATTEMPTS = 2
-const QSTASH_RETRY_DELAY_MS = 800
 
 function getWorkflowBaseUrl(): string {
   const url =
@@ -499,8 +530,8 @@ async function runWorkflowSyncLocally(
 
 /**
  * Sync single patient ke Zains lalu (jika ada transactionId) sync transactions_to_zains.
- * Prioritas: trigger via Upstash QStash ke /api/workflow/sync-patient-to-zains (eksekusi di request terpisah).
- * Jika QStash tidak tersedia atau gagal setelah retry, fallback jalankan secara lokal.
+ * Prioritas: trigger via Upstash Workflow SDK ke /api/workflow/sync-patient-to-zains (eksekusi terpisah).
+ * Jika token tidak tersedia atau gagal setelah retry, fallback jalankan secara lokal.
  * Dipanggil dari API insert/upload/scrap (bisa di dalam after() atau langsung).
  *
  * @param patientId - ID patient yang akan di-sync donatur ke Zains
@@ -513,35 +544,37 @@ export async function syncPatientToZainsWorkflow(
   const workflowEndpoint = `${getWorkflowBaseUrl()}/api/workflow/sync-patient-to-zains`
   const body = { patientId, transactionId: transactionId ?? null }
 
-  // 1. Coba trigger via QStash agar workflow jalan di invocation terpisah (log di dashboard QStash).
-  const qstash = getQStashClient()
-  if (qstash) {
-    let lastErr: any = null
-    for (let attempt = 1; attempt <= QSTASH_RETRY_ATTEMPTS; attempt++) {
+  // 1. Trigger run workflow (tercatat di Upstash Workflow / QStash).
+  const wf = getWorkflowTriggerClient()
+  if (wf) {
+    let lastErr: unknown = null
+    for (let attempt = 1; attempt <= WORKFLOW_TRIGGER_MAX_ATTEMPTS; attempt++) {
       try {
-        await qstash.publishJSON({
+        await wf.trigger({
           url: workflowEndpoint,
           body,
-          headers: { 'Content-Type': 'application/json' },
+          retries: ZAINS_API_MAX_ATTEMPTS,
+          retryDelay: 'min(15000, 1000 * pow(2, retried))',
         })
         console.log(
-          `✅ [Upstash Workflow] Sync patient-to-zains triggered via QStash (patientId=${patientId}, transactionId=${transactionId ?? 'n/a'})`,
+          `✅ [Upstash Workflow] sync-patient-to-zains triggered (patientId=${patientId}, transactionId=${transactionId ?? 'n/a'})`,
         )
         return
-      } catch (err: any) {
+      } catch (err: unknown) {
         lastErr = err
-        const isLast = attempt === QSTASH_RETRY_ATTEMPTS
+        const isLast = attempt === WORKFLOW_TRIGGER_MAX_ATTEMPTS
         console.warn(
-          `⚠️  [Upstash Workflow] Attempt ${attempt}/${QSTASH_RETRY_ATTEMPTS} gagal (sync-patient-to-zains):`,
-          err?.message || err,
+          `⚠️  [Upstash Workflow] Attempt ${attempt}/${WORKFLOW_TRIGGER_MAX_ATTEMPTS} gagal (trigger sync-patient):`,
+          err instanceof Error ? err.message : err,
         )
         if (!isLast) {
-          await new Promise((r) => setTimeout(r, QSTASH_RETRY_DELAY_MS))
+          await sleep(WORKFLOW_TRIGGER_RETRY_DELAY_MS)
         }
       }
     }
     console.warn(
-      '⚠️  [Workflow] QStash gagal setelah retry, jalankan sync patient+transaksi secara lokal',
+      '⚠️  [Workflow] Trigger gagal setelah retry, jalankan sync patient+transaksi secara lokal:',
+      lastErr instanceof Error ? lastErr.message : lastErr,
     )
   }
 
@@ -578,46 +611,70 @@ export async function syncPatientToZainsWorkflow(
 }
 
 /**
- * Trigger sync batch transactions_to_zains via QStash (agar muncul di log QStash).
- * Jika QStash tidak tersedia atau gagal setelah retry, jalankan sync secara lokal.
+ * Trigger sync batch transactions_to_zains via Upstash Workflow.
+ * Jika token tidak tersedia atau gagal setelah retry, jalankan sync secara lokal.
  */
 export async function syncTransactionsBatchToZainsWorkflow(): Promise<void> {
-  const qstash = getQStashClient()
-  if (!qstash) {
-    console.warn('⚠️  [Workflow] QStash tidak dikonfigurasi, jalankan sync transaksi batch secara lokal')
+  const wf = getWorkflowTriggerClient()
+  if (!wf) {
+    console.warn('⚠️  [Workflow] Token tidak dikonfigurasi, jalankan sync transaksi batch secara lokal')
     await syncTransactionsBatchToZains()
     return
   }
 
   const workflowEndpoint = `${getWorkflowBaseUrl()}/api/workflow/sync-transactions-to-zains`
 
-  let lastError: any = null
-  for (let attempt = 1; attempt <= QSTASH_RETRY_ATTEMPTS; attempt++) {
+  let lastError: unknown = null
+  for (let attempt = 1; attempt <= WORKFLOW_TRIGGER_MAX_ATTEMPTS; attempt++) {
     try {
-      await qstash.publishJSON({
+      await wf.trigger({
         url: workflowEndpoint,
         body: {},
-        headers: { 'Content-Type': 'application/json' },
+        retries: ZAINS_API_MAX_ATTEMPTS,
+        retryDelay: 'min(15000, 1000 * pow(2, retried))',
       })
-      console.log('✅ [Upstash Workflow] Workflow sync transaksi batch ke Zains triggered')
+      console.log('✅ [Upstash Workflow] sync-transactions-to-zains batch triggered')
       return
-    } catch (err: any) {
+    } catch (err: unknown) {
       lastError = err
-      const isLast = attempt === QSTASH_RETRY_ATTEMPTS
+      const isLast = attempt === WORKFLOW_TRIGGER_MAX_ATTEMPTS
       console.warn(
-        `⚠️  [Upstash Workflow] Attempt ${attempt}/${QSTASH_RETRY_ATTEMPTS} gagal (sync transaksi batch):`,
-        err?.message || err,
+        `⚠️  [Upstash Workflow] Attempt ${attempt}/${WORKFLOW_TRIGGER_MAX_ATTEMPTS} gagal (trigger batch):`,
+        err instanceof Error ? err.message : err,
       )
       if (!isLast) {
-        await new Promise((r) => setTimeout(r, QSTASH_RETRY_DELAY_MS))
+        await sleep(WORKFLOW_TRIGGER_RETRY_DELAY_MS)
       }
     }
   }
 
   console.warn(
-    '⚠️  [Workflow] QStash gagal setelah retry, jalankan sync transaksi batch secara lokal',
+    '⚠️  [Workflow] Trigger batch gagal setelah retry, jalankan lokal:',
+    lastError instanceof Error ? lastError.message : lastError,
   )
   await syncTransactionsBatchToZains()
+}
+
+/**
+ * Trigger banyak workflow sync patient+transaksi dengan konkurensi terbatas (hindari spike memori/koneksi).
+ */
+export async function syncPatientToZainsWorkflowsBatch(
+  items: Array<{ patientId: number; transactionId?: number }>,
+): Promise<void> {
+  if (items.length === 0) return
+  for (let i = 0; i < items.length; i += ZAINS_WORKFLOW_TRIGGER_CONCURRENCY) {
+    const chunk = items.slice(i, i + ZAINS_WORKFLOW_TRIGGER_CONCURRENCY)
+    await Promise.all(
+      chunk.map(({ patientId, transactionId }) =>
+        syncPatientToZainsWorkflow(patientId, transactionId).catch((err: unknown) => {
+          console.error(
+            `[Workflow batch] Sync Zains gagal (patientId=${patientId}, transactionId=${transactionId}):`,
+            err instanceof Error ? err.message : err,
+          )
+        }),
+      ),
+    )
+  }
 }
 
 /**
@@ -945,7 +1002,7 @@ export async function syncSingleTransactionToZains(record: any): Promise<{
   }
 
   try {
-    const response = await fetch(`${apiUrl}/corez/transaksi/save`, {
+    const response = await fetchZainsWithRetry(`${apiUrl}/corez/transaksi/save`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

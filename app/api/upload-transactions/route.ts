@@ -3,7 +3,7 @@ import { after } from 'next/server'
 import { sql } from '@/lib/db'
 import * as XLSX from 'xlsx'
 import { getZainsTransactionSyncEnabled } from '@/lib/settings'
-import { syncPatientToZainsWorkflow } from '@/lib/services/zains-sync'
+import { syncPatientToZainsWorkflowsBatch } from '@/lib/services/zains-sync'
 
 // Helper function untuk parse tanggal
 function parseDate(dateStr: string | number): Date | null {
@@ -586,12 +586,10 @@ export async function POST(request: NextRequest) {
     if (syncWorkflows.length > 0) {
       const workflows = [...syncWorkflows]
       after(async () => {
-        for (const { patientId, transactionId } of workflows) {
-          try {
-            await syncPatientToZainsWorkflow(patientId, transactionId)
-          } catch (err: any) {
-            console.error(`[after] Sync Zains gagal (patientId=${patientId}, transactionId=${transactionId}):`, err?.message ?? err)
-          }
+        try {
+          await syncPatientToZainsWorkflowsBatch(workflows)
+        } catch (err: unknown) {
+          console.error('[after] Sync Zains batch gagal:', err instanceof Error ? err.message : err)
         }
       })
     }

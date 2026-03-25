@@ -3,8 +3,8 @@ import { syncTransactionsBatchToZainsWorkflow } from '@/lib/services/zains-sync'
 
 /**
  * API Route untuk sync transactions_to_zains ke Zains.
- * Trigger via QStash ke /api/workflow/sync-transactions-to-zains agar muncul di log QStash.
- * Jika QStash tidak tersedia atau gagal, sync dijalankan secara lokal.
+ * Trigger via @upstash/workflow Client ke /api/workflow/sync-transactions-to-zains.
+ * Jika token tidak tersedia atau gagal, sync dijalankan secara lokal.
  */
 export async function POST(request: NextRequest) {
   try {
@@ -13,8 +13,8 @@ export async function POST(request: NextRequest) {
       {
         success: true,
         message:
-          'Proses sync transaksi telah di-trigger (via QStash atau lokal). Cek log QStash atau system_logs untuk hasilnya.',
-        note: 'Jika QStash dikonfigurasi, eksekusi akan tercatat di dashboard QStash.',
+          'Proses sync transaksi telah di-trigger (Upstash Workflow atau lokal). Cek dashboard Upstash atau system_logs.',
+        note: 'Jika QSTASH_TOKEN dikonfigurasi, eksekusi tercatat sebagai workflow run.',
       },
       { status: 200 },
     )
@@ -32,7 +32,7 @@ export async function POST(request: NextRequest) {
 
 /**
  * GET endpoint untuk trigger sync (cron / manual trigger).
- * Sama seperti POST: trigger via QStash agar muncul di log QStash.
+ * Sama seperti POST: trigger via Upstash Workflow bila token tersedia.
  */
 export async function GET(request: NextRequest) {
   try {
@@ -41,7 +41,7 @@ export async function GET(request: NextRequest) {
       {
         success: true,
         message:
-          'Proses sync transaksi telah di-trigger (via QStash atau lokal). Cek log QStash atau system_logs untuk hasilnya.',
+          'Proses sync transaksi telah di-trigger (Upstash Workflow atau lokal). Cek dashboard Upstash atau system_logs.',
       },
       { status: 200 },
     )
