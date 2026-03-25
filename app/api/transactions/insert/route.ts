@@ -308,17 +308,44 @@ export async function POST(request: NextRequest) {
         // Break data ke transactions_to_zains berdasarkan master_target_categories
         // Hanya ambil field "Jumlah Pembayaran" yang ada nilainya (tidak 0)
         // Mapping sesuai dengan nama di master_target_categories
-        // Setiap kategori dikurangi diskonnya masing-masing jika ada (dengan Math.max untuk memastikan tidak negatif)
-        const paidFields = [
-          { key: 'Jumlah Pembayaran ( Rp. ) - Karcis', category: 'Karcis', value: billRegistDiscount > 0 ? Math.max(0, paidRegist - billRegistDiscount) : paidRegist },
-          { key: 'Jumlah Pembayaran ( Rp. ) - Tindakan', category: 'Tindakan', value: billActionDiscount > 0 ? Math.max(0, paidAction - billActionDiscount) : paidAction },
-          { key: 'Jumlah Pembayaran ( Rp. ) - Laboratorium', category: 'Laboratorium', value: billLabDiscount > 0 ? Math.max(0, paidLab - billLabDiscount) : paidLab },
-          { key: 'Jumlah Pembayaran ( Rp. ) - Obat', category: 'Obat-obatan', value: billDrugDiscount > 0 ? Math.max(0, paidDrug - billDrugDiscount) : paidDrug },
-          { key: 'Jumlah Pembayaran ( Rp. ) - Alkes', category: 'Alat Kesehatan', value: billAlkesDiscount > 0 ? Math.max(0, paidAlkes - billAlkesDiscount) : paidAlkes },
-          { key: 'Jumlah Pembayaran ( Rp. ) - MCU', category: 'MCU', value: billMcuDiscount > 0 ? Math.max(0, paidMcu - billMcuDiscount) : paidMcu },
-          { key: 'Jumlah Pembayaran ( Rp. ) - Radiologi', category: 'Radiologi', value: billRadioDiscount > 0 ? Math.max(0, paidRadio - billRadioDiscount) : paidRadio },
-          { key: 'Jumlah Pembayaran ( Rp. ) - Pembulatan', category: 'Pembulatan', value: paidRounding },
-        ]
+        //
+        // Nominal per kategori memakai paid_* (sudah neto setelah diskon baris di sumber eclinic).
+        // Jangan kurangi lagi dengan bill_*_discount — itu membuat double diskon (mis. paid_drug 6000 jadi 2000).
+        //
+        // KHUSUS: jika semua bill_*_discount kosong tapi paid_discount ada (kasus upload Excel),
+        // anggap diskon global hanya mengurangi Tindakan (sama seperti upload-transactions).
+        const allBillDiscountsEmpty =
+          billRegistDiscount === 0 &&
+          billActionDiscount === 0 &&
+          billLabDiscount === 0 &&
+          billDrugDiscount === 0 &&
+          billAlkesDiscount === 0 &&
+          billMcuDiscount === 0 &&
+          billRadioDiscount === 0
+
+        const usePaidDiscountForTindakanOnly = allBillDiscountsEmpty && paidDiscount > 0
+
+        const paidFields = usePaidDiscountForTindakanOnly
+          ? [
+              { key: 'Jumlah Pembayaran ( Rp. ) - Karcis', category: 'Karcis', value: paidRegist },
+              { key: 'Jumlah Pembayaran ( Rp. ) - Tindakan', category: 'Tindakan', value: Math.max(0, paidAction - paidDiscount) },
+              { key: 'Jumlah Pembayaran ( Rp. ) - Laboratorium', category: 'Laboratorium', value: paidLab },
+              { key: 'Jumlah Pembayaran ( Rp. ) - Obat', category: 'Obat-obatan', value: paidDrug },
+              { key: 'Jumlah Pembayaran ( Rp. ) - Alkes', category: 'Alat Kesehatan', value: paidAlkes },
+              { key: 'Jumlah Pembayaran ( Rp. ) - MCU', category: 'MCU', value: paidMcu },
+              { key: 'Jumlah Pembayaran ( Rp. ) - Radiologi', category: 'Radiologi', value: paidRadio },
+              { key: 'Jumlah Pembayaran ( Rp. ) - Pembulatan', category: 'Pembulatan', value: paidRounding },
+            ]
+          : [
+              { key: 'Jumlah Pembayaran ( Rp. ) - Karcis', category: 'Karcis', value: paidRegist },
+              { key: 'Jumlah Pembayaran ( Rp. ) - Tindakan', category: 'Tindakan', value: paidAction },
+              { key: 'Jumlah Pembayaran ( Rp. ) - Laboratorium', category: 'Laboratorium', value: paidLab },
+              { key: 'Jumlah Pembayaran ( Rp. ) - Obat', category: 'Obat-obatan', value: paidDrug },
+              { key: 'Jumlah Pembayaran ( Rp. ) - Alkes', category: 'Alat Kesehatan', value: paidAlkes },
+              { key: 'Jumlah Pembayaran ( Rp. ) - MCU', category: 'MCU', value: paidMcu },
+              { key: 'Jumlah Pembayaran ( Rp. ) - Radiologi', category: 'Radiologi', value: paidRadio },
+              { key: 'Jumlah Pembayaran ( Rp. ) - Pembulatan', category: 'Pembulatan', value: paidRounding },
+            ]
 
         // Cari id_donatur dari patient jika ada (hanya dari patient yang SUDAH ada)
         const patientRows = (await sql`
