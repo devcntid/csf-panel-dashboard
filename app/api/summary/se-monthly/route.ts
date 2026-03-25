@@ -1,11 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { sql } from '@/lib/db'
-import { getZainsApiConfig } from '@/lib/zains-api-config'
 import {
   applyZainsFinsTotalsContactFilters,
   parseCommaSeparatedIds,
-  resolveZainsFinsTotalsUrl,
 } from '@/lib/zains-fins-totals'
+import { queryFinsTotals } from '@/lib/fins-totals'
 
 export const dynamic = 'force-dynamic'
 
@@ -25,15 +24,6 @@ async function fetchZainsMonthlyTotal(params: {
   excludeIdContact?: string[]
   idKantor?: string
 }): Promise<{ monthly: MonthlyItem[]; grandTotal: { sum: number; count: number } }> {
-  const { url } = getZainsApiConfig()
-  const apiKey = process.env.API_KEY_ZAINS
-  if (!url) {
-    throw new Error('URL_API_ZAINS belum dikonfigurasi')
-  }
-  if (!apiKey) {
-    throw new Error('API_KEY_ZAINS tidak dikonfigurasi')
-  }
-
   const searchParams = new URLSearchParams({
     type: params.type,
     group_by: 'monthly',
@@ -58,27 +48,20 @@ async function fetchZainsMonthlyTotal(params: {
     params.excludeIdContact ?? [],
   )
 
-  const targetUrl = resolveZainsFinsTotalsUrl(url, searchParams)
-
-  const res = await fetch(targetUrl, {
-    method: 'GET',
-    cache: 'no-store',
-    next: { revalidate: 0 },
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: apiKey,
-    },
+  const json: any = await queryFinsTotals({
+    type: params.type === 'expend' ? 'expend' : 'receipt',
+    group_by: 'monthly',
+    year: params.year,
+    approve: searchParams.get('approve') || undefined,
+    id_kantor: searchParams.get('id_kantor') || undefined,
+    id_program: searchParams.get('id_program') || undefined,
+    only_coa_debet: searchParams.get('only_coa_debet') || undefined,
+    only_coa_kredit: searchParams.get('only_coa_kredit') || undefined,
+    exclude_coa_debet: searchParams.get('exclude_coa_debet') || undefined,
+    exclude_coa_kredit: searchParams.get('exclude_coa_kredit') || undefined,
+    only_id_contact: searchParams.get('only_id_contact') || undefined,
+    exclude_id_contact: searchParams.get('exclude_id_contact') || undefined,
   })
-
-  if (!res.ok) {
-    const text = await res.text()
-    throw new Error(`Gagal call API Zains (monthly): ${res.status} ${text}`)
-  }
-
-  const json: any = await res.json()
-  if (!json || typeof json !== 'object') {
-    throw new Error('Respons API Zains (monthly) tidak valid (bukan JSON)')
-  }
 
   // Jika status=false dan tidak ada data array, anggap tidak ada data (semua nol)
   if (json.status === false && !Array.isArray(json.data)) {

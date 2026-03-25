@@ -1,7 +1,6 @@
 import { sql } from '@/lib/db'
 import { getZainsTransactionSyncEnabled } from '@/lib/settings'
 import { Client as WorkflowTriggerClient } from '@upstash/workflow'
-import { getZainsApiConfig } from '@/lib/zains-api-config'
 
 /** Minimal percobaan HTTP ke API Zains (cold start / 5xx / rate limit) */
 export const ZAINS_API_MAX_ATTEMPTS = 5
@@ -80,19 +79,25 @@ function extractContactFromNik(nikOrFallback: string): { hp: string; telpon: str
 
 /** Helper: tambah mode dan host Zains ke payload log agar bisa diverifikasi di system_logs */
 function payloadWithZainsEnv(payload: any): any {
-  const { mode, urlHost } = getZainsApiConfig()
-  return { ...payload, _zains_env: { mode, urlHost } }
+  // Endpoint corez versi Next tidak butuh auth dan tidak lewat API Zains Golang.
+  // Kita tetap simpan informasi host sebagai pembeda di `system_logs`.
+  let urlHost = ''
+  try {
+    const base = getWorkflowBaseUrl()
+    urlHost = new URL(base).hostname
+  } catch {
+    urlHost = ''
+  }
+
+  return {
+    ...payload,
+    _zains_env: { mode: 'next-corez', urlHost },
+    _zains_target: 'next',
+  }
 }
 
-/**
- * Get Zains API URL based on environment.
- * - Jika URL_API_ZAINS di-set: dipakai langsung (override, untuk paksa URL tertentu).
- * - Jika IS_PRODUCTION true: pakai URL_API_ZAINS_PRODUCTION.
- * - Else: pakai URL_API_ZAINS_STAGING.
- */
-function getZainsApiUrl(): string {
-  return getZainsApiConfig().url
-}
+// Catatan:
+// Endpoint corez versi Next dipanggil via `getWorkflowBaseUrl()` sehingga tidak perlu API Zains Golang.
 
 /**
  * Sync single patient to Zains API
@@ -103,24 +108,8 @@ export async function syncPatientToZains(patient: any): Promise<{
   error?: string
   patientId: number
 }> {
-  const apiUrl = getZainsApiUrl()
-  const apiKey = process.env.API_KEY_ZAINS
-  
-  if (!apiUrl) {
-    return {
-      success: false,
-      error: 'URL_API_ZAINS tidak dikonfigurasi',
-      patientId: patient.id
-    }
-  }
-
-  if (!apiKey) {
-    return {
-      success: false,
-      error: 'API_KEY_ZAINS tidak dikonfigurasi',
-      patientId: patient.id
-    }
-  }
+  // Kita hit endpoint corez versi Next yang baru (tanpa Authorization).
+  const apiUrl = getWorkflowBaseUrl()
 
   // NIK boleh kosong: fallback ke erm_no_for_zains agar sync tetap jalan (Zains butuh isi hp/telpon/email)
   const contactSource = patient.nik || patient.erm_no_for_zains || ''
@@ -137,11 +126,10 @@ export async function syncPatientToZains(patient: any): Promise<{
   }
 
   try {
-    const response = await fetchZainsWithRetry(`${apiUrl}/corez/mitra/save`, {
+    const response = await fetchZainsWithRetry(`${apiUrl}/api/corez/mitra/save`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': apiKey,
       },
       body: JSON.stringify(payload),
     })
@@ -897,24 +885,8 @@ export async function syncSingleTransactionToZains(record: any): Promise<{
   rawResponse?: any
   httpStatus?: number
 }> {
-  const apiUrl = getZainsApiUrl()
-  const apiKey = process.env.API_KEY_ZAINS
-
-  if (!apiUrl) {
-    return {
-      success: false,
-      error: 'URL_API_ZAINS tidak dikonfigurasi',
-      transactionsToZainsId: record.id,
-    }
-  }
-
-  if (!apiKey) {
-    return {
-      success: false,
-      error: 'API_KEY_ZAINS tidak dikonfigurasi',
-      transactionsToZainsId: record.id,
-    }
-  }
+  // Kita hit endpoint corez versi Next (tanpa Authorization).
+  const apiUrl = getWorkflowBaseUrl()
 
   // Helper: format tgl_transaksi ke YYYY-MM-DD
   const formatDateOnly = (value: any): string | null => {
@@ -1002,11 +974,10 @@ export async function syncSingleTransactionToZains(record: any): Promise<{
   }
 
   try {
-    const response = await fetchZainsWithRetry(`${apiUrl}/corez/transaksi/save`, {
+    const response = await fetchZainsWithRetry(`${apiUrl}/api/corez/transaksi/save`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': apiKey,
       },
       body: JSON.stringify(payload),
     })
@@ -1015,6 +986,63 @@ export async function syncSingleTransactionToZains(record: any): Promise<{
 
     if (!response.ok) {
       const errorText = await response.text()
+
+      // Jika duplikat, Next endpoint mengembalikan HTTP 409 dengan JSON.
+      // Kita perlakukan duplikat sebagai sukses agar record ditandai `synced`
+      // dan tidak di-retry oleh workflow/batch.
+      try {
+        const parsed = JSON.parse(errorText) as Partial<any>
+        const msg = typeof parsed?.message === 'string' ? parsed.message : ''
+        const isDuplicateMessage =
+          parsed?.status === false &&
+          msg &&
+          (msg.toLowerCase().includes('transaksi sudah ada') ||
+            msg.toLowerCase().includes('sudah ada') ||
+            msg.toLowerCase().includes('telah tercatat'))
+
+        const idTransaksi = parsed?.id_transaksi ?? parsed?.data?.id_transaksi ?? null
+        const idDonatur = parsed?.id_donatur ?? parsed?.data?.id_donatur ?? null
+
+        if (isDuplicateMessage && idTransaksi) {
+          await sql`
+            UPDATE transactions_to_zains
+            SET 
+              id_transaksi = ${idTransaksi},
+              synced = true,
+              todo_zains = false,
+              updated_at = NOW()
+            WHERE id = ${record.id}
+          `
+
+          if (record.transaction_id) {
+            await sql`
+              UPDATE transactions
+              SET 
+                zains_synced = true,
+                zains_sync_at = NOW(),
+                updated_at = NOW()
+              WHERE id = ${record.transaction_id}
+            `
+          }
+
+          await logTransactionSyncResult(
+            record.clinic_id || null,
+            'success',
+            { ...parsed, _note: 'Transaksi duplikat (HTTP 409) di Next corez - di-skip dan ditandai synced' },
+            payloadWithZainsEnv(payload),
+          )
+
+          return {
+            success: true,
+            id_transaksi: String(idTransaksi),
+            transactionsToZainsId: record.id,
+            rawResponse: parsed,
+            httpStatus: response.status,
+          }
+        }
+      } catch {
+        // ignore parse error, jatuh ke return error default
+      }
 
       // Log setiap request yang gagal dengan payload request & response dari Zains
       await logTransactionSyncResult(

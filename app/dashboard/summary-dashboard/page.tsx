@@ -208,11 +208,11 @@ export default function SummaryDashboardPage() {
         <div>
           <h1 className="text-2xl font-bold text-slate-800">Summary Dashboard</h1>
           <p className="text-slate-500 text-sm">
-            Rekap capaian SE Klinik, Ambulance, Fundraising dan grafik capaian SE per klinik langsung dari API Zains.
+            Rekap capaian SE Klinik, Ambulance, Fundraising dan grafik capaian SE per klinik langsung dari database Zains (via API Next).
           </p>
           <p className="text-amber-800/90 text-xs mt-1.5 bg-amber-50 border border-amber-100 rounded-md px-2 py-1.5 inline-block max-w-xl">
-            Memuat data bisa memakan waktu 1–3 menit karena banyak klinik memanggil API Zains (Koyeb). Mohon
-            ditunggu; jika gagal, gunakan <strong>Muat ulang</strong> di bawah.
+            Memuat data bisa memakan waktu 1–3 menit karena banyak klinik dan filter agregasi. Mohon ditunggu; jika gagal,
+            gunakan <strong>Muat ulang</strong> di bawah.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
