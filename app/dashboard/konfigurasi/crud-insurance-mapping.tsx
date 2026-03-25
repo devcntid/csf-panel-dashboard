@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useIncrementalRequest } from '@/hooks/use-incremental-request'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -50,7 +51,10 @@ export function CRUDInsuranceMapping({
     master_insurance_id: '',
   })
 
+  const { start, invalidate } = useIncrementalRequest()
+
   const loadMappings = async () => {
+    const stale = start()
     setLoading(true)
     try {
       const result = await getInsuranceMappingsPaginated(
@@ -60,18 +64,19 @@ export function CRUDInsuranceMapping({
         page,
         limit
       )
+      if (stale()) return
       setMappings(result.mappings)
       setTotal(result.total)
     } catch (error) {
       console.error('Error loading mappings:', error)
     } finally {
-      setLoading(false)
+      if (!stale()) setLoading(false)
     }
   }
 
   useEffect(() => {
-    // Always fetch when page, limit, or filters change
     loadMappings()
+    return invalidate
   }, [page, limit, filters.clinic_id, filters.master_insurance_id, filters.search])
 
   const handleAddMapping = () => {

@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useIncrementalRequest } from '@/hooks/use-incremental-request'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -37,22 +38,26 @@ export function CRUDTargetCategory({
     description: '',
   })
 
+  const { start, invalidate } = useIncrementalRequest()
+
   const loadCategories = async () => {
+    const stale = start()
     setLoading(true)
     try {
       const result = await getTargetCategoriesPaginated(page, limit)
+      if (stale()) return
       setCategories(result.categories)
       setTotal(result.total)
     } catch (error) {
       console.error('Error loading categories:', error)
     } finally {
-      setLoading(false)
+      if (!stale()) setLoading(false)
     }
   }
 
   useEffect(() => {
-    // Always fetch when page or limit changes
     loadCategories()
+    return invalidate
   }, [page, limit])
 
   const handleSubmit = async (e: React.FormEvent) => {

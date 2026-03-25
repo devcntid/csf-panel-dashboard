@@ -2,6 +2,7 @@ import { getTransactions, getTransactionStats } from '@/lib/actions/transactions
 import { getAllClinics, getMasterPolies, getMasterInsuranceTypes } from '@/lib/actions/config'
 import { TransaksiClient } from './transaksi-client'
 import { Suspense } from 'react'
+import { DataTablePageSkeleton } from '@/components/dashboard/data-table-page-skeleton'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 
@@ -10,9 +11,11 @@ export default async function TransaksiPage({
 }: {
   searchParams: Promise<{ search?: string; page?: string; perPage?: string; clinic?: string; poly?: string; insurance?: string; dateFrom?: string; dateTo?: string; zainsSync?: string; sort?: string }>
 }) {
-  const params = await searchParams
+  const [params, session] = await Promise.all([
+    searchParams,
+    getServerSession(authOptions),
+  ])
 
-  const session = await getServerSession(authOptions)
   const role = (session?.user as any)?.role || 'super_admin'
   const sessionClinicId = (session?.user as any)?.clinic_id as number | null | undefined
   
@@ -59,7 +62,7 @@ export default async function TransaksiPage({
   const { transactions, total } = transactionsData
   
   return (
-    <Suspense fallback={null}>
+    <Suspense fallback={<DataTablePageSkeleton showStatCards tableRows={10} />}>
       <div>
         {/* Content */}
         <div className="p-6">

@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useIncrementalRequest } from '@/hooks/use-incremental-request'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -146,22 +147,26 @@ export function CRUDKlinik({
     )
   }
 
+  const { start, invalidate } = useIncrementalRequest()
+
   const loadClinics = async () => {
+    const stale = start()
     setLoading(true)
     try {
       const result = await getClinicsPaginated(page, limit)
+      if (stale()) return
       setClinics(result.clinics)
       setTotal(result.total)
     } catch (error) {
       console.error('Error loading clinics:', error)
     } finally {
-      setLoading(false)
+      if (!stale()) setLoading(false)
     }
   }
 
   useEffect(() => {
-    // Always fetch when page or limit changes
     loadClinics()
+    return invalidate
   }, [page, limit])
 
   const handleSubmit = async (e: React.FormEvent) => {

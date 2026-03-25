@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useIncrementalRequest } from '@/hooks/use-incremental-request'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -48,34 +49,31 @@ export function CRUDUser({
     clinic_id: '',
   })
 
-  const loadClinics = async () => {
-    try {
-      const clinicsData = await getAllClinics()
-      setClinics(clinicsData)
-    } catch (error) {
-      console.error('Error loading clinics:', error)
-    }
-  }
+  const { start, invalidate } = useIncrementalRequest()
 
   const loadUsers = async () => {
+    const stale = start()
     setLoading(true)
     try {
-      const result = await getUsersPaginated(page, limit)
+      const needClinics = !initialClinics || initialClinics.length === 0
+      const [result, clinicsData] = await Promise.all([
+        getUsersPaginated(page, limit),
+        needClinics ? getAllClinics() : Promise.resolve(null),
+      ])
+      if (stale()) return
       setUsers(result.users)
       setTotal(result.total)
+      if (clinicsData) setClinics(clinicsData)
     } catch (error) {
       console.error('Error loading users:', error)
     } finally {
-      setLoading(false)
+      if (!stale()) setLoading(false)
     }
   }
 
   useEffect(() => {
-    // Always fetch when page or limit changes
     loadUsers()
-    if (!initialClinics || initialClinics.length === 0) {
-      loadClinics()
-    }
+    return invalidate
   }, [page, limit])
 
   const handleSubmit = async (e: React.FormEvent) => {

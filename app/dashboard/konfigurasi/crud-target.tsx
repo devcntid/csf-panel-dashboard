@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useIncrementalRequest } from '@/hooks/use-incremental-request'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -60,7 +61,10 @@ export function CRUDTarget({
     is_active: true,
   })
 
+  const { start, invalidate } = useIncrementalRequest()
+
   const loadData = async () => {
+    const stale = start()
     setLoading(true)
     try {
       const [configsResult, poliesData, clinicsData] = await Promise.all([
@@ -74,6 +78,7 @@ export function CRUDTarget({
         getMasterPolies(),
         getAllClinics(),
       ])
+      if (stale()) return
       setConfigs(configsResult.configs)
       setTotal(configsResult.total)
       setPolies(poliesData)
@@ -81,16 +86,15 @@ export function CRUDTarget({
     } catch (error) {
       console.error('Error loading data:', error)
     } finally {
-      setLoading(false)
+      if (!stale()) setLoading(false)
     }
   }
 
   useEffect(() => {
-    // Always fetch when page, limit, or filters change
     loadData()
-    // Set initial data for dropdowns if available
     if (initialPolies) setPolies(initialPolies)
     if (initialClinics) setClinics(initialClinics)
+    return invalidate
   }, [page, limit, filters.clinic_id, filters.poly_id, filters.year])
 
   const handleSubmit = async (e: React.FormEvent) => {

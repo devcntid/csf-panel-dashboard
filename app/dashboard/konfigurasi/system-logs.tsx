@@ -1,6 +1,7 @@
 'use client'
 
-import { useEffect, useState, useTransition } from 'react'
+import { useEffect, useState } from 'react'
+import { useIncrementalRequest } from '@/hooks/use-incremental-request'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -34,7 +35,7 @@ export function SystemLogs({ clinics, initialData }: SystemLogsProps) {
   const [page, setPage] = useState(initialData?.page || 1)
   const [limit, setLimit] = useState(initialData?.limit || 10)
   const [total, setTotal] = useState(initialData?.total || 0)
-  const [isPending, startTransition] = useTransition()
+  const [loading, setLoading] = useState(false)
   const [showFilters, setShowFilters] = useState(false)
   const [detailLog, setDetailLog] = useState<any | null>(null)
   const getToday = () => {
@@ -50,8 +51,12 @@ export function SystemLogs({ clinics, initialData }: SystemLogsProps) {
     end_date: getToday(),
   })
 
-  const loadLogs = () => {
-    startTransition(async () => {
+  const { start, invalidate } = useIncrementalRequest()
+
+  const loadLogs = async () => {
+    const stale = start()
+    setLoading(true)
+    try {
       const result = await getSystemLogsPaginated(
         filters.clinic_id ? parseInt(filters.clinic_id) : undefined,
         filters.process_type || undefined,
@@ -62,14 +67,19 @@ export function SystemLogs({ clinics, initialData }: SystemLogsProps) {
         page,
         limit
       )
+      if (stale()) return
       setLogs(result.logs)
       setTotal(result.total)
-    })
+    } catch (e) {
+      console.error('Error loading system logs:', e)
+    } finally {
+      if (!stale()) setLoading(false)
+    }
   }
 
   useEffect(() => {
-    // Always fetch when page, limit, or filters change
     loadLogs()
+    return invalidate
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page, limit, filters.clinic_id, filters.status, filters.process_type, filters.start_date, filters.end_date])
 
@@ -105,7 +115,7 @@ export function SystemLogs({ clinics, initialData }: SystemLogsProps) {
               onChange={(e) => setFilters({ ...filters, search: e.target.value })}
               className="flex-1"
             />
-            <Button type="submit" className="bg-teal-600 hover:bg-teal-700" disabled={isPending}>
+            <Button type="submit" className="bg-teal-600 hover:bg-teal-700" disabled={loading}>
               <Search className="w-4 h-4 mr-1" />
               Cari
             </Button>
@@ -247,7 +257,7 @@ export function SystemLogs({ clinics, initialData }: SystemLogsProps) {
                 </tr>
               </thead>
               <tbody>
-                {logs.length === 0 && !isPending ? (
+                {logs.length === 0 && !loading ? (
                   <tr>
                     <td colSpan={8} className="text-center py-8 text-slate-500">
                       Tidak ada system logs

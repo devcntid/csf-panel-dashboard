@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useIncrementalRequest } from '@/hooks/use-incremental-request'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
@@ -42,23 +43,28 @@ export function AppSettingsForm() {
   const [uploadingBg, setUploadingBg] = useState(false)
   const [uploadingFavicon, setUploadingFavicon] = useState(false)
 
+  const { start, invalidate } = useIncrementalRequest()
+
   const fetchSettings = async () => {
+    const stale = start()
     setLoading(true)
     try {
       const res = await fetch(API)
       const data = await res.json()
+      if (stale()) return
       if (res.ok && typeof data === 'object' && data !== null) {
         setSettings({ ...DEFAULT_SETTINGS, ...data })
       }
     } catch {
-      toast.error('Gagal memuat pengaturan')
+      if (!stale()) toast.error('Gagal memuat pengaturan')
     } finally {
-      setLoading(false)
+      if (!stale()) setLoading(false)
     }
   }
 
   useEffect(() => {
     fetchSettings()
+    return invalidate
   }, [])
 
   const update = (key: string, value: string) => {

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useState, useMemo, useRef } from 'react'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
@@ -64,10 +64,13 @@ export default function SummarySEChartPage() {
   const [clinics, setClinics] = useState<{ id: number; name: string }[]>([])
   const [loading, setLoading] = useState(false)
   const [data, setData] = useState<MonthlyResponse | null>(null)
+  const loadDataSeq = useRef(0)
 
   useEffect(() => {
+    let cancelled = false
     getAllClinics()
       .then((list) => {
+        if (cancelled) return
         const arr = Array.isArray(list) ? list : []
         setClinics(arr)
         if (!clinicId && arr.length > 0) {
@@ -77,18 +80,23 @@ export default function SummarySEChartPage() {
         }
       })
       .catch((error) => {
-        console.error('Gagal memuat daftar klinik untuk chart SE:', error)
+        if (!cancelled) console.error('Gagal memuat daftar klinik untuk chart SE:', error)
       })
+    return () => {
+      cancelled = true
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const loadData = async () => {
     if (!clinicId) return
+    const reqId = ++loadDataSeq.current
     setLoading(true)
     try {
       const params = new URLSearchParams({ year: String(year), clinic_id: clinicId })
       const res = await fetch(`/api/summary/se-monthly?${params.toString()}`, { cache: 'no-store' })
       const json = (await res.json()) as MonthlyResponse
+      if (reqId !== loadDataSeq.current) return
       if (!json.success) {
         console.error('Gagal mengambil summary SE monthly', json)
         setData(null)
@@ -97,15 +105,17 @@ export default function SummarySEChartPage() {
       setData(json)
     } catch (error) {
       console.error('Error fetch summary SE monthly:', error)
-      setData(null)
+      if (reqId === loadDataSeq.current) setData(null)
     } finally {
-      setLoading(false)
+      if (reqId === loadDataSeq.current) setLoading(false)
     }
   }
 
   useEffect(() => {
-    if (clinicId) {
-      loadData()
+    if (!clinicId) return
+    loadData()
+    return () => {
+      loadDataSeq.current++
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clinicId])

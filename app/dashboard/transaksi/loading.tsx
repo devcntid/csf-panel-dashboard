@@ -1,3 +1,5 @@
+import { DataTablePageSkeleton } from '@/components/dashboard/data-table-page-skeleton'
+
 export default function Loading() {
-  return null
+  return <DataTablePageSkeleton showStatCards tableRows={10} />
 }

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { KeyboardEvent } from 'react'
 import { useRouter } from 'next/navigation'
 import { useSession } from 'next-auth/react'
@@ -157,6 +157,10 @@ export default function FinsCashbookPage() {
   const isClinicManager =
     sessionStatus === 'authenticated' && (session?.user as any)?.role === 'clinic_manager'
 
+  const kantorReqRef = useRef(0)
+  const coaReqRef = useRef(0)
+  const cashbookReqRef = useRef(0)
+
   useEffect(() => {
     if (sessionStatus !== 'authenticated') return
     const role = (session?.user as any)?.role || ''
@@ -166,12 +170,15 @@ export default function FinsCashbookPage() {
   }, [session, sessionStatus, router])
 
   const loadKantors = async () => {
+    const reqId = ++kantorReqRef.current
+    const stale = () => reqId !== kantorReqRef.current
     setLoadingMeta(true)
     try {
       const res = await fetch('/api/fins/kantor?page=1&per_page=100&aktif=y', {
         cache: 'no-store',
       })
       const json = (await res.json()) as KantorResponse
+      if (stale()) return
       if (!res.ok || !json.status) {
         setError(json.message || 'Gagal mengambil data kantor dari Zains')
         setKantors([])
@@ -190,14 +197,18 @@ export default function FinsCashbookPage() {
       setSelectedKantorId((prev) => prev ?? defaultId)
     } catch (err: any) {
       console.error('Error fetch /api/fins/kantor:', err)
-      setError(err?.message || 'Terjadi kesalahan saat mengambil data kantor')
-      setKantors([])
+      if (!stale()) {
+        setError(err?.message || 'Terjadi kesalahan saat mengambil data kantor')
+        setKantors([])
+      }
     } finally {
-      setLoadingMeta(false)
+      if (!stale()) setLoadingMeta(false)
     }
   }
 
   const loadCoas = async (idKantor: string) => {
+    const reqId = ++coaReqRef.current
+    const stale = () => reqId !== coaReqRef.current
     setLoadingMeta(true)
     try {
       const params = new URLSearchParams()
@@ -205,6 +216,7 @@ export default function FinsCashbookPage() {
 
       const res = await fetch(`/api/fins/coa?${params.toString()}`, { cache: 'no-store' })
       const json = (await res.json()) as CoaResponse
+      if (stale()) return
       if (!res.ok || !json.status) {
         setError(json.message || 'Gagal mengambil data COA dari Zains')
         setCoas([])
@@ -226,10 +238,12 @@ export default function FinsCashbookPage() {
       }
     } catch (err: any) {
       console.error('Error fetch /api/fins/coa:', err)
-      setError(err?.message || 'Terjadi kesalahan saat mengambil data COA')
-      setCoas([])
+      if (!stale()) {
+        setError(err?.message || 'Terjadi kesalahan saat mengambil data COA')
+        setCoas([])
+      }
     } finally {
-      setLoadingMeta(false)
+      if (!stale()) setLoadingMeta(false)
     }
   }
 
@@ -237,12 +251,18 @@ export default function FinsCashbookPage() {
     if (sessionStatus === 'authenticated') {
       loadKantors()
     }
+    return () => {
+      kantorReqRef.current++
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionStatus])
 
   useEffect(() => {
     if (!selectedKantorId) return
     loadCoas(selectedKantorId)
+    return () => {
+      coaReqRef.current++
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedKantorId])
 
@@ -258,6 +278,9 @@ export default function FinsCashbookPage() {
       setError('Periode tanggal wajib diisi')
       return
     }
+
+    const reqId = ++cashbookReqRef.current
+    const stale = () => reqId !== cashbookReqRef.current
 
     setLoading(true)
     setError(null)
@@ -277,6 +300,7 @@ export default function FinsCashbookPage() {
 
       const json = (await res.json()) as CashbookResponse & { status?: boolean; message?: string }
 
+      if (stale()) return
       if (!res.ok || json.status === false) {
         setError(json.message || 'Gagal mengambil data cashbook dari Zains')
         setItems([])
@@ -299,18 +323,23 @@ export default function FinsCashbookPage() {
       setPerPage(targetPerPage)
     } catch (err: any) {
       console.error('Error fetch /api/fins/cashbook:', err)
-      setError(err?.message || 'Terjadi kesalahan saat mengambil data cashbook')
-      setItems([])
-      setFooter(null)
-      setTotalData(0)
+      if (!stale()) {
+        setError(err?.message || 'Terjadi kesalahan saat mengambil data cashbook')
+        setItems([])
+        setFooter(null)
+        setTotalData(0)
+      }
     } finally {
-      setLoading(false)
+      if (!stale()) setLoading(false)
     }
   }
 
   useEffect(() => {
     if (sessionStatus === 'authenticated' && selectedCoa) {
       fetchData({ page: 1, perPage })
+    }
+    return () => {
+      cashbookReqRef.current++
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionStatus, selectedCoa])

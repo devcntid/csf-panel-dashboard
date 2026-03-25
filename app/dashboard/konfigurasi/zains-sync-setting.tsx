@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useIncrementalRequest } from '@/hooks/use-incremental-request'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
@@ -16,21 +17,26 @@ export function ZainsSyncSetting() {
   const [saving, setSaving] = useState(false)
   const [activatingAll, setActivatingAll] = useState(false)
 
+  const { start, invalidate } = useIncrementalRequest()
+
   const fetchSetting = async () => {
+    const stale = start()
     setLoading(true)
     try {
       const res = await fetch(API)
       const data = await res.json()
+      if (stale()) return
       if (res.ok && typeof data.enabled === 'boolean') setEnabled(data.enabled)
     } catch {
-      toast.error('Gagal memuat pengaturan sync Zains')
+      if (!stale()) toast.error('Gagal memuat pengaturan sync Zains')
     } finally {
-      setLoading(false)
+      if (!stale()) setLoading(false)
     }
   }
 
   useEffect(() => {
     fetchSetting()
+    return invalidate
   }, [])
 
   const handleToggle = async (checked: boolean) => {
