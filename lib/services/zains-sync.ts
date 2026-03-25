@@ -1,5 +1,3 @@
-'use server'
-
 import { sql } from '@/lib/db'
 import { getZainsTransactionSyncEnabled } from '@/lib/settings'
 import { Client as WorkflowTriggerClient } from '@upstash/workflow'
