@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useIncrementalRequest } from '@/hooks/use-incremental-request'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -36,22 +37,26 @@ export function CRUDPoli({
     description: '',
   })
 
+  const { start, invalidate } = useIncrementalRequest()
+
   const loadPolies = async () => {
+    const stale = start()
     setLoading(true)
     try {
       const result = await getMasterPoliesPaginated(page, limit)
+      if (stale()) return
       setPolies(result.polies)
       setTotal(result.total)
     } catch (error) {
       console.error('Error loading polies:', error)
     } finally {
-      setLoading(false)
+      if (!stale()) setLoading(false)
     }
   }
 
   useEffect(() => {
-    // Always fetch when page or limit changes
     loadPolies()
+    return invalidate
   }, [page, limit])
 
   const handleSubmit = async (e: React.FormEvent) => {

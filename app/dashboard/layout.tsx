@@ -72,7 +72,8 @@ export default function DashboardLayout({
   // App settings: brand color & logo (untuk dinamisasi)
   useEffect(() => {
     if (status !== 'authenticated') return
-    fetch('/api/settings/app')
+    const ac = new AbortController()
+    fetch('/api/settings/app', { signal: ac.signal })
       .then((r) => r.json())
       .then((data: Record<string, string>) => {
         const color = data?.app_sidebar_bg_color?.trim() || '#00786F'
@@ -83,6 +84,7 @@ export default function DashboardLayout({
         if (data?.app_logo_url) setLogoUrl(data.app_logo_url)
       })
       .catch(() => {})
+    return () => ac.abort()
   }, [status])
 
   const toggleSidebar = () => {

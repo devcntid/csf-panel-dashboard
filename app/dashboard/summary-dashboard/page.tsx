@@ -1,10 +1,20 @@
 'use client'
 
-import { Fragment, useEffect, useMemo, useState } from 'react'
+import { Fragment, useEffect, useState } from 'react'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
 import { Spinner } from '@/components/ui/spinner'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { Clock, RefreshCw } from 'lucide-react'
+
+const MAX_CLIENT_ATTEMPTS = 3
+const CLIENT_RETRY_DELAY_MS = 5000
+const CLIENT_FETCH_TIMEOUT_MS = 280_000
+
+function sleep(ms: number) {
+  return new Promise<void>((r) => setTimeout(r, ms))
+}
 
 type PivotRow = {
   label: string
@@ -63,30 +73,121 @@ export default function SummaryDashboardPage() {
   // State untuk tabel pivot SE & Fundraising
   const [loadingTable, setLoadingTable] = useState(false)
   const [tableData, setTableData] = useState<PivotResponse | null>(null)
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const [loadAttempt, setLoadAttempt] = useState(0)
+  const [elapsedSec, setElapsedSec] = useState(0)
 
-  const loadTableData = async (options?: { year?: number }) => {
+  useEffect(() => {
+    if (!loadingTable) return
+    setElapsedSec(0)
+    const t0 = Date.now()
+    const id = setInterval(() => {
+      setElapsedSec(Math.floor((Date.now() - t0) / 1000))
+    }, 1000)
+    return () => clearInterval(id)
+  }, [loadingTable])
+
+  const loadTableData = async (options?: { year?: number; isCancelled?: () => boolean }) => {
     const y = options?.year ?? year
+    const isCancelled = options?.isCancelled
+    const hadExistingTable = tableData != null
+
     setLoadingTable(true)
+    setLoadError(null)
+    setLoadAttempt(0)
+
     try {
       const params = new URLSearchParams({ year: String(y) })
-      const res = await fetch(`/api/summary/se-yearly?${params.toString()}`, { cache: 'no-store' })
-      const json = (await res.json()) as PivotResponse
-      if (!json.success) {
-        console.error('Gagal mengambil summary SE yearly', json)
-        setTableData(null)
-        return
+
+      for (let attempt = 1; attempt <= MAX_CLIENT_ATTEMPTS; attempt++) {
+        if (isCancelled?.()) return
+        setLoadAttempt(attempt)
+
+        const controller = new AbortController()
+        const clientTimer = setTimeout(() => controller.abort(), CLIENT_FETCH_TIMEOUT_MS)
+
+        try {
+          const res = await fetch(`/api/summary/se-yearly?${params.toString()}`, {
+            cache: 'no-store',
+            signal: controller.signal,
+          })
+          clearTimeout(clientTimer)
+
+          let json: PivotResponse & { message?: string }
+          try {
+            json = (await res.json()) as PivotResponse & { message?: string }
+          } catch {
+            json = { success: false, message: 'Respons tidak valid' } as PivotResponse & {
+              message?: string
+            }
+          }
+
+          if (isCancelled?.()) return
+
+          if (res.ok && json.success) {
+            setTableData(json)
+            setLoadError(null)
+            return
+          }
+
+          const serverMsg =
+            typeof json?.message === 'string' && json.message.trim()
+              ? json.message.trim()
+              : `Permintaan gagal (${res.status})`
+
+          const retryable =
+            res.status === 502 ||
+            res.status === 503 ||
+            res.status === 504 ||
+            res.status === 408 ||
+            res.status === 429
+
+          if (retryable && attempt < MAX_CLIENT_ATTEMPTS) {
+            await sleep(CLIENT_RETRY_DELAY_MS)
+            continue
+          }
+
+          if (!hadExistingTable) setTableData(null)
+          setLoadError(
+            retryable || res.status >= 500
+              ? `${serverMsg} — Layanan Zains/Koyeb sedang lambat atau sibuk.`
+              : serverMsg,
+          )
+          return
+        } catch (err: unknown) {
+          clearTimeout(clientTimer)
+          if (isCancelled?.()) return
+
+          const isAbort = err instanceof Error && err.name === 'AbortError'
+          const msg = isAbort
+            ? 'Waktu tunggu habis — server masih memproses banyak data dari Zains.'
+            : err instanceof Error
+              ? err.message
+              : 'Gagal terhubung ke server.'
+
+          if (attempt < MAX_CLIENT_ATTEMPTS) {
+            await sleep(CLIENT_RETRY_DELAY_MS)
+            continue
+          }
+
+          if (!hadExistingTable) setTableData(null)
+          setLoadError(
+            `${msg} Silakan tunggu sebentar lalu ketuk Muat ulang — kami sudah mencoba ${MAX_CLIENT_ATTEMPTS} kali.`,
+          )
+          return
+        }
       }
-      setTableData(json)
-    } catch (error) {
-      console.error('Error fetch summary SE:', error)
-      setTableData(null)
     } finally {
-      setLoadingTable(false)
+      if (!isCancelled || !isCancelled()) setLoadingTable(false)
     }
   }
 
   useEffect(() => {
-    loadTableData()
+    let cancelled = false
+    loadTableData({ isCancelled: () => cancelled })
+    return () => {
+      cancelled = true
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -108,6 +209,10 @@ export default function SummaryDashboardPage() {
           <h1 className="text-2xl font-bold text-slate-800">Summary Dashboard</h1>
           <p className="text-slate-500 text-sm">
             Rekap capaian SE Klinik, Ambulance, Fundraising dan grafik capaian SE per klinik langsung dari API Zains.
+          </p>
+          <p className="text-amber-800/90 text-xs mt-1.5 bg-amber-50 border border-amber-100 rounded-md px-2 py-1.5 inline-block max-w-xl">
+            Memuat data bisa memakan waktu 1–3 menit karena banyak klinik memanggil API Zains (Koyeb). Mohon
+            ditunggu; jika gagal, gunakan <strong>Muat ulang</strong> di bawah.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
@@ -145,6 +250,26 @@ export default function SummaryDashboardPage() {
 
       <div className="grid grid-cols-1 gap-6">
         <div className="space-y-4">
+          {loadError && (
+            <Alert className="border-amber-200 bg-amber-50 text-amber-950 [&>svg]:text-amber-700">
+              <RefreshCw className="size-4" />
+              <AlertTitle>Belum berhasil memuat data terbaru</AlertTitle>
+              <AlertDescription className="text-amber-900/90 space-y-3">
+                <p>{loadError}</p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="border-amber-300 bg-white hover:bg-amber-100"
+                  onClick={() => loadTableData({ year })}
+                  disabled={loadingTable}
+                >
+                  <RefreshCw className="size-4 mr-2" />
+                  Muat ulang
+                </Button>
+              </AlertDescription>
+            </Alert>
+          )}
           {tableData ? (
             <Card>
               <CardHeader className="bg-emerald-50 border-b border-emerald-100">
@@ -249,13 +374,33 @@ export default function SummaryDashboardPage() {
               </CardContent>
             </Card>
           ) : loadingTable ? (
-            <div className="flex flex-col items-center justify-center gap-3 py-12 text-slate-400 text-sm">
-              <Spinner className="size-6 text-teal-600" />
-              <span>Memuat data summary...</span>
+            <div className="flex flex-col items-center justify-center gap-4 py-14 px-4 text-center rounded-lg border border-teal-100 bg-teal-50/40">
+              <Spinner className="size-8 text-teal-600" />
+              <div className="space-y-1 text-slate-700 text-sm max-w-md">
+                <p className="font-medium text-slate-800">Mengambil data dari API Zains…</p>
+                {loadAttempt > 1 && (
+                  <p className="text-amber-800 text-xs">
+                    Percobaan ke-{loadAttempt} dari {MAX_CLIENT_ATTEMPTS} (server otomatis mengulang jika lambat).
+                  </p>
+                )}
+                <p className="flex items-center justify-center gap-1.5 text-slate-500 text-xs">
+                  <Clock className="size-3.5 shrink-0" />
+                  Terhubung: {elapsedSec}s — ini normal untuk banyak klinik; jangan tutup halaman.
+                </p>
+              </div>
             </div>
           ) : (
-            <div className="flex items-center justify-center py-12 text-slate-400 text-sm">
-              Belum ada data summary yang bisa ditampilkan
+            <div className="flex flex-col items-center justify-center gap-3 py-12 text-slate-400 text-sm">
+              <p>Belum ada data summary yang bisa ditampilkan.</p>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => loadTableData({ year })}
+                disabled={loadingTable}
+              >
+                Muat data
+              </Button>
             </div>
           )}
         </div>

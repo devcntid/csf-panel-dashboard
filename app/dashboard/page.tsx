@@ -71,7 +71,7 @@ export default function DashboardPage() {
   const [clinics, setClinics] = useState<{ id: number; name: string }[]>([])
   const [polyCompositionExpanded, setPolyCompositionExpanded] = useState(false)
 
-  const fetchData = useCallback(async () => {
+  const loadDashboard = useCallback(async (isCancelled?: () => boolean) => {
     setLoading(true)
     try {
       const result = await getDashboardData({
@@ -79,31 +79,40 @@ export default function DashboardPage() {
         dateTo,
         clinicId: clinicId === 'all' ? undefined : parseInt(clinicId),
       })
+      if (isCancelled?.()) return
       setData(result)
     } catch (err) {
       console.error('Error fetching dashboard:', err)
-      setData(null)
+      if (!isCancelled?.()) setData(null)
     } finally {
-      setLoading(false)
+      if (!isCancelled || !isCancelled()) setLoading(false)
     }
   }, [dateFrom, dateTo, clinicId])
 
   useEffect(() => {
-    fetchData()
-  }, [fetchData])
+    let cancelled = false
+    loadDashboard(() => cancelled)
+    return () => {
+      cancelled = true
+    }
+  }, [loadDashboard])
 
   useEffect(() => {
     setPolyCompositionExpanded(false)
   }, [data?.polyComposition])
 
   useEffect(() => {
+    let cancelled = false
     getAllClinics().then((list) => {
-      setClinics(Array.isArray(list) ? list : [])
+      if (!cancelled) setClinics(Array.isArray(list) ? list : [])
     })
+    return () => {
+      cancelled = true
+    }
   }, [])
 
   const handleRefresh = () => {
-    fetchData()
+    loadDashboard()
   }
 
   const handleYearToDate = () => {

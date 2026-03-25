@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useIncrementalRequest } from '@/hooks/use-incremental-request'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -94,7 +95,10 @@ export function CRUDDailyTarget({
     tipe_donatur: 'retail' as 'retail' | 'corporate' | 'community',
   })
 
+  const { start, invalidate } = useIncrementalRequest()
+
   const loadData = async () => {
+    const stale = start()
     setLoading(true)
     try {
       const [targetsResult, poliesData, clinicsData, sourcesData, insuranceTypesData] = await Promise.all([
@@ -115,6 +119,7 @@ export function CRUDDailyTarget({
         getSources(),
         getMasterInsuranceTypes(),
       ])
+      if (stale()) return
       setTargets(targetsResult.targets)
       setTotal(targetsResult.total)
       setPolies(poliesData)
@@ -124,29 +129,29 @@ export function CRUDDailyTarget({
     } catch (error) {
       console.error('Error loading data:', error)
     } finally {
-      setLoading(false)
+      if (!stale()) setLoading(false)
     }
   }
 
   useEffect(() => {
-    // Always fetch when page, limit, or filters change
     loadData()
-    // Set initial data for dropdowns if available
     if (initialPolies) setPolies(initialPolies)
     if (initialClinics) setClinics(initialClinics)
     if (initialSources) setSources(initialSources)
+    return invalidate
   }, [page, limit, filters.clinic_id, filters.poly_id, filters.source_id, filters.tipe_donatur, filters.start_date, filters.end_date, filters.target_month, filters.target_year])
 
   // Load base rate when clinic, poly, or year changes
   useEffect(() => {
     if (formData.clinic_id && formData.master_poly_id && isOpen && formData.target_year) {
+      let cancelled = false
       const loadBaseRate = async () => {
         const rate = await getTargetConfigByClinicPolyYear(
           parseInt(formData.clinic_id),
           parseInt(formData.master_poly_id),
           formData.target_year
         )
-        
+        if (cancelled) return
         setFormData(prev => {
           const visits = prev.target_visits || 0
           const revenue = rate * visits
@@ -158,6 +163,9 @@ export function CRUDDailyTarget({
         })
       }
       loadBaseRate()
+      return () => {
+        cancelled = true
+      }
     }
   }, [formData.clinic_id, formData.master_poly_id, formData.target_year, isOpen])
 

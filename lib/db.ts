@@ -1,3 +1,8 @@
+/**
+ * Client DB = @neondatabase/serverless (`neon()`).
+ * Neon adalah PostgreSQL ter-hosting; `sql` / `getSqlClient()` memang sudah Neon serverless,
+ * bukan driver “lama” terpisah. Import dari sini = satu singleton + lazy init.
+ */
 import { neon } from '@neondatabase/serverless'
 
 // Load .env.local jika belum ter-load (untuk development)

@@ -1523,7 +1523,7 @@ export const getTransactions = cache(
         );
       }
 
-      // Filter tanggal
+      // Filter tanggal (tanpa DATE(kolom) agar indeks pada trx_date bisa dipakai)
       if (validDateFrom && validDateTo) {
         paramIndex++;
         const fromIdx = paramIndex;
@@ -1534,16 +1534,16 @@ export const getTransactions = cache(
         params.push(validDateTo);
 
         whereClauses.push(
-          `DATE(t.trx_date) >= DATE($${fromIdx}) AND DATE(t.trx_date) <= DATE($${toIdx})`,
+          `t.trx_date >= $${fromIdx}::date AND t.trx_date <= $${toIdx}::date`,
         );
       } else if (validDateFrom) {
         paramIndex++;
         params.push(validDateFrom);
-        whereClauses.push(`DATE(t.trx_date) >= DATE($${paramIndex})`);
+        whereClauses.push(`t.trx_date >= $${paramIndex}::date`);
       } else if (validDateTo) {
         paramIndex++;
         params.push(validDateTo);
-        whereClauses.push(`DATE(t.trx_date) <= DATE($${paramIndex})`);
+        whereClauses.push(`t.trx_date <= $${paramIndex}::date`);
       }
 
       // Filter poli
@@ -1579,11 +1579,30 @@ export const getTransactions = cache(
       const offsetIdx = paramIndex;
       params.push(offset);
 
+      const baseFromForCount = `
+      FROM transactions t
+      JOIN clinics c ON c.id = t.clinic_id
+      LEFT JOIN master_polies mp ON mp.id = t.poly_id
+      LEFT JOIN master_insurance_types mit ON mit.id = t.insurance_type_id
+      WHERE ${whereSql}
+    `;
+
       const baseFromWhere = `
       FROM transactions t
       JOIN clinics c ON c.id = t.clinic_id
       LEFT JOIN master_polies mp ON mp.id = t.poly_id
       LEFT JOIN master_insurance_types mit ON mit.id = t.insurance_type_id
+      LEFT JOIN LATERAL (
+        SELECT
+          string_agg(tz.id_transaksi, ', ' ORDER BY tz.id) FILTER (
+            WHERE tz.id_transaksi IS NOT NULL AND tz.id_transaksi <> ''
+          ) AS id_transaksi_zains,
+          (array_agg(tz.id_donatur ORDER BY tz.id) FILTER (
+            WHERE tz.id_donatur IS NOT NULL AND tz.id_donatur <> ''
+          ))[1] AS id_donatur_zains
+        FROM transactions_to_zains tz
+        WHERE tz.transaction_id = t.id
+      ) zains ON TRUE
       WHERE ${whereSql}
     `;
 
@@ -1604,8 +1623,8 @@ export const getTransactions = cache(
           c.name AS clinic_name,
           mp.name AS master_poly_name,
           mit.name AS master_insurance_name,
-          (SELECT string_agg(tz.id_transaksi, ', ' ORDER BY tz.id) FROM transactions_to_zains tz WHERE tz.transaction_id = t.id AND tz.id_transaksi IS NOT NULL AND tz.id_transaksi != '') AS id_transaksi_zains,
-          (SELECT tz.id_donatur FROM transactions_to_zains tz WHERE tz.transaction_id = t.id AND tz.id_donatur IS NOT NULL AND tz.id_donatur != '' LIMIT 1) AS id_donatur_zains
+          zains.id_transaksi_zains,
+          zains.id_donatur_zains
         ${baseFromWhere}
         ${orderByClause}
         LIMIT $${limitIdx} OFFSET $${offsetIdx}
@@ -1615,7 +1634,7 @@ export const getTransactions = cache(
         client(
           `
         SELECT COUNT(*) AS total
-        ${baseFromWhere}
+        ${baseFromForCount}
         `,
           filterParams,
         ),
@@ -1787,17 +1806,17 @@ export const getTransactionStats = cache(
         whereClauses.push(`t.clinic_id = $${paramIndex}`);
       }
 
-      // Filter search (trx_no, patient_name, erm_no, id_transaksi_zains, id_donatur_zains via transactions_to_zains)
+      // Filter search (sama dengan getTransactions: termasuk nik)
       if (trimmedSearch) {
         paramIndex++;
         params.push(`%${trimmedSearch}%`);
         const idx = paramIndex;
         whereClauses.push(
-          `(t.trx_no ILIKE $${idx} OR t.patient_name ILIKE $${idx} OR t.erm_no ILIKE $${idx} OR EXISTS (SELECT 1 FROM transactions_to_zains tz WHERE tz.transaction_id = t.id AND (tz.id_transaksi ILIKE $${idx} OR tz.id_donatur ILIKE $${idx})))`,
+          `(t.trx_no ILIKE $${idx} OR t.patient_name ILIKE $${idx} OR t.erm_no ILIKE $${idx} OR t.nik ILIKE $${idx} OR EXISTS (SELECT 1 FROM transactions_to_zains tz WHERE tz.transaction_id = t.id AND (tz.id_transaksi ILIKE $${idx} OR tz.id_donatur ILIKE $${idx})))`,
         );
       }
 
-      // Filter tanggal
+      // Filter tanggal (tanpa DATE(kolom))
       if (validDateFrom && validDateTo) {
         paramIndex++;
         const fromIdx = paramIndex;
@@ -1808,16 +1827,16 @@ export const getTransactionStats = cache(
         params.push(validDateTo);
 
         whereClauses.push(
-          `DATE(t.trx_date) >= DATE($${fromIdx}) AND DATE(t.trx_date) <= DATE($${toIdx})`,
+          `t.trx_date >= $${fromIdx}::date AND t.trx_date <= $${toIdx}::date`,
         );
       } else if (validDateFrom) {
         paramIndex++;
         params.push(validDateFrom);
-        whereClauses.push(`DATE(t.trx_date) >= DATE($${paramIndex})`);
+        whereClauses.push(`t.trx_date >= $${paramIndex}::date`);
       } else if (validDateTo) {
         paramIndex++;
         params.push(validDateTo);
-        whereClauses.push(`DATE(t.trx_date) <= DATE($${paramIndex})`);
+        whereClauses.push(`t.trx_date <= $${paramIndex}::date`);
       }
 
       // Filter poli
@@ -1848,11 +1867,11 @@ export const getTransactionStats = cache(
         `
       SELECT 
         COUNT(*) as total_transactions,
-        COUNT(CASE WHEN zains_synced = true THEN 1 END) as synced_count,
-        COUNT(CASE WHEN zains_synced = false THEN 1 END) as pending_count,
-        COALESCE(SUM(paid_total), 0) as total_revenue,
-        COALESCE(SUM(covered_total), 0) as total_jaminan,
-        COALESCE(SUM(bill_total), 0) as total_tagihan
+        COUNT(CASE WHEN t.zains_synced = true THEN 1 END) as synced_count,
+        COUNT(CASE WHEN (t.zains_synced = false OR t.zains_synced IS NULL) THEN 1 END) as pending_count,
+        COALESCE(SUM(t.paid_total), 0) as total_revenue,
+        COALESCE(SUM(t.covered_total), 0) as total_jaminan,
+        COALESCE(SUM(t.bill_total), 0) as total_tagihan
       FROM transactions t
       WHERE ${whereSql}
       `,
@@ -2032,16 +2051,16 @@ export const getTransactionsToZainsList = cache(
         params.push(validDateTo);
         const toIdx = paramIndex;
         whereClauses.push(
-          `tz.tgl_transaksi >= DATE($${fromIdx}) AND tz.tgl_transaksi <= DATE($${toIdx})`
+          `tz.tgl_transaksi >= $${fromIdx}::date AND tz.tgl_transaksi <= $${toIdx}::date`
         );
       } else if (validDateFrom) {
         paramIndex++;
         params.push(validDateFrom);
-        whereClauses.push(`tz.tgl_transaksi >= DATE($${paramIndex})`);
+        whereClauses.push(`tz.tgl_transaksi >= $${paramIndex}::date`);
       } else if (validDateTo) {
         paramIndex++;
         params.push(validDateTo);
-        whereClauses.push(`tz.tgl_transaksi <= DATE($${paramIndex})`);
+        whereClauses.push(`tz.tgl_transaksi <= $${paramIndex}::date`);
       }
 
       if (zainsSynced === "synced") {
@@ -2166,16 +2185,16 @@ export const getTransactionsToZainsStats = cache(
         params.push(validDateTo);
         const toIdx = paramIndex;
         whereClauses.push(
-          `tz.tgl_transaksi >= DATE($${fromIdx}) AND tz.tgl_transaksi <= DATE($${toIdx})`
+          `tz.tgl_transaksi >= $${fromIdx}::date AND tz.tgl_transaksi <= $${toIdx}::date`
         );
       } else if (validDateFrom) {
         paramIndex++;
         params.push(validDateFrom);
-        whereClauses.push(`tz.tgl_transaksi >= DATE($${paramIndex})`);
+        whereClauses.push(`tz.tgl_transaksi >= $${paramIndex}::date`);
       } else if (validDateTo) {
         paramIndex++;
         params.push(validDateTo);
-        whereClauses.push(`tz.tgl_transaksi <= DATE($${paramIndex})`);
+        whereClauses.push(`tz.tgl_transaksi <= $${paramIndex}::date`);
       }
       if (zainsSynced === "synced") {
         whereClauses.push("tz.synced = true");

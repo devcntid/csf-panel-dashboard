@@ -9,6 +9,7 @@ import { PasienClient } from './pasien-client'
 import { PatientPagination } from './patient-pagination'
 import { PasienRowActions } from './pasien-row-actions'
 import { Suspense } from 'react'
+import { DataTablePageSkeleton } from '@/components/dashboard/data-table-page-skeleton'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 
@@ -196,9 +197,12 @@ export default async function PasienPage({
 }: {
   searchParams: Promise<{ search?: string; page?: string; clinic?: string; perPage?: string }>
 }) {
-  const params = await searchParams
+  const [params, session, clinics] = await Promise.all([
+    searchParams,
+    getServerSession(authOptions),
+    getAllClinics(),
+  ])
 
-  const session = await getServerSession(authOptions)
   const role = (session?.user as any)?.role || 'super_admin'
   const sessionClinicId = (session?.user as any)?.clinic_id as number | null | undefined
 
@@ -209,9 +213,6 @@ export default async function PasienPage({
 
   const isClinicManager = role === 'clinic_manager'
   const clinicId = isClinicManager ? (sessionClinicId ?? undefined) : requestedClinicId
-
-  // Fetch clinics untuk dropdown filter
-  const clinics = await getAllClinics()
 
   return (
     <div>
@@ -228,7 +229,11 @@ export default async function PasienPage({
       {/* Content */}
       <div className="p-6">
         {/* Stats Cards - Streamed separately */}
-        <Suspense fallback={null}>
+        <Suspense
+          fallback={
+            <DataTablePageSkeleton showPageHeader={false} showStatCards tableRows={0} />
+          }
+        >
           <PatientStats search={search} clinicId={clinicId} />
         </Suspense>
 
@@ -236,7 +241,11 @@ export default async function PasienPage({
         <PasienClient clinics={clinics} readonlyClinicId={isClinicManager ? clinicId : undefined} />
 
         {/* Patient Table - Streamed separately */}
-        <Suspense fallback={null}>
+        <Suspense
+          fallback={
+            <DataTablePageSkeleton showPageHeader={false} showStatCards={false} tableRows={10} />
+          }
+        >
           <PatientList search={search} page={page} clinicId={clinicId} perPage={perPage} />
         </Suspense>
       </div>

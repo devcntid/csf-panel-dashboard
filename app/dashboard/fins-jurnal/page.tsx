@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { KeyboardEvent } from 'react'
 import { useRouter } from 'next/navigation'
 import { useSession } from 'next-auth/react'
@@ -135,6 +135,8 @@ export default function FinsJurnalPage() {
   const [searchTerm, setSearchTerm] = useState<string>('')
   const [exportingExcel, setExportingExcel] = useState<boolean>(false)
 
+  const jurnalFetchReqRef = useRef(0)
+
   // Pencarian by terms dikirim ke API Zains (server-side). Tabel menampilkan items dari response.
 
   // Proteksi: clinic_manager tidak boleh mengakses halaman ini
@@ -155,6 +157,9 @@ export default function FinsJurnalPage() {
       return
     }
 
+    const reqId = ++jurnalFetchReqRef.current
+    const stale = () => reqId !== jurnalFetchReqRef.current
+
     setLoading(true)
     setError(null)
 
@@ -173,6 +178,7 @@ export default function FinsJurnalPage() {
 
       const json = (await res.json()) as FinsJurnalResponse
 
+      if (stale()) return
       if (!res.ok || !json.status) {
         setError(json.message || 'Gagal mengambil data jurnal dari Zains')
         setItems([])
@@ -210,12 +216,14 @@ export default function FinsJurnalPage() {
       setPerPage(json.paging?.per_page ?? targetPerPage)
     } catch (err: any) {
       console.error('Error fetch /api/fins/jurnal:', err)
-      setError(err?.message || 'Terjadi kesalahan saat mengambil data jurnal')
-      setItems([])
-      setTotalData(0)
-      setTotalNominal(0)
+      if (!stale()) {
+        setError(err?.message || 'Terjadi kesalahan saat mengambil data jurnal')
+        setItems([])
+        setTotalData(0)
+        setTotalNominal(0)
+      }
     } finally {
-      setLoading(false)
+      if (!stale()) setLoading(false)
     }
   }
 
@@ -223,6 +231,9 @@ export default function FinsJurnalPage() {
   useEffect(() => {
     if (sessionStatus === 'authenticated') {
       fetchData({ page: 1, perPage })
+    }
+    return () => {
+      jurnalFetchReqRef.current++
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionStatus])

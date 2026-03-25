@@ -6,8 +6,15 @@ import {
   parseCommaSeparatedIds,
   resolveZainsFinsTotalsUrl,
 } from '@/lib/zains-fins-totals'
+import {
+  fetchZainsWithRetry,
+  getZainsSummaryConcurrency,
+  runPool,
+} from '@/lib/zains-fetch-retry'
 
 export const dynamic = 'force-dynamic'
+/** Banyak call paralel ke Zains; naikkan batas agar tidak putus di 60s (Vercel / hosting). */
+export const maxDuration = 300
 
 type MonthlyPoint = {
   month: number
@@ -88,7 +95,7 @@ async function fetchZainsMonthlySeries(params: {
 
   const targetUrl = resolveZainsFinsTotalsUrl(url, searchParams)
 
-  const res = await fetch(targetUrl, {
+  const res = await fetchZainsWithRetry(targetUrl, {
     method: 'GET',
     cache: 'no-store',
     next: { revalidate: 0 },
@@ -428,42 +435,40 @@ export async function GET(req: NextRequest) {
       })
     }
 
-    // Jalankan semua call ke Zains secara paralel
-    const taskResults = await Promise.all(
-      tasks.map(async (t) => {
-        const base = {
-          year,
-          onlyCoaDebet: t.params.onlyCoaDebet,
-          onlyCoaKredit: t.params.onlyCoaKredit,
-          onlyIdContact: t.params.onlyIdContact,
-          excludeIdContact: t.params.excludeIdContact,
-          idKantor: t.params.idKantorZains,
-        }
-        let monthly: MonthlyPoint[]
-        if (t.params.subtractType) {
-          // Expend di Zains memakai filter COA terbalik vs receipt (debet/kredit ditukar).
-          const [receiptPts, expendPts] = await Promise.all([
-            fetchZainsMonthlySeries({ ...base, type: t.params.type }),
-            fetchZainsMonthlySeries({
-              year,
-              onlyCoaDebet: t.params.onlyCoaKredit,
-              onlyCoaKredit: t.params.onlyCoaDebet,
-              onlyIdContact: t.params.onlyIdContact,
-              excludeIdContact: t.params.excludeIdContact,
-              idKantor: t.params.idKantorZains,
-              type: t.params.subtractType,
-            }),
-          ])
-          monthly = netMonthlySeries(receiptPts, expendPts)
-        } else {
-          monthly = await fetchZainsMonthlySeries({
-            ...base,
-            type: t.params.type,
-          })
-        }
-        return { ...t, monthly }
-      }),
-    )
+    // Call ke Zains dibatasi paralelisme (ZAINS_SUMMARY_CONCURRENCY, default 5) + retry per request
+    const concurrency = getZainsSummaryConcurrency()
+    const taskResults = await runPool(tasks, concurrency, async (t) => {
+      const base = {
+        year,
+        onlyCoaDebet: t.params.onlyCoaDebet,
+        onlyCoaKredit: t.params.onlyCoaKredit,
+        onlyIdContact: t.params.onlyIdContact,
+        excludeIdContact: t.params.excludeIdContact,
+        idKantor: t.params.idKantorZains,
+      }
+      let monthly: MonthlyPoint[]
+      if (t.params.subtractType) {
+        const [receiptPts, expendPts] = await Promise.all([
+          fetchZainsMonthlySeries({ ...base, type: t.params.type }),
+          fetchZainsMonthlySeries({
+            year,
+            onlyCoaDebet: t.params.onlyCoaKredit,
+            onlyCoaKredit: t.params.onlyCoaDebet,
+            onlyIdContact: t.params.onlyIdContact,
+            excludeIdContact: t.params.excludeIdContact,
+            idKantor: t.params.idKantorZains,
+            type: t.params.subtractType,
+          }),
+        ])
+        monthly = netMonthlySeries(receiptPts, expendPts)
+      } else {
+        monthly = await fetchZainsMonthlySeries({
+          ...base,
+          type: t.params.type,
+        })
+      }
+      return { ...t, monthly }
+    })
 
     // Kumpulkan semua bulan unik yang punya data di salah satu row
     const monthSet = new Set<number>()

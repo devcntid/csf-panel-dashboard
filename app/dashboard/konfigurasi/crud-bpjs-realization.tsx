@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useIncrementalRequest } from '@/hooks/use-incremental-request'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -69,7 +70,10 @@ export function CRUDBpjsRealization({
     non_pbi_count: '' as number | '',
   })
 
+  const { start, invalidate } = useIncrementalRequest()
+
   const loadData = async () => {
+    const stale = start()
     setLoading(true)
     try {
       const result = await getBpjsRealizationsPaginated(
@@ -79,17 +83,19 @@ export function CRUDBpjsRealization({
         page,
         limit
       )
+      if (stale()) return
       setRealizations(result.realizations)
       setTotal(result.total)
     } catch (error) {
       console.error('Error loading data:', error)
     } finally {
-      setLoading(false)
+      if (!stale()) setLoading(false)
     }
   }
 
   useEffect(() => {
     loadData()
+    return invalidate
   }, [page, limit, filters.clinic_id, filters.year, filters.month])
 
   const handleSubmit = async (e: React.FormEvent) => {

@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useIncrementalRequest } from '@/hooks/use-incremental-request'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -48,7 +49,10 @@ export function CRUDPublicHoliday({
     is_national_holiday: true,
   })
 
+  const { start, invalidate } = useIncrementalRequest()
+
   const loadData = async () => {
+    const stale = start()
     setLoading(true)
     try {
       const result = await getPublicHolidays(
@@ -56,18 +60,19 @@ export function CRUDPublicHoliday({
         page,
         limit
       )
+      if (stale()) return
       setHolidays(result.holidays)
       setTotal(result.total)
     } catch (error) {
       console.error('Error loading data:', error)
     } finally {
-      setLoading(false)
+      if (!stale()) setLoading(false)
     }
   }
 
   useEffect(() => {
-    // Always fetch when page, limit, or filters change
     loadData()
+    return invalidate
   }, [page, limit, filters.year])
 
   const handleSubmit = async (e: React.FormEvent) => {

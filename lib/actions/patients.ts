@@ -14,7 +14,15 @@ export const getPatients = cache(async (search?: string, page: number = 1, limit
         const [patients, countResultRaw] = await Promise.all([
           sql`
             SELECT 
-              p.*,
+              p.id,
+              p.clinic_id,
+              p.erm_no,
+              p.nik,
+              p.full_name,
+              p.id_donatur_zains,
+              p.first_visit_at,
+              p.last_visit_at,
+              p.visit_count,
               c.name as clinic_name,
               CASE 
                 WHEN p.visit_count >= 10 THEN 'Loyal'
@@ -57,7 +65,15 @@ export const getPatients = cache(async (search?: string, page: number = 1, limit
         const [patients, countResultRaw] = await Promise.all([
           sql`
             SELECT 
-              p.*,
+              p.id,
+              p.clinic_id,
+              p.erm_no,
+              p.nik,
+              p.full_name,
+              p.id_donatur_zains,
+              p.first_visit_at,
+              p.last_visit_at,
+              p.visit_count,
               c.name as clinic_name,
               CASE 
                 WHEN p.visit_count >= 10 THEN 'Loyal'
@@ -100,7 +116,15 @@ export const getPatients = cache(async (search?: string, page: number = 1, limit
         const [patients, countResultRaw] = await Promise.all([
           sql`
             SELECT 
-              p.*,
+              p.id,
+              p.clinic_id,
+              p.erm_no,
+              p.nik,
+              p.full_name,
+              p.id_donatur_zains,
+              p.first_visit_at,
+              p.last_visit_at,
+              p.visit_count,
               c.name as clinic_name,
               CASE 
                 WHEN p.visit_count >= 10 THEN 'Loyal'
@@ -132,7 +156,15 @@ export const getPatients = cache(async (search?: string, page: number = 1, limit
         const [patients, countResultRaw] = await Promise.all([
           sql`
             SELECT 
-              p.*,
+              p.id,
+              p.clinic_id,
+              p.erm_no,
+              p.nik,
+              p.full_name,
+              p.id_donatur_zains,
+              p.first_visit_at,
+              p.last_visit_at,
+              p.visit_count,
               c.name as clinic_name,
               CASE 
                 WHEN p.visit_count >= 10 THEN 'Loyal'
@@ -234,6 +266,7 @@ export const getPatientStats = cache(async (search?: string, clinicId?: number) 
           AND (
             p.full_name ILIKE ${searchPattern} OR
             p.erm_no ILIKE ${searchPattern} OR
+            p.nik ILIKE ${searchPattern} OR
             p.id_donatur_zains ILIKE ${searchPattern}
           )
       `
@@ -290,6 +323,7 @@ export const getPatientStats = cache(async (search?: string, clinicId?: number) 
         WHERE 
           p.full_name ILIKE ${searchPattern} OR
           p.erm_no ILIKE ${searchPattern} OR
+          p.nik ILIKE ${searchPattern} OR
           p.id_donatur_zains ILIKE ${searchPattern}
       `
     } else {

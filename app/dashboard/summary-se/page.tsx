@@ -1,6 +1,6 @@
 'use client'
 
-import { Fragment, useEffect, useState } from 'react'
+import { Fragment, useEffect, useRef, useState } from 'react'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
@@ -76,6 +76,7 @@ export default function SummarySEPage() {
   const [loading, setLoading] = useState(false)
   const [progress, setProgress] = useState(0)
   const [data, setData] = useState<PivotResponse | null>(null)
+  const loadRequestSeq = useRef(0)
 
   const buildPivotData = (responses: Array<SummaryResponse | null>, targetYear: number): PivotResponse | null => {
     const monthCount = monthOptions.length
@@ -156,6 +157,9 @@ export default function SummarySEPage() {
 
   const loadData = async (options?: { year?: number }) => {
     const y = options?.year ?? year
+    const reqId = ++loadRequestSeq.current
+    const stale = () => reqId !== loadRequestSeq.current
+
     setLoading(true)
     setProgress(0)
     try {
@@ -169,32 +173,38 @@ export default function SummarySEPage() {
             const json = (await res.json()) as SummaryResponse
             if (!json.success) {
               console.error(`Gagal mengambil summary SE untuk bulan ${m}`, json)
-              setProgress((prev) => Math.min(prev + 100 / totalMonths, 100))
+              if (!stale()) setProgress((prev) => Math.min(prev + 100 / totalMonths, 100))
               return null
             }
-            setProgress((prev) => Math.min(prev + 100 / totalMonths, 100))
+            if (!stale()) setProgress((prev) => Math.min(prev + 100 / totalMonths, 100))
             return json
           } catch (error) {
             console.error(`Error fetch summary SE untuk bulan ${m}:`, error)
-            setProgress((prev) => Math.min(prev + 100 / totalMonths, 100))
+            if (!stale()) setProgress((prev) => Math.min(prev + 100 / totalMonths, 100))
             return null
           }
         }),
       )
 
+      if (stale()) return
       const pivot = buildPivotData(responses, y)
       setData(pivot)
     } catch (error) {
       console.error('Error fetch summary SE:', error)
-      setData(null)
+      if (!stale()) setData(null)
     } finally {
-      setProgress(100)
-      setLoading(false)
+      if (!stale()) {
+        setProgress(100)
+        setLoading(false)
+      }
     }
   }
 
   useEffect(() => {
     loadData()
+    return () => {
+      loadRequestSeq.current++
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 

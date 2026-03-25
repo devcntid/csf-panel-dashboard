@@ -2,6 +2,7 @@ import { getTransactionsToZainsList, getTransactionsToZainsStats } from '@/lib/a
 import { getAllClinics } from '@/lib/actions/config'
 import { TransaksiZainsClient } from './transaksi-zains-client'
 import { Suspense } from 'react'
+import { DataTablePageSkeleton } from '@/components/dashboard/data-table-page-skeleton'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 
@@ -19,9 +20,11 @@ export default async function TransaksiZainsPage({
     method?: string
   }>
 }) {
-  const params = await searchParams
+  const [params, session] = await Promise.all([
+    searchParams,
+    getServerSession(authOptions),
+  ])
 
-  const session = await getServerSession(authOptions)
   const role = (session?.user as any)?.role || 'super_admin'
   const sessionClinicId = (session?.user as any)?.clinic_id as number | null | undefined
 
@@ -64,7 +67,7 @@ export default async function TransaksiZainsPage({
   const { rows, total } = listData
 
   return (
-    <Suspense fallback={null}>
+    <Suspense fallback={<DataTablePageSkeleton showStatCards tableRows={10} />}>
       <div>
         <div className="p-6">
           <TransaksiZainsClient
