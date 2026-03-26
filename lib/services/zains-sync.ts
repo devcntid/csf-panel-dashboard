@@ -1,5 +1,6 @@
 import { sql } from '@/lib/db'
 import { getZainsTransactionSyncEnabled } from '@/lib/settings'
+import { getZainsApiConfig } from '@/lib/zains-api-config'
 import { Client as WorkflowTriggerClient } from '@upstash/workflow'
 
 /** Minimal percobaan HTTP ke API Zains (cold start / 5xx / rate limit) */
@@ -77,27 +78,63 @@ function extractContactFromNik(nikOrFallback: string): { hp: string; telpon: str
   }
 }
 
+/** Base URL API Zains (Golang/Koyeb) dari env; kosong = fallback ke Next lokal `/api/corez/*`. */
+function getZainsHttpApiBase(): string {
+  const { url } = getZainsApiConfig()
+  return url ? url.trim().replace(/\/+$/, '') : ''
+}
+
+function isZainsHttpApiConfigured(): boolean {
+  return getZainsHttpApiBase().length > 0
+}
+
+function corezPostHeaders(): HeadersInit {
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  }
+  if (isZainsHttpApiConfigured() && process.env.API_KEY_ZAINS) {
+    headers.Authorization = process.env.API_KEY_ZAINS
+  }
+  return headers
+}
+
+function urlCorezMitraSave(): string {
+  const base = getZainsHttpApiBase()
+  if (base) return `${base}/corez/mitra/save`
+  return `${getWorkflowBaseUrl()}/api/corez/mitra/save`
+}
+
+function urlCorezTransaksiSave(): string {
+  const base = getZainsHttpApiBase()
+  if (base) return `${base}/corez/transaksi/save`
+  return `${getWorkflowBaseUrl()}/api/corez/transaksi/save`
+}
+
 /** Helper: tambah mode dan host Zains ke payload log agar bisa diverifikasi di system_logs */
 function payloadWithZainsEnv(payload: any): any {
-  // Endpoint corez versi Next tidak butuh auth dan tidak lewat API Zains Golang.
-  // Kita tetap simpan informasi host sebagai pembeda di `system_logs`.
   let urlHost = ''
+  let mode: string = 'next-corez'
+  let target: string = 'next'
   try {
-    const base = getWorkflowBaseUrl()
-    urlHost = new URL(base).hostname
+    const base = getZainsHttpApiBase()
+    if (base) {
+      urlHost = new URL(base).hostname
+      mode = 'zains-golang'
+      target = 'koyeb'
+    } else {
+      const w = getWorkflowBaseUrl()
+      urlHost = new URL(w).hostname
+    }
   } catch {
     urlHost = ''
   }
 
   return {
     ...payload,
-    _zains_env: { mode: 'next-corez', urlHost },
-    _zains_target: 'next',
+    _zains_env: { mode, urlHost },
+    _zains_target: target,
   }
 }
-
-// Catatan:
-// Endpoint corez versi Next dipanggil via `getWorkflowBaseUrl()` sehingga tidak perlu API Zains Golang.
 
 /**
  * Sync single patient to Zains API
@@ -108,8 +145,8 @@ export async function syncPatientToZains(patient: any): Promise<{
   error?: string
   patientId: number
 }> {
-  // Kita hit endpoint corez versi Next yang baru (tanpa Authorization).
-  const apiUrl = getWorkflowBaseUrl()
+  // Prioritas: API Zains Golang (URL_API_ZAINS* / URL_API_ZAINS) dari env; fallback: Next `/api/corez/mitra/save`.
+  const mitraUrl = urlCorezMitraSave()
 
   // NIK boleh kosong: fallback ke erm_no_for_zains agar sync tetap jalan (Zains butuh isi hp/telpon/email)
   const contactSource = patient.nik || patient.erm_no_for_zains || ''
@@ -126,11 +163,9 @@ export async function syncPatientToZains(patient: any): Promise<{
   }
 
   try {
-    const response = await fetchZainsWithRetry(`${apiUrl}/api/corez/mitra/save`, {
+    const response = await fetchZainsWithRetry(mitraUrl, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: corezPostHeaders(),
       body: JSON.stringify(payload),
     })
 
@@ -885,8 +920,7 @@ export async function syncSingleTransactionToZains(record: any): Promise<{
   rawResponse?: any
   httpStatus?: number
 }> {
-  // Kita hit endpoint corez versi Next (tanpa Authorization).
-  const apiUrl = getWorkflowBaseUrl()
+  const transaksiUrl = urlCorezTransaksiSave()
 
   // Helper: format tgl_transaksi ke YYYY-MM-DD
   const formatDateOnly = (value: any): string | null => {
@@ -974,11 +1008,9 @@ export async function syncSingleTransactionToZains(record: any): Promise<{
   }
 
   try {
-    const response = await fetchZainsWithRetry(`${apiUrl}/api/corez/transaksi/save`, {
+    const response = await fetchZainsWithRetry(transaksiUrl, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: corezPostHeaders(),
       body: JSON.stringify(payload),
     })
 

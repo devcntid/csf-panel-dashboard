@@ -1,5 +1,7 @@
 import type { PoolConnection } from 'mysql2/promise'
 import { getZainsCsfPool } from '@/lib/mysql-zains-csf'
+import { getZainsApiConfig } from '@/lib/zains-api-config'
+import { resolveZainsFinsTotalsUrl } from '@/lib/zains-fins-totals'
 
 export type FinsTotalsType = 'expend' | 'receipt'
 export type FinsTotalsGroupBy = 'monthly' | 'yearly' | null
@@ -87,7 +89,63 @@ function buildInClause(column: string, values: string[], negate: boolean): { sql
   return { sql: ` AND ${column}${negate ? ' NOT' : ''} IN (${placeholders})`, params: values }
 }
 
+function buildFinsTotalsSearchParams(filters: FinsTotalsFilters): URLSearchParams {
+  const sp = new URLSearchParams()
+  sp.set('type', filters.type)
+  if (filters.group_by === 'monthly' || filters.group_by === 'yearly') {
+    sp.set('group_by', filters.group_by)
+  }
+  if (filters.year != null && Number.isFinite(Number(filters.year))) {
+    sp.set('year', String(filters.year))
+  }
+  if (filters.tgl_awal) sp.set('tgl_awal', filters.tgl_awal)
+  if (filters.tgl_akhir) sp.set('tgl_akhir', filters.tgl_akhir)
+  if (filters.approve) sp.set('approve', filters.approve)
+  if (filters.id_program) sp.set('id_program', filters.id_program)
+  if (filters.id_kantor) sp.set('id_kantor', filters.id_kantor)
+  if (filters.only_coa_debet) sp.set('only_coa_debet', filters.only_coa_debet)
+  if (filters.exclude_coa_debet) sp.set('exclude_coa_debet', filters.exclude_coa_debet)
+  if (filters.only_coa_kredit) sp.set('only_coa_kredit', filters.only_coa_kredit)
+  if (filters.exclude_coa_kredit) sp.set('exclude_coa_kredit', filters.exclude_coa_kredit)
+  if (filters.only_id_contact) sp.set('only_id_contact', filters.only_id_contact)
+  if (filters.exclude_id_contact) sp.set('exclude_id_contact', filters.exclude_id_contact)
+  return sp
+}
+
+async function queryFinsTotalsViaZainsHttp(filters: FinsTotalsFilters): Promise<FinsTotalsResponse> {
+  const { url: baseUrl } = getZainsApiConfig()
+  const apiKey = process.env.API_KEY_ZAINS
+  if (!baseUrl || !apiKey) {
+    throw new Error('queryFinsTotalsViaZainsHttp: baseUrl atau API_KEY_ZAINS kosong')
+  }
+  const sp = buildFinsTotalsSearchParams(filters)
+  const targetUrl = resolveZainsFinsTotalsUrl(baseUrl, sp)
+  const res = await fetch(targetUrl, {
+    method: 'GET',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: apiKey,
+    },
+    cache: 'no-store',
+  })
+  const text = await res.text()
+  if (!res.ok) {
+    throw new Error(`Fins totals HTTP ${res.status}: ${text.slice(0, 800)}`)
+  }
+  return JSON.parse(text) as FinsTotalsResponse
+}
+
+/**
+ * Agregat FINS: jika `URL_API_ZAINS` / `URL_API_ZAINS_*` + `API_KEY_ZAINS` terisi, pakai GET ke API Zains Golang;
+ * selain itu query langsung ke MySQL `zains_csf` (HOST_DB).
+ */
 export async function queryFinsTotals(filters: FinsTotalsFilters): Promise<FinsTotalsResponse> {
+  const { url: baseUrl } = getZainsApiConfig()
+  const apiKey = process.env.API_KEY_ZAINS
+  if (baseUrl && apiKey) {
+    return queryFinsTotalsViaZainsHttp(filters)
+  }
+
   const pool = getZainsCsfPool()
   const connection = await pool.getConnection()
   try {
