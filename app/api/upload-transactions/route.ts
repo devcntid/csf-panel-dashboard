@@ -4,6 +4,7 @@ import { sql } from '@/lib/db'
 import * as XLSX from 'xlsx'
 import { getZainsTransactionSyncEnabled } from '@/lib/settings'
 import { syncPatientToZainsWorkflowsBatch } from '@/lib/services/zains-sync'
+import { buildZainsPaidFieldRows } from '@/lib/zains-paid-fields'
 
 // Helper function untuk parse tanggal
 function parseDate(dateStr: string | number): Date | null {
@@ -411,27 +412,20 @@ export async function POST(request: NextRequest) {
 
         const usePaidDiscountForTindakanOnly = allBillDiscountsEmpty && paidDiscount > 0
 
-        const paidFields = usePaidDiscountForTindakanOnly
-          ? [
-              { key: 'Jumlah Pembayaran ( Rp. ) - Karcis', category: 'Karcis', value: paidRegist },
-              { key: 'Jumlah Pembayaran ( Rp. ) - Tindakan', category: 'Tindakan', value: Math.max(0, paidAction - paidDiscount) },
-              { key: 'Jumlah Pembayaran ( Rp. ) - Laboratorium', category: 'Laboratorium', value: paidLab },
-              { key: 'Jumlah Pembayaran ( Rp. ) - Obat', category: 'Obat-obatan', value: paidDrug },
-              { key: 'Jumlah Pembayaran ( Rp. ) - Alkes', category: 'Alat Kesehatan', value: paidAlkes },
-              { key: 'Jumlah Pembayaran ( Rp. ) - MCU', category: 'MCU', value: paidMcu },
-              { key: 'Jumlah Pembayaran ( Rp. ) - Radiologi', category: 'Radiologi', value: paidRadio },
-              { key: 'Jumlah Pembayaran ( Rp. ) - Pembulatan', category: 'Pembulatan', value: paidRounding },
-            ]
-          : [
-              { key: 'Jumlah Pembayaran ( Rp. ) - Karcis', category: 'Karcis', value: paidRegist },
-              { key: 'Jumlah Pembayaran ( Rp. ) - Tindakan', category: 'Tindakan', value: paidAction },
-              { key: 'Jumlah Pembayaran ( Rp. ) - Laboratorium', category: 'Laboratorium', value: paidLab },
-              { key: 'Jumlah Pembayaran ( Rp. ) - Obat', category: 'Obat-obatan', value: paidDrug },
-              { key: 'Jumlah Pembayaran ( Rp. ) - Alkes', category: 'Alat Kesehatan', value: paidAlkes },
-              { key: 'Jumlah Pembayaran ( Rp. ) - MCU', category: 'MCU', value: paidMcu },
-              { key: 'Jumlah Pembayaran ( Rp. ) - Radiologi', category: 'Radiologi', value: paidRadio },
-              { key: 'Jumlah Pembayaran ( Rp. ) - Pembulatan', category: 'Pembulatan', value: paidRounding },
-            ]
+        const zainsPaidRows = buildZainsPaidFieldRows({
+          paidRegist,
+          paidAction,
+          paidLab,
+          paidDrug,
+          paidAlkes,
+          paidMcu,
+          paidRadio,
+          paidRounding,
+          paidTax,
+          paidDiscount,
+          paidTotal,
+          usePaidDiscountForTindakanOnly,
+        })
 
         // Cari id_donatur dari patient jika ada (hanya dari patient yang SUDAH ada)
         const patientRows = (await sql`
@@ -448,15 +442,11 @@ export async function POST(request: NextRequest) {
 
         // Jika total pembayaran 0, jangan break transaksi ke transactions_to_zains.
         if (paidTotal > 0) {
-          // Insert ke transactions_to_zains untuk setiap field yang memiliki nilai > 0
-          for (const field of paidFields) {
-            if (field.value > 0) {
-              const idProgram = categoryMap[field.category]
-              if (idProgram && ID_KANTOR_ZAINS) {
-                const nominalValue = Math.round(field.value)
-                
-                // Cek apakah sudah ada untuk menghindari duplikasi
-                // Gunakan kombinasi transaction_id, id_program, dan nominal untuk uniqueness
+          for (const field of zainsPaidRows) {
+            const idProgram = categoryMap[field.category]
+            if (idProgram && ID_KANTOR_ZAINS) {
+              const nominalValue = field.nominal
+
               const existingRows = (await sql`
                   SELECT id FROM transactions_to_zains
                   WHERE transaction_id = ${transactionId}
@@ -499,9 +489,8 @@ export async function POST(request: NextRequest) {
                   zainsInsertedCount++
                   transactionZainsInsertedCount++
                 }
-              } else {
+            } else {
                 console.warn(`⚠️  Category "${field.category}" tidak memiliki id_program_zains atau id_kantor_zains tidak tersedia untuk klinik ${clinicId}`)
-              }
             }
           }
         }

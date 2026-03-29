@@ -3,6 +3,7 @@ import { after } from 'next/server'
 import { sql } from '@/lib/db'
 import { getZainsTransactionSyncEnabled } from '@/lib/settings'
 import { syncPatientToZainsWorkflowsBatch } from '@/lib/services/zains-sync'
+import { buildZainsPaidFieldRows } from '@/lib/zains-paid-fields'
 
 // Helper function untuk parse tanggal
 function parseDate(dateStr: string | number): Date | null {
@@ -324,28 +325,20 @@ export async function POST(request: NextRequest) {
   
           const usePaidDiscountForTindakanOnly = allBillDiscountsEmpty && paidDiscount > 0
   
-          // Jika ada bill_*_discount terisi: paid_* sudah neto — jangan kurangi lagi (double diskon).
-          const paidFields = usePaidDiscountForTindakanOnly
-            ? [
-                { key: 'Jumlah Pembayaran ( Rp. ) - Karcis', category: 'Karcis', value: paidRegist },
-                { key: 'Jumlah Pembayaran ( Rp. ) - Tindakan', category: 'Tindakan', value: Math.max(0, paidAction - paidDiscount) },
-                { key: 'Jumlah Pembayaran ( Rp. ) - Laboratorium', category: 'Laboratorium', value: paidLab },
-                { key: 'Jumlah Pembayaran ( Rp. ) - Obat', category: 'Obat-obatan', value: paidDrug },
-                { key: 'Jumlah Pembayaran ( Rp. ) - Alkes', category: 'Alat Kesehatan', value: paidAlkes },
-                { key: 'Jumlah Pembayaran ( Rp. ) - MCU', category: 'MCU', value: paidMcu },
-                { key: 'Jumlah Pembayaran ( Rp. ) - Radiologi', category: 'Radiologi', value: paidRadio },
-                { key: 'Jumlah Pembayaran ( Rp. ) - Pembulatan', category: 'Pembulatan', value: paidRounding },
-              ]
-            : [
-                { key: 'Jumlah Pembayaran ( Rp. ) - Karcis', category: 'Karcis', value: paidRegist },
-                { key: 'Jumlah Pembayaran ( Rp. ) - Tindakan', category: 'Tindakan', value: paidAction },
-                { key: 'Jumlah Pembayaran ( Rp. ) - Laboratorium', category: 'Laboratorium', value: paidLab },
-                { key: 'Jumlah Pembayaran ( Rp. ) - Obat', category: 'Obat-obatan', value: paidDrug },
-                { key: 'Jumlah Pembayaran ( Rp. ) - Alkes', category: 'Alat Kesehatan', value: paidAlkes },
-                { key: 'Jumlah Pembayaran ( Rp. ) - MCU', category: 'MCU', value: paidMcu },
-                { key: 'Jumlah Pembayaran ( Rp. ) - Radiologi', category: 'Radiologi', value: paidRadio },
-                { key: 'Jumlah Pembayaran ( Rp. ) - Pembulatan', category: 'Pembulatan', value: paidRounding },
-              ]
+          const zainsPaidRows = buildZainsPaidFieldRows({
+            paidRegist,
+            paidAction,
+            paidLab,
+            paidDrug,
+            paidAlkes,
+            paidMcu,
+            paidRadio,
+            paidRounding,
+            paidTax,
+            paidDiscount,
+            paidTotal,
+            usePaidDiscountForTindakanOnly,
+          })
   
           const [patientData] = (await sql`
             SELECT id_donatur_zains FROM patients 
@@ -358,11 +351,10 @@ export async function POST(request: NextRequest) {
           const todoZains = await getZainsTransactionSyncEnabled()
   
           if (paidTotal > 0) {
-            for (const field of paidFields) {
-              if (field.value > 0) {
-                const idProgram = categoryMap[field.category]
-                if (idProgram && ID_KANTOR_ZAINS) {
-                  const nominalValue = Math.round(field.value)
+            for (const field of zainsPaidRows) {
+              const idProgram = categoryMap[field.category]
+              if (idProgram && ID_KANTOR_ZAINS) {
+                const nominalValue = field.nominal
                   
                   const [existing] = (await sql`
                     SELECT id FROM transactions_to_zains
@@ -391,7 +383,8 @@ export async function POST(request: NextRequest) {
                     zainsInsertedCount++
                     transactionZainsInsertedCount++
                   }
-                }
+              } else {
+                console.warn(`⚠️  Category "${field.category}" tidak memiliki id_program_zains atau id_kantor_zains tidak tersedia untuk klinik ${clinicId}`)
               }
             }
           }
