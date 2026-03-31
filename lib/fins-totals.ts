@@ -4,7 +4,8 @@ import { getZainsApiConfig } from '@/lib/zains-api-config'
 import { resolveZainsFinsTotalsUrl } from '@/lib/zains-fins-totals'
 
 export type FinsTotalsType = 'expend' | 'receipt'
-export type FinsTotalsGroupBy = 'monthly' | 'yearly' | null
+// Selaras dengan kemampuan API Zains fins/total (daily, weekly, monthly, quarterly, yearly)
+export type FinsTotalsGroupBy = 'daily' | 'weekly' | 'monthly' | 'quarterly' | 'yearly' | null
 
 export type FinsTotalsFilters = {
   type: FinsTotalsType
@@ -92,7 +93,8 @@ function buildInClause(column: string, values: string[], negate: boolean): { sql
 function buildFinsTotalsSearchParams(filters: FinsTotalsFilters): URLSearchParams {
   const sp = new URLSearchParams()
   sp.set('type', filters.type)
-  if (filters.group_by === 'monthly' || filters.group_by === 'yearly') {
+  // Untuk HTTP API Zains, semua nilai group_by yang didukung boleh diteruskan apa adanya
+  if (filters.group_by) {
     sp.set('group_by', filters.group_by)
   }
   if (filters.year != null && Number.isFinite(Number(filters.year))) {

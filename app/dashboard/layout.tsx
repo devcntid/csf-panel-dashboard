@@ -27,6 +27,7 @@ import {
   LogOut,
   ChevronDown,
   ChevronRight,
+  PieChart,
 } from 'lucide-react'
 
 export default function DashboardLayout({
@@ -100,6 +101,7 @@ export default function DashboardLayout({
   const isUserReady = status === 'authenticated' && !!session?.user
   const isRoleReady = isUserReady && !!userRole
   const isClinicManager = isRoleReady && userRole === 'clinic_manager'
+  const isSuperAdmin = isRoleReady && userRole === 'super_admin'
   const clinicSummaryHref = userClinicId ? `/dashboard/klinik/${userClinicId}` : '/dashboard'
 
   const menuItems = !isRoleReady
@@ -115,6 +117,9 @@ export default function DashboardLayout({
           { href: '/dashboard/yayasan', label: 'Dashboard Lembaga', icon: Building2 },
           { href: '/dashboard', label: 'Dashboard Klinik', icon: LayoutDashboard },
           { href: '/dashboard/summary-dashboard', label: 'Summary Dashboard', icon: LayoutDashboard },
+          ...(isSuperAdmin
+            ? [{ href: '/dashboard/financial-visual', label: 'Dashboard Finansial', icon: PieChart }]
+            : []),
           { href: '/dashboard/fins-jurnal', label: 'FINS Jurnal', icon: ClipboardList },
           { href: '/dashboard/fins-cashbook', label: 'FINS Cashbook', icon: ClipboardList },
           { href: '/dashboard/transaksi', label: 'Data Transaksi', icon: ClipboardList },

@@ -6,50 +6,14 @@ import { Button } from '@/components/ui/button'
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
 import { Spinner } from '@/components/ui/spinner'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import Link from 'next/link'
 import { Clock, RefreshCw } from 'lucide-react'
-
-const MAX_CLIENT_ATTEMPTS = 3
-const CLIENT_RETRY_DELAY_MS = 5000
-const CLIENT_FETCH_TIMEOUT_MS = 280_000
-
-function sleep(ms: number) {
-  return new Promise<void>((r) => setTimeout(r, ms))
-}
-
-type PivotRow = {
-  label: string
-  monthly: {
-    month: number
-    sum: number
-  }[]
-}
-
-type PivotSection = {
-  title: string
-  groups: {
-    title: string
-    rows: PivotRow[]
-  }[]
-}
-
-type PivotResponse = {
-  success: boolean
-  year: number
-  months: {
-    month: number
-    label: string
-  }[]
-  sections: PivotSection[]
-}
-
-function formatRupiah(value: number): string {
-  return new Intl.NumberFormat('id-ID', {
-    style: 'currency',
-    currency: 'IDR',
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(value)
-}
+import type { PivotResponse } from '@/lib/summary-se-yearly-types'
+import { formatRupiah } from '@/lib/summary-se-yearly-types'
+import {
+  fetchSeYearlySummary,
+  SE_YEARLY_MAX_ATTEMPTS,
+} from '@/lib/fetch-se-yearly-summary'
 
 const monthOptions = [
   { value: '1', label: 'Jan' },
@@ -97,86 +61,18 @@ export default function SummaryDashboardPage() {
     setLoadAttempt(0)
 
     try {
-      const params = new URLSearchParams({ year: String(y) })
-
-      for (let attempt = 1; attempt <= MAX_CLIENT_ATTEMPTS; attempt++) {
-        if (isCancelled?.()) return
-        setLoadAttempt(attempt)
-
-        const controller = new AbortController()
-        const clientTimer = setTimeout(() => controller.abort(), CLIENT_FETCH_TIMEOUT_MS)
-
-        try {
-          const res = await fetch(`/api/summary/se-yearly?${params.toString()}`, {
-            cache: 'no-store',
-            signal: controller.signal,
-          })
-          clearTimeout(clientTimer)
-
-          let json: PivotResponse & { message?: string }
-          try {
-            json = (await res.json()) as PivotResponse & { message?: string }
-          } catch {
-            json = { success: false, message: 'Respons tidak valid' } as PivotResponse & {
-              message?: string
-            }
-          }
-
-          if (isCancelled?.()) return
-
-          if (res.ok && json.success) {
-            setTableData(json)
-            setLoadError(null)
-            return
-          }
-
-          const serverMsg =
-            typeof json?.message === 'string' && json.message.trim()
-              ? json.message.trim()
-              : `Permintaan gagal (${res.status})`
-
-          const retryable =
-            res.status === 502 ||
-            res.status === 503 ||
-            res.status === 504 ||
-            res.status === 408 ||
-            res.status === 429
-
-          if (retryable && attempt < MAX_CLIENT_ATTEMPTS) {
-            await sleep(CLIENT_RETRY_DELAY_MS)
-            continue
-          }
-
-          if (!hadExistingTable) setTableData(null)
-          setLoadError(
-            retryable || res.status >= 500
-              ? `${serverMsg} — Layanan Zains/Koyeb sedang lambat atau sibuk.`
-              : serverMsg,
-          )
-          return
-        } catch (err: unknown) {
-          clearTimeout(clientTimer)
-          if (isCancelled?.()) return
-
-          const isAbort = err instanceof Error && err.name === 'AbortError'
-          const msg = isAbort
-            ? 'Waktu tunggu habis — server masih memproses banyak data dari Zains.'
-            : err instanceof Error
-              ? err.message
-              : 'Gagal terhubung ke server.'
-
-          if (attempt < MAX_CLIENT_ATTEMPTS) {
-            await sleep(CLIENT_RETRY_DELAY_MS)
-            continue
-          }
-
-          if (!hadExistingTable) setTableData(null)
-          setLoadError(
-            `${msg} Silakan tunggu sebentar lalu ketuk Muat ulang — kami sudah mencoba ${MAX_CLIENT_ATTEMPTS} kali.`,
-          )
-          return
-        }
+      const result = await fetchSeYearlySummary(y, {
+        isCancelled,
+        onAttempt: (n) => setLoadAttempt(n),
+      })
+      if (isCancelled?.()) return
+      if (result.ok) {
+        setTableData(result.data)
+        setLoadError(null)
+        return
       }
+      if (!hadExistingTable) setTableData(null)
+      setLoadError(result.error)
     } finally {
       if (!isCancelled || !isCancelled()) setLoadingTable(false)
     }
@@ -208,7 +104,11 @@ export default function SummaryDashboardPage() {
         <div>
           <h1 className="text-2xl font-bold text-slate-800">Summary Dashboard</h1>
           <p className="text-slate-500 text-sm">
-            Rekap capaian SE Klinik, Ambulance, Fundraising dan grafik capaian SE per klinik langsung dari database Zains (via API Next).
+            Rekap capaian SE Klinik, Ambulance, Fundraising langsung dari database Zains (via API Next).{' '}
+            <Link href="/dashboard/financial-visual" className="text-teal-700 hover:underline font-medium">
+              Buka dashboard visual &amp; capaian target
+            </Link>
+            .
           </p>
           <p className="text-amber-800/90 text-xs mt-1.5 bg-amber-50 border border-amber-100 rounded-md px-2 py-1.5 inline-block max-w-xl">
             Memuat data bisa memakan waktu 1–3 menit karena banyak klinik dan filter agregasi. Mohon ditunggu; jika gagal,
@@ -380,7 +280,7 @@ export default function SummaryDashboardPage() {
                 <p className="font-medium text-slate-800">Mengambil data dari API Zains…</p>
                 {loadAttempt > 1 && (
                   <p className="text-amber-800 text-xs">
-                    Percobaan ke-{loadAttempt} dari {MAX_CLIENT_ATTEMPTS} (server otomatis mengulang jika lambat).
+                    Percobaan ke-{loadAttempt} dari {SE_YEARLY_MAX_ATTEMPTS} (server otomatis mengulang jika lambat).
                   </p>
                 )}
                 <p className="flex items-center justify-center gap-1.5 text-slate-500 text-xs">

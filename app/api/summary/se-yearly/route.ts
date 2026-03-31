@@ -111,6 +111,15 @@ async function fetchZainsMonthlySeries(params: {
   }))
 }
 
+function sumYearVector(vec: MonthlyPoint[]): number {
+  return vec.reduce((s, p) => s + p.sum, 0)
+}
+
+function achievementPct(actual: number, target: number): number | null {
+  if (target <= 0 || !Number.isFinite(target)) return null
+  return Math.round((actual / target) * 1000) / 10
+}
+
 function netMonthlySeries(receipt: MonthlyPoint[], expend: MonthlyPoint[]): MonthlyPoint[] {
   const rMap = new Map<number, number>()
   for (const p of receipt) {
@@ -595,12 +604,102 @@ export async function GET(req: NextRequest) {
       label: MONTH_LABELS[m] || String(m),
     }))
 
+    const actualRollup = {
+      total_se: sumYearVector(totalSEVector),
+      total_fundraising: sumYearVector(totalFundraisingVector),
+      penerimaan_lainnya: sumYearVector(penerimaanLainnyaVector),
+      grand_total: sumYearVector(grandTotalVector),
+    }
+
+    type TargetBySource = Record<string, number>
+    let targetsBySourceId: TargetBySource = {}
+    const bySourceId = new Map<number, number>()
+
+    try {
+      const targetAggRows = await sql`
+        SELECT
+          cdt.source_id,
+          COALESCE(SUM(cdt.target_revenue), 0)::numeric AS total_target
+        FROM clinic_daily_targets cdt
+        WHERE (
+          (cdt.target_type = 'cumulative' AND cdt.target_year = ${year})
+          OR (
+            cdt.target_type = 'daily'
+            AND cdt.target_date IS NOT NULL
+            AND EXTRACT(YEAR FROM cdt.target_date::date) = ${year}
+          )
+        )
+        GROUP BY cdt.source_id
+      `
+      const rows = Array.isArray(targetAggRows) ? targetAggRows : []
+      for (const row of rows as { source_id: unknown; total_target: unknown }[]) {
+        const sid = Number(row.source_id || 0)
+        const t = Number(row.total_target || 0)
+        if (!sid) continue
+        bySourceId.set(sid, t)
+        targetsBySourceId[String(sid)] = t
+      }
+    } catch (targetErr) {
+      console.error('summary se-yearly: gagal agregasi clinic_daily_targets.target_revenue:', targetErr)
+      targetsBySourceId = {}
+    }
+
+    const sumTargetForIds = (ids: number[]) =>
+      ids.reduce((s, id) => s + (bySourceId.get(id) || 0), 0)
+
+    const seSourceIds = (sourceRows as { id: unknown; category?: string }[])
+      .filter((s) => String(s.category || '').toUpperCase() === 'SE')
+      .map((s) => Number(s.id))
+    const fundraisingSourceIds = (sourceRows as { id: unknown; category?: string }[])
+      .filter((s) => String(s.category || '').toUpperCase() === 'FUNDRAISING')
+      .map((s) => Number(s.id))
+    const penerimaanSourceIds = (sourceRows as { id: unknown; slug?: string }[])
+      .filter((s) => String(s.slug || '') === 'penerimaan_lainnya')
+      .map((s) => Number(s.id))
+    const allConfiguredSourceIds = (sourceRows as { id: unknown }[])
+      .map((s) => Number(s.id))
+      .filter(Boolean)
+
+    const targetRollup = {
+      total_se: sumTargetForIds(seSourceIds),
+      total_fundraising: sumTargetForIds(fundraisingSourceIds),
+      penerimaan_lainnya: sumTargetForIds(penerimaanSourceIds),
+      grand_total: sumTargetForIds(allConfiguredSourceIds),
+    }
+
+    const rollupWithAchievement = {
+      total_se: {
+        actual: actualRollup.total_se,
+        target: targetRollup.total_se,
+        achievement_pct: achievementPct(actualRollup.total_se, targetRollup.total_se),
+      },
+      total_fundraising: {
+        actual: actualRollup.total_fundraising,
+        target: targetRollup.total_fundraising,
+        achievement_pct: achievementPct(actualRollup.total_fundraising, targetRollup.total_fundraising),
+      },
+      penerimaan_lainnya: {
+        actual: actualRollup.penerimaan_lainnya,
+        target: targetRollup.penerimaan_lainnya,
+        achievement_pct: achievementPct(actualRollup.penerimaan_lainnya, targetRollup.penerimaan_lainnya),
+      },
+      grand_total: {
+        actual: actualRollup.grand_total,
+        target: targetRollup.grand_total,
+        achievement_pct: achievementPct(actualRollup.grand_total, targetRollup.grand_total),
+      },
+    }
+
     return NextResponse.json(
       {
         success: true,
         year,
         months: monthMeta,
         sections,
+        targets: {
+          bySourceId: targetsBySourceId,
+          rollup: rollupWithAchievement,
+        },
       },
       { status: 200 },
     )
