@@ -2,6 +2,8 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
+import { useSession } from 'next-auth/react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import {
@@ -62,6 +64,8 @@ function formatRupiah(value: number): string {
 
 
 export default function DashboardPage() {
+  const router = useRouter()
+  const { data: session, status } = useSession()
   const { dateFrom: defaultFrom, dateTo: defaultTo } = getYearToDateRange()
   const [dateFrom, setDateFrom] = useState(defaultFrom)
   const [dateTo, setDateTo] = useState(defaultTo)
@@ -70,6 +74,14 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true)
   const [clinics, setClinics] = useState<{ id: number; name: string }[]>([])
   const [polyCompositionExpanded, setPolyCompositionExpanded] = useState(false)
+
+  useEffect(() => {
+    if (status !== 'authenticated') return
+    const role = (session?.user as any)?.role
+    if (role === 'super_admin') {
+      router.replace('/dashboard/financial-visual')
+    }
+  }, [router, session, status])
 
   const loadDashboard = useCallback(async (isCancelled?: () => boolean) => {
     setLoading(true)
@@ -91,11 +103,13 @@ export default function DashboardPage() {
 
   useEffect(() => {
     let cancelled = false
+    // Jangan load executive dashboard jika super_admin akan redirect ke dashboard finansial.
+    if (status === 'authenticated' && (session?.user as any)?.role === 'super_admin') return
     loadDashboard(() => cancelled)
     return () => {
       cancelled = true
     }
-  }, [loadDashboard])
+  }, [loadDashboard, session, status])
 
   useEffect(() => {
     setPolyCompositionExpanded(false)
