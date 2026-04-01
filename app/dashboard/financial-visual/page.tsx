@@ -21,8 +21,7 @@ import { Button } from '@/components/ui/button'
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
 import { Spinner } from '@/components/ui/spinner'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Clock, RefreshCw, Table2, TrendingDown, TrendingUp } from 'lucide-react'
+import { Building2, Clock, DollarSign, HandCoins, Layers3, RefreshCw, Table2, TrendingDown, TrendingUp } from 'lucide-react'
 import type { PivotResponse } from '@/lib/summary-se-yearly-types'
 import { formatAchievementPct, formatRupiah } from '@/lib/summary-se-yearly-types'
 import { fetchSeYearlySummary, SE_YEARLY_MAX_ATTEMPTS } from '@/lib/fetch-se-yearly-summary'
@@ -80,6 +79,7 @@ type RevenueGrowthResponse = {
   current: { year: number; value: number } | null
   previous: { year: number; value: number } | null
   growth_pct: number | null
+  message?: string
 }
 
 type ClinicHeatmapResponse = {
@@ -89,6 +89,40 @@ type ClinicHeatmapResponse = {
   clinics: { id: number; name: string }[]
   matrix: number[][]
   message?: string
+}
+
+const CACHE_TTL_MS = 10 * 60 * 1000
+
+function cacheGet<T>(key: string): T | null {
+  try {
+    const raw = sessionStorage.getItem(key)
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as { t: number; v: T }
+    if (!parsed || typeof parsed.t !== 'number') return null
+    if (Date.now() - parsed.t > CACHE_TTL_MS) return null
+    return parsed.v
+  } catch {
+    return null
+  }
+}
+
+function cacheSet<T>(key: string, value: T) {
+  try {
+    sessionStorage.setItem(key, JSON.stringify({ t: Date.now(), v: value }))
+  } catch {
+    // ignore quota / privacy mode
+  }
+}
+
+async function fetchJsonCached<T>(key: string, url: string, opts?: { force?: boolean }): Promise<T> {
+  if (!opts?.force) {
+    const hit = cacheGet<T>(key)
+    if (hit != null) return hit
+  }
+  const res = await fetch(url, { cache: 'no-store' })
+  const json = (await res.json()) as T
+  cacheSet(key, json)
+  return json
 }
 
 function alignSeriesToMonths(
@@ -110,9 +144,12 @@ export default function FinancialVisualDashboardPage() {
   const [loadError, setLoadError] = useState<string | null>(null)
   const [loadAttempt, setLoadAttempt] = useState(0)
   const [elapsedSec, setElapsedSec] = useState(0)
+  const [forceRefresh, setForceRefresh] = useState(false)
 
   // Tracker + ranking
   const [period, setPeriod] = useState<TimePeriod>('monthly')
+  const [periodDraft, setPeriodDraft] = useState<TimePeriod>('monthly')
+  const rankingPeriod: TimePeriod = 'monthly'
   const [trackerLoading, setTrackerLoading] = useState(false)
   const [tracker, setTracker] = useState<TimeTrackerResponse | null>(null)
   const [trackerError, setTrackerError] = useState<string | null>(null)
@@ -124,6 +161,7 @@ export default function FinancialVisualDashboardPage() {
   const [growth, setGrowth] = useState<RevenueGrowthResponse | null>(null)
   const [growthError, setGrowthError] = useState<string | null>(null)
 
+  const [heatmapLoading, setHeatmapLoading] = useState(false)
   const [heatmap, setHeatmap] = useState<ClinicHeatmapResponse | null>(null)
   const [heatmapError, setHeatmapError] = useState<string | null>(null)
 
@@ -137,7 +175,7 @@ export default function FinancialVisualDashboardPage() {
     return () => clearInterval(id)
   }, [loading])
 
-  const load = async (options?: { y?: number; isCancelled?: () => boolean }) => {
+  const load = async (options?: { y?: number; isCancelled?: () => boolean; force?: boolean }) => {
     const y = options?.y ?? year
     const isCancelled = options?.isCancelled
     const hadExisting = data != null
@@ -147,16 +185,24 @@ export default function FinancialVisualDashboardPage() {
     setLoadAttempt(0)
 
     try {
-      const result = await fetchSeYearlySummary(y, {
-        isCancelled,
-        onAttempt: (n) => setLoadAttempt(n),
-      })
+      const cacheKey = `financial-visual:se-yearly:${y}`
+      if (!options?.force) {
+        const cached = cacheGet<PivotResponse>(cacheKey)
+        if (cached) {
+          setData(cached)
+          setLoadError(null)
+          return
+        }
+      }
+
+      const result = await fetchSeYearlySummary(y, { isCancelled, onAttempt: (n) => setLoadAttempt(n) })
 
       if (isCancelled?.()) return
 
       if (result.ok) {
         setData(result.data)
         setLoadError(null)
+        cacheSet(cacheKey, result.data)
         return
       }
 
@@ -185,14 +231,16 @@ export default function FinancialVisualDashboardPage() {
       setTrackerError(null)
       try {
         const sp = new URLSearchParams({ year: String(year), period })
-        const res = await fetch(`/api/financial/time-tracker?${sp.toString()}`, { cache: 'no-store' })
-        const json = (await res.json()) as TimeTrackerResponse
+        const key = `financial-visual:time-tracker:${sp.toString()}`
+        const json = await fetchJsonCached<TimeTrackerResponse>(key, `/api/financial/time-tracker?${sp.toString()}`, {
+          force: forceRefresh,
+        })
         if (isCancelled()) return
-        if (res.ok && json.success) {
+        if (json.success) {
           setTracker(json)
         } else {
           setTracker(null)
-          setTrackerError(json?.message || `Gagal memuat time tracker (${res.status})`)
+          setTrackerError(json?.message || 'Gagal memuat time tracker')
         }
       } catch (e: unknown) {
         if (!isCancelled()) {
@@ -208,15 +256,18 @@ export default function FinancialVisualDashboardPage() {
       setRankingLoading(true)
       setRankingError(null)
       try {
-        const sp = new URLSearchParams({ year: String(year), period })
-        const res = await fetch(`/api/financial/clinic-ranking?${sp.toString()}`, { cache: 'no-store' })
-        const json = (await res.json()) as ClinicRankingResponse
+        // Ranking default & konsisten dengan chart monthly.
+        const sp = new URLSearchParams({ year: String(year), period: rankingPeriod })
+        const key = `financial-visual:clinic-ranking:${sp.toString()}`
+        const json = await fetchJsonCached<ClinicRankingResponse>(key, `/api/financial/clinic-ranking?${sp.toString()}`, {
+          force: forceRefresh,
+        })
         if (isCancelled()) return
-        if (res.ok && json.success) {
+        if (json.success) {
           setRanking(json)
         } else {
           setRanking(null)
-          setRankingError(json?.message || `Gagal memuat ranking klinik (${res.status})`)
+          setRankingError(json?.message || 'Gagal memuat ranking klinik')
         }
       } catch (e: unknown) {
         if (!isCancelled()) {
@@ -234,14 +285,16 @@ export default function FinancialVisualDashboardPage() {
       try {
         setGrowthError(null)
         const sp = new URLSearchParams({ year: String(year) })
-        const res = await fetch(`/api/financial/revenue-growth?${sp.toString()}`, { cache: 'no-store' })
-        const json = (await res.json()) as RevenueGrowthResponse
+        const key = `financial-visual:revenue-growth:${sp.toString()}`
+        const json = await fetchJsonCached<RevenueGrowthResponse>(key, `/api/financial/revenue-growth?${sp.toString()}`, {
+          force: forceRefresh,
+        })
         if (isCancelled()) return
-        if (res.ok && json.success) {
+        if (json.success) {
           setGrowth(json)
         } else {
           setGrowth(null)
-          setGrowthError(json?.message || `Gagal memuat growth revenue (${res.status})`)
+          setGrowthError((json as any)?.message || 'Gagal memuat growth revenue')
         }
       } catch (e: unknown) {
         if (!isCancelled()) {
@@ -253,29 +306,40 @@ export default function FinancialVisualDashboardPage() {
 
     ;(async () => {
       try {
+        setHeatmapLoading(true)
         setHeatmapError(null)
         const sp = new URLSearchParams({ year: String(year) })
-        const res = await fetch(`/api/financial/clinic-heatmap?${sp.toString()}`, { cache: 'no-store' })
-        const json = (await res.json()) as ClinicHeatmapResponse
+        const key = `financial-visual:clinic-heatmap:${sp.toString()}`
+        const json = await fetchJsonCached<ClinicHeatmapResponse>(key, `/api/financial/clinic-heatmap?${sp.toString()}`, {
+          force: forceRefresh,
+        })
         if (isCancelled()) return
-        if (res.ok && json.success) {
+        if (json.success) {
           setHeatmap(json)
         } else {
           setHeatmap(null)
-          setHeatmapError(json?.message || `Gagal memuat heatmap klinik (${res.status})`)
+          setHeatmapError(json?.message || 'Gagal memuat heatmap klinik')
         }
       } catch (e: unknown) {
         if (!isCancelled()) {
           setHeatmap(null)
           setHeatmapError(e instanceof Error ? e.message : 'Gagal memuat heatmap klinik')
         }
+      } finally {
+        if (!isCancelled()) setHeatmapLoading(false)
       }
     })()
 
     return () => {
       cancelled = true
     }
-  }, [year, period])
+    // Reset refresh flag setelah satu siklus fetch.
+    if (forceRefresh) setForceRefresh(false)
+  }, [year, period, forceRefresh])
+
+  useEffect(() => {
+    setPeriodDraft(period)
+  }, [period])
 
   const yearOptions = []
   const baseYear = now.getFullYear()
@@ -412,7 +476,7 @@ export default function FinancialVisualDashboardPage() {
       { key: 'fundraising_project', label: 'Fundraising Project', color: '#4f46e5' },
       { key: 'fundraising_digital', label: 'Fundraising Digital', color: '#6366f1' },
       { key: 'penerimaan_lainnya', label: 'Penerimaan Lainnya', color: '#f59e0b' },
-      { key: 'grand_total', label: 'GRAND TOTAL', color: '#0f172a' },
+      { key: 'grand_total', label: 'GRAND TOTAL', color: '#2563eb' },
     ]
 
     // Untuk monthly, gunakan sumber kebenaran pivot `se-yearly` yang sama dengan Summary Dashboard.
@@ -444,8 +508,8 @@ export default function FinancialVisualDashboardPage() {
             label: p.label,
             data: labels.map((_, i) => Number(vals[i] || 0)),
             borderColor: p.color,
-            backgroundColor: p.key === 'grand_total' ? 'rgba(15, 23, 42, 0.08)' : `${p.color}22`,
-            fill: false,
+            backgroundColor: p.key === 'grand_total' ? 'rgba(37, 99, 235, 0.12)' : `${p.color}22`,
+            fill: true,
             tension: 0.25,
             borderWidth: p.key === 'grand_total' ? 2 : 1.5,
             pointRadius: p.key === 'grand_total' ? 2 : 1.5,
@@ -471,8 +535,8 @@ export default function FinancialVisualDashboardPage() {
           label: p.label,
           data: labels.map((_, i) => Number(vals[i] || 0)),
           borderColor: p.color,
-          backgroundColor: p.key === 'grand_total' ? 'rgba(15, 23, 42, 0.08)' : `${p.color}22`,
-          fill: false,
+          backgroundColor: p.key === 'grand_total' ? 'rgba(37, 99, 235, 0.12)' : `${p.color}22`,
+          fill: true,
           tension: 0.25,
           borderWidth: p.key === 'grand_total' ? 2 : 1.5,
           pointRadius: p.key === 'grand_total' ? 2 : 1.5,
@@ -510,6 +574,15 @@ export default function FinancialVisualDashboardPage() {
     }),
     [],
   )
+
+  const showTrackerSpinner = useMemo(() => {
+    if (period === 'monthly') return false // monthly pakai pivot, instan
+    if (trackerLoading) return true
+    if (!tracker?.success) return true
+    if (tracker.period !== period) return true
+    if (!Array.isArray(tracker.labels) || tracker.labels.length === 0) return true
+    return false
+  }, [period, trackerLoading, tracker])
 
   const stackedWeeklyData = useMemo(() => {
     if (!tracker || tracker.period !== 'weekly') return null
@@ -554,8 +627,8 @@ export default function FinancialVisualDashboardPage() {
             type: 'line' as const,
             label: 'GRAND TOTAL',
             data: labels.map((_, i) => Number(gt.values[i] || 0)),
-            borderColor: '#0f172a',
-            backgroundColor: 'rgba(15, 23, 42, 0.12)',
+            borderColor: '#2563eb',
+            backgroundColor: 'rgba(37, 99, 235, 0.12)',
             tension: 0.25,
             yAxisID: 'y',
           },
@@ -624,8 +697,8 @@ export default function FinancialVisualDashboardPage() {
             type: 'line' as const,
             label: 'GRAND TOTAL',
             data: labels.map((_, i) => Number(gt[i] || 0)),
-            borderColor: '#0f172a',
-            backgroundColor: 'rgba(15, 23, 42, 0.12)',
+            borderColor: '#2563eb',
+            backgroundColor: 'rgba(37, 99, 235, 0.12)',
             tension: 0.25,
             yAxisID: 'y',
           },
@@ -708,6 +781,18 @@ export default function FinancialVisualDashboardPage() {
               'Terapkan'
             )}
           </Button>
+          <Button
+            type="button"
+            variant="outline"
+            className="border-slate-200 bg-white hover:bg-slate-50"
+            disabled={loading}
+            onClick={() => {
+              setForceRefresh(true)
+              load({ y: year, force: true })
+            }}
+          >
+            Refresh (tanpa cache)
+          </Button>
         </div>
       </div>
 
@@ -752,73 +837,115 @@ export default function FinancialVisualDashboardPage() {
 
       {data && rollup && (
         <>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4">
             {(
               [
-                { key: 'total_se', title: 'TOTAL SE', m: rollup.total_se },
-                { key: 'total_fundraising', title: 'TOTAL FUNDRAISING', m: rollup.total_fundraising },
-                { key: 'penerimaan_lainnya', title: 'PENERIMAAN LAINNYA', m: rollup.penerimaan_lainnya },
-                { key: 'grand_total', title: 'GRAND TOTAL', m: rollup.grand_total },
+                {
+                  key: 'total_se',
+                  title: 'TOTAL SE',
+                  m: rollup.total_se,
+                  gradient: 'from-teal-600 to-emerald-500',
+                  Icon: Building2,
+                },
+                {
+                  key: 'total_fundraising',
+                  title: 'TOTAL FUNDRAISING',
+                  m: rollup.total_fundraising,
+                  gradient: 'from-indigo-600 to-blue-500',
+                  Icon: HandCoins,
+                },
+                {
+                  key: 'penerimaan_lainnya',
+                  title: 'PENERIMAAN LAINNYA',
+                  m: rollup.penerimaan_lainnya,
+                  gradient: 'from-violet-600 to-fuchsia-600',
+                  Icon: Layers3,
+                },
+                {
+                  key: 'grand_total',
+                  title: 'GRAND TOTAL',
+                  m: rollup.grand_total,
+                  gradient: 'from-amber-600 to-orange-500',
+                  Icon: DollarSign,
+                },
               ] as const
-            ).map(({ key, title, m }) => (
-              <Card key={key} className="border-slate-200 shadow-sm">
-                <CardHeader className="pb-2 pt-4 px-4">
-                  <CardTitle className="text-sm font-medium text-slate-600">{title}</CardTitle>
-                </CardHeader>
-                <CardContent className="px-4 pb-4 space-y-2">
-                  <p className="text-xl font-semibold tabular-nums text-slate-900">{formatRupiah(m.actual)}</p>
-                  <div className="text-xs text-slate-500 space-y-0.5">
-                    <p>
-                      Target: <span className="text-slate-700 font-medium">{formatRupiah(m.target)}</span>
+            ).map(({ key, title, m, gradient, Icon }) => (
+              <div
+                key={key}
+                className={`relative overflow-hidden rounded-2xl p-4 shadow-sm border border-white/10 bg-gradient-to-br ${gradient} text-white`}
+              >
+                <div className="pointer-events-none absolute inset-0 bg-black/5" />
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-xs font-medium tracking-wide text-white/85 relative">{title}</p>
+                    <p className="mt-2 text-2xl font-semibold tabular-nums text-white/95 truncate relative">
+                      {formatRupiah(m.actual)}
                     </p>
-                    <p>
-                      Capaian: <span className="font-semibold text-teal-700">{formatAchievementPct(m.achievement_pct)}</span>
-                    </p>
-                    {key === 'grand_total' && m.achievement_pct != null && (
-                      <div className="pt-2">
-                        <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
-                          <div className="h-full bg-teal-600 rounded-full transition-all" style={{ width: `${Math.min(100, m.achievement_pct)}%` }} />
-                        </div>
-                      </div>
-                    )}
                   </div>
-                </CardContent>
-              </Card>
+                  <div className="shrink-0 rounded-xl bg-white/15 p-2 ring-1 ring-white/15 relative">
+                    <Icon className="size-5 text-white/90" />
+                  </div>
+                </div>
+
+                <div className="mt-2 text-[11px] text-white/80 flex flex-wrap items-center gap-x-2 gap-y-1 relative">
+                  <span className="opacity-90">Target {formatRupiah(m.target)}</span>
+                  <span className="opacity-70">•</span>
+                  <span className="font-semibold">Capaian {formatAchievementPct(m.achievement_pct)}</span>
+                </div>
+
+                {key === 'grand_total' && m.achievement_pct != null && (
+                  <div className="mt-3 relative">
+                    <div className="h-2 bg-black/25 rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-white/85 rounded-full transition-all"
+                        style={{ width: `${Math.min(100, m.achievement_pct)}%` }}
+                      />
+                    </div>
+                  </div>
+                )}
+
+                <div className="pointer-events-none absolute -right-10 -top-10 h-24 w-24 rounded-full bg-white/8 blur-2xl" />
+              </div>
             ))}
-            <Card className="border-slate-200 shadow-sm">
-              <CardHeader className="pb-2 pt-4 px-4">
-                <CardTitle className="text-sm font-medium text-slate-600">GROWTH REVENUE (YoY)</CardTitle>
-              </CardHeader>
-              <CardContent className="px-4 pb-4 space-y-2">
-                {growthKpi != null ? (
-                  <>
-                    <p
-                      className={`text-xl font-semibold tabular-nums ${
-                        growthKpi >= 0 ? 'text-emerald-700' : 'text-rose-700'
-                      } flex items-center gap-1.5`}
-                    >
+
+            <div className="relative overflow-hidden rounded-2xl p-4 shadow-sm border border-white/10 bg-gradient-to-br from-slate-800 to-slate-950 text-white">
+              <div className="pointer-events-none absolute inset-0 bg-black/5" />
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-xs font-medium tracking-wide text-white/85 relative">GROWTH REVENUE (YoY)</p>
+                  {growthKpi != null ? (
+                    <p className="mt-2 text-2xl font-semibold tabular-nums flex items-center gap-1.5 relative text-white/95">
                       {growthKpi >= 0 ? (
-                        <TrendingUp className="size-4 text-emerald-600" />
+                        <TrendingUp className="size-5 text-emerald-300" />
                       ) : (
-                        <TrendingDown className="size-4 text-rose-600" />
+                        <TrendingDown className="size-5 text-rose-300" />
                       )}
                       {growthKpi.toFixed(1)}%
                     </p>
-                    <div className="text-xs text-slate-500 space-y-0.5">
-                      <p>
-                        vs tahun {year - 1} (total receipt Zains){' '}
-                        {growthError && <span className="text-amber-700">— {growthError}</span>}
-                      </p>
-                    </div>
-                  </>
+                  ) : (
+                    <p className="mt-2 text-2xl font-semibold tabular-nums text-white/70 relative">—</p>
+                  )}
+                </div>
+                <div className="shrink-0 rounded-xl bg-white/10 p-2 ring-1 ring-white/10 relative">
+                  <TrendingUp className="size-5 text-white/85" />
+                </div>
+              </div>
+
+              <div className="mt-2 text-[11px] text-white/75 relative">
+                {growthKpi != null ? (
+                  <span>
+                    vs tahun {year - 1} (total receipt Zains) {growthError && <span className="text-amber-200">— {growthError}</span>}
+                  </span>
                 ) : (
-                  <p className="text-xs text-slate-400">
-                    Belum ada data growth (cek konfigurasi Zains fins/total yearly){' '}
-                    {growthError && <span className="text-amber-700">— {growthError}</span>}
-                  </p>
+                  <span>
+                    Belum ada data growth (Zains fins/total yearly){' '}
+                    {growthError && <span className="text-amber-200">— {growthError}</span>}
+                  </span>
                 )}
-              </CardContent>
-            </Card>
+              </div>
+
+              <div className="pointer-events-none absolute -right-10 -top-10 h-24 w-24 rounded-full bg-white/8 blur-2xl" />
+            </div>
           </div>
 
           <Card className="border-slate-200">
@@ -826,25 +953,46 @@ export default function FinancialVisualDashboardPage() {
               <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
                 <div>
                   <CardTitle className="text-base">Time Performance Tracker</CardTitle>
-                  <p className="text-xs text-slate-500 font-normal">Daily / Weekly / Monthly / Quarterly / Yearly — receipt per kategori (konsisten pivot)</p>
+                  <p className="text-xs text-slate-500 font-normal">
+                    Pilih group-by lalu tekan <span className="font-medium text-slate-700">Terapkan</span> — line area chart receipt per kategori (konsisten pivot)
+                  </p>
                 </div>
-                <Tabs value={period} onValueChange={(v) => setPeriod(v as TimePeriod)}>
-                  <TabsList>
-                    <TabsTrigger value="daily">Daily</TabsTrigger>
-                    <TabsTrigger value="weekly">Weekly</TabsTrigger>
-                    <TabsTrigger value="monthly">Monthly</TabsTrigger>
-                    <TabsTrigger value="quarterly">Quarterly</TabsTrigger>
-                    <TabsTrigger value="yearly">Yearly</TabsTrigger>
-                  </TabsList>
-                </Tabs>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Select value={periodDraft} onValueChange={(v) => setPeriodDraft(v as TimePeriod)}>
+                    <SelectTrigger className="w-[160px]">
+                      <SelectValue placeholder="Pilih periode" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="daily">Daily</SelectItem>
+                      <SelectItem value="weekly">Weekly</SelectItem>
+                      <SelectItem value="monthly">Monthly</SelectItem>
+                      <SelectItem value="quarterly">Quarterly</SelectItem>
+                      <SelectItem value="yearly">Yearly</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="border-slate-200 bg-white hover:bg-slate-50"
+                    onClick={() => {
+                      // Agar sumbu X tidak “nyangkut” periode sebelumnya:
+                      // kosongkan chart dulu, lalu tampilkan spinner sampai data baru siap.
+                      if (periodDraft !== period) setTracker(null)
+                      setPeriod(periodDraft)
+                    }}
+                    disabled={trackerLoading || periodDraft === period}
+                  >
+                    Terapkan
+                  </Button>
+                </div>
               </div>
               {trackerError && (
                 <p className="text-xs text-amber-800 bg-amber-50 border border-amber-100 rounded-md px-2 py-1">{trackerError}</p>
               )}
             </CardHeader>
             <CardContent>
-              <div className="h-[320px]">
-                {trackerLoading && !tracker ? (
+              <div className="h-[260px]">
+                {showTrackerSpinner ? (
                   <div className="flex items-center justify-center h-full text-slate-400 text-sm">
                     <Spinner className="size-5 text-teal-600 mr-2" />
                     Memuat tracker...
@@ -862,7 +1010,7 @@ export default function FinancialVisualDashboardPage() {
             <Card className="border-slate-200">
               <CardHeader>
                 <CardTitle className="text-base">Clinic Performance Ranking</CardTitle>
-                <p className="text-xs text-slate-500 font-normal">Ranking revenue (receipt) SE Klinik per klinik (bucket saat ini)</p>
+                <p className="text-xs text-slate-500 font-normal">Default: Monthly — ranking revenue (receipt) SE Klinik per klinik</p>
                 {rankingError && (
                   <p className="text-xs text-amber-800 bg-amber-50 border border-amber-100 rounded-md px-2 py-1 mt-2">
                     {rankingError}
@@ -876,20 +1024,26 @@ export default function FinancialVisualDashboardPage() {
                     Memuat ranking...
                   </div>
                 ) : ranking ? (
-                  <ol className="space-y-2">
-                    {ranking.top.map((r, i) => (
-                      <li key={r.clinic_id} className="flex items-center justify-between gap-3">
-                        <div className="min-w-0">
-                          <p className="text-sm text-slate-800 truncate">
-                            {i + 1}. {r.clinic_name}
-                          </p>
-                          <p className="text-xs text-slate-500 tabular-nums">
-                            {formatRupiah(r.value_curr)}
-                          </p>
-                        </div>
-                      </li>
-                    ))}
-                  </ol>
+                  <div className="overflow-auto rounded-md border border-slate-100">
+                    <table className="min-w-full text-sm">
+                      <thead className="bg-slate-50">
+                        <tr>
+                          <th className="px-3 py-2 text-left text-xs font-semibold text-slate-600 w-[56px]">#</th>
+                          <th className="px-3 py-2 text-left text-xs font-semibold text-slate-600">Klinik</th>
+                          <th className="px-3 py-2 text-right text-xs font-semibold text-slate-600">Revenue</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {ranking.top.map((r, i) => (
+                          <tr key={r.clinic_id} className="border-t border-slate-100">
+                            <td className="px-3 py-2 text-slate-500 tabular-nums">{i + 1}</td>
+                            <td className="px-3 py-2 text-slate-800">{r.clinic_name}</td>
+                            <td className="px-3 py-2 text-right text-slate-800 tabular-nums">{formatRupiah(r.value_curr)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 ) : (
                   <div className="flex items-center justify-center py-6 text-slate-400 text-sm">
                     Belum ada ranking untuk ditampilkan
@@ -945,17 +1099,25 @@ export default function FinancialVisualDashboardPage() {
                   </p>
                 )}
               </CardHeader>
-              <CardContent>
-                {heatmap && heatmap.clinics.length > 0 ? (
-                  <div className="overflow-x-auto">
-                    <table className="min-w-full text-[11px] border-collapse">
+              <CardContent className="pt-0">
+                {heatmapLoading && !heatmap ? (
+                  <div className="h-[380px] flex items-center justify-center text-slate-400 text-sm rounded-md border border-slate-100">
+                    <Spinner className="size-5 text-teal-600 mr-2" />
+                    Memuat heatmap...
+                  </div>
+                ) : heatmap && heatmap.clinics.length > 0 ? (
+                  <div className="h-[380px] overflow-auto rounded-md border border-slate-100">
+                    <table className="w-max min-w-full text-sm border-collapse table-fixed">
                       <thead>
                         <tr>
-                          <th className="sticky left-0 bg-white z-10 px-2 py-1 text-left text-slate-600 font-semibold">
+                          <th className="sticky left-0 top-0 bg-white z-20 px-3 py-3 text-left text-slate-600 font-semibold min-w-[160px]">
                             Klinik
                           </th>
                           {heatmap.labels.map((lbl) => (
-                            <th key={lbl} className="px-1 py-1 text-center text-slate-500 font-medium">
+                            <th
+                              key={lbl}
+                              className="sticky top-0 bg-white z-10 px-3 py-3 text-center text-slate-500 font-medium min-w-[92px]"
+                            >
                               {lbl}
                             </th>
                           ))}
@@ -964,7 +1126,7 @@ export default function FinancialVisualDashboardPage() {
                       <tbody>
                         {heatmap.clinics.map((c, rowIdx) => (
                           <tr key={c.id} className="border-t border-slate-100">
-                            <td className="sticky left-0 bg-white z-10 px-2 py-1 pr-3 text-slate-700 whitespace-nowrap">
+                            <td className="sticky left-0 bg-white z-10 px-3 py-3 pr-3 text-slate-700 whitespace-nowrap min-w-[160px]">
                               {c.name}
                             </td>
                             {heatmap.labels.map((lbl, colIdx) => {
@@ -980,7 +1142,7 @@ export default function FinancialVisualDashboardPage() {
                               return (
                                 <td
                                   key={`${c.id}-${lbl}`}
-                                  className="px-1 py-1 text-right tabular-nums align-middle"
+                                  className="px-3 py-3 text-right tabular-nums align-middle"
                                   style={{ backgroundColor: bg, color }}
                                 >
                                   {abs === 0 ? '-' : formatRupiah(v)}

@@ -48,6 +48,17 @@ export async function GET(req: NextRequest) {
     const curr = buckets[bucketIdx]
     const prev = buckets[Math.max(0, bucketIdx - 1)]
 
+    // Untuk monthly, samakan skala dengan chart monthly/pivot: gunakan YTD (Jan -> akhir bucket).
+    const currRange =
+      period === 'monthly'
+        ? { tgl_awal: `${year}-01-01`, tgl_akhir: curr.tgl_akhir }
+        : { tgl_awal: curr.tgl_awal, tgl_akhir: curr.tgl_akhir }
+    // NOTE: value_prev hanya untuk growth_pct; gunakan "bulan sebelumnya" untuk perbandingan yang stabil.
+    const prevRange =
+      period === 'monthly'
+        ? { tgl_awal: prev.tgl_awal, tgl_akhir: prev.tgl_akhir }
+        : { tgl_awal: prev.tgl_awal, tgl_akhir: prev.tgl_akhir }
+
     const sources = (await sql`
       SELECT id, name, slug, category, coa_debet, coa_kredit, only_id_contact, exclude_id_contact
       FROM sources
@@ -110,8 +121,8 @@ export async function GET(req: NextRequest) {
       }
 
       const [value_curr, value_prev] = await Promise.all([
-        fetchZainsRangeSum({ type: 'receipt', tgl_awal: curr.tgl_awal, tgl_akhir: curr.tgl_akhir, filters }),
-        fetchZainsRangeSum({ type: 'receipt', tgl_awal: prev.tgl_awal, tgl_akhir: prev.tgl_akhir, filters }),
+        fetchZainsRangeSum({ type: 'receipt', tgl_awal: currRange.tgl_awal, tgl_akhir: currRange.tgl_akhir, filters }),
+        fetchZainsRangeSum({ type: 'receipt', tgl_awal: prevRange.tgl_awal, tgl_akhir: prevRange.tgl_akhir, filters }),
       ])
 
       const delta = value_curr - value_prev
