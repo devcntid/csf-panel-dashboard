@@ -120,32 +120,36 @@ export async function POST(request: NextRequest) {
           continue
         }
 
-        const trxNo = row['trx_no'] || row['No Transaksi'] || row['no_transaksi'] || ''
+        const trxNo = String(
+          row['trx_no'] || row['No Transaksi'] || row['no_transaksi'] || '',
+        ).trim()
+        if (!trxNo) {
+          errors.push({ index: i, error: 'trx_no harus diisi' })
+          skippedCount++
+          continue
+        }
+
         const ermNo = row['erm_no'] || row['No. eRM'] || row['no_erm'] || ''
         const nik = row['nik'] || row['NIK'] || ''
 
-        // Fast duplicate check: jika sudah ada transaksi dengan clinic_id + trx_no + erm_no yang sama,
-        // anggap transaksi sudah pernah masuk dan skip tanpa melakukan proses berat lainnya.
-        if (trxNo && ermNo) {
-          const existingByTrxNoRows = (await sql`
-            SELECT id FROM transactions
-            WHERE clinic_id = ${clinic_id}
-              AND trx_no = ${trxNo}
-              AND erm_no = ${ermNo}
-            LIMIT 1
-          `) as any[]
-          const existingByTrxNo = existingByTrxNoRows[0]
+        // Cegah double proses: kunci unik DB = clinic_id + trx_no + trx_date
+        const existingByTrxNoRows = (await sql`
+          SELECT id FROM transactions
+          WHERE clinic_id = ${clinic_id}
+            AND trx_no = ${trxNo}
+            AND trx_date = ${formatDateToYYYYMMDD(trxDate)}
+          LIMIT 1
+        `) as any[]
+        const existingByTrxNo = existingByTrxNoRows[0]
 
-          if (existingByTrxNo) {
-            skippedCount++
-            errors.push({
-              index: i,
-              error: 'Transaksi sudah masuk (duplicate trx_no & erm_no)',
-              trx_no: trxNo,
-              erm_no: ermNo,
-            })
-            continue
-          }
+        if (existingByTrxNo) {
+          skippedCount++
+          errors.push({
+            index: i,
+            error: 'Transaksi sudah masuk (duplicate trx_no & tanggal)',
+            trx_no: trxNo,
+          })
+          continue
         }
 
         const patientName = row['patient_name'] || row['Nama Pasien'] || row['patient_name'] || ''
@@ -207,19 +211,8 @@ export async function POST(request: NextRequest) {
         // Format tanggal untuk patient & transaksi
         const trxDateFormatted = formatDateToYYYYMMDD(trxDate)
 
-        // Cek apakah transaksi sudah ada (untuk menentukan apakah perlu increment visit_count)
-        const existingTransactionRows = (await sql`
-          SELECT id FROM transactions
-          WHERE clinic_id = ${clinic_id} 
-            AND erm_no = ${ermNo}
-            AND trx_date = ${trxDateFormatted}
-            AND polyclinic = ${polyclinic}
-            AND bill_total = ${billTotal}
-          LIMIT 1
-        `) as any[]
-        const existingTransaction = existingTransactionRows[0]
-
-        const isNewTransaction = !existingTransaction
+        // Pre-check di atas memastikan belum ada baris (clinic_id, trx_no, trx_date); anggap kunjungan baru untuk visit_count
+        const isNewTransaction = true
 
         // patientId & visitCount akan diisi NANTI,
         // hanya jika transaksi ini benar-benar di-break ke transactions_to_zains
@@ -281,9 +274,9 @@ export async function POST(request: NextRequest) {
             ${receivableMcu}, ${receivableRadio}, ${receivableTotal},
             ${JSON.stringify(row)}, 'manual'
           )
-          ON CONFLICT (clinic_id, erm_no, trx_date, polyclinic, bill_total) 
+          ON CONFLICT (clinic_id, trx_no, trx_date)
           DO UPDATE SET
-            trx_no = EXCLUDED.trx_no,
+            erm_no = EXCLUDED.erm_no,
             patient_name = EXCLUDED.patient_name,
             insurance_type = EXCLUDED.insurance_type,
             payment_method = EXCLUDED.payment_method,

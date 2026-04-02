@@ -338,7 +338,7 @@ CREATE INDEX idx_bpjs_realization_clinic_period ON clinic_bpjs_realizations(clin
 
     -- PENTING: Primary Key pada partitioned table HARUS menyertakan kolom partisi (trx_date)
     PRIMARY KEY (id, trx_date),
-    CONSTRAINT unique_transaction_entry UNIQUE (clinic_id, erm_no, trx_date, polyclinic, bill_total)
+    CONSTRAINT unique_transaction_entry UNIQUE (clinic_id, trx_no, trx_date)
 ) PARTITION BY RANGE (trx_date);
 
 -- =============================================

@@ -4,6 +4,7 @@ import { sql } from '@/lib/db'
 import { getZainsTransactionSyncEnabled } from '@/lib/settings'
 import { syncPatientToZainsWorkflowsBatch } from '@/lib/services/zains-sync'
 import { buildZainsPaidFieldRows } from '@/lib/zains-paid-fields'
+import { resolveTrxNoForUploadUpsert } from '@/lib/transaction-upsert-key'
 
 // Helper function untuk parse tanggal
 function parseDate(dateStr: string | number): Date | null {
@@ -159,7 +160,7 @@ export async function POST(request: NextRequest) {
             continue
           }
   
-          const trxNo = row['No Transaksi'] || row['no_transaksi'] || row['No. Transaksi'] || ''
+          const trxNoRaw = row['No Transaksi'] || row['no_transaksi'] || row['No. Transaksi'] || ''
           const ermNo = row['No. eRM'] || row['no_erm'] || row['No RM'] || row['ERM'] || ''
           const nik = row['NIK'] || row['nik'] || ''
           const patientName = row['Nama Pasien'] || row['nama_pasien'] || row['Nama'] || ''
@@ -217,15 +218,22 @@ export async function POST(request: NextRequest) {
           const receivableTotal = parseIndonesianNumber(row['Jumlah Piutang ( Rp. ) - Total'] || row['Receivable Total'] || 0)
   
           const trxDateFormatted = formatDateToYYYYMMDD(trxDate)
+          const trxNo = resolveTrxNoForUploadUpsert({
+            trxNoRaw: String(trxNoRaw),
+            clinicId,
+            ermNo: String(ermNo),
+            trxDate: trxDateFormatted,
+            polyclinic: String(polyclinic),
+            billTotal,
+            rowIndex,
+          })
           const ermNoForZains = `${clinicId}${ermNo}`
   
           const [existingTransaction] = (await sql`
             SELECT id FROM transactions
-            WHERE clinic_id = ${clinicId} 
-              AND erm_no = ${ermNo}
+            WHERE clinic_id = ${clinicId}
+              AND trx_no = ${trxNo}
               AND trx_date = ${trxDateFormatted}
-              AND polyclinic = ${polyclinic}
-              AND bill_total = ${billTotal}
             LIMIT 1
           `) as any[]
   
@@ -287,9 +295,9 @@ export async function POST(request: NextRequest) {
               ${receivableMcu}, ${receivableRadio}, ${receivableTotal},
               ${JSON.stringify(row)}, 'upload'
             )
-            ON CONFLICT (clinic_id, erm_no, trx_date, polyclinic, bill_total) 
+            ON CONFLICT (clinic_id, trx_no, trx_date)
             DO UPDATE SET
-              trx_no = EXCLUDED.trx_no,
+              erm_no = EXCLUDED.erm_no,
               patient_name = EXCLUDED.patient_name,
               insurance_type = EXCLUDED.insurance_type,
               payment_method = EXCLUDED.payment_method,
