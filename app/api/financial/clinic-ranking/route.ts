@@ -1,12 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { sql } from '@/lib/db'
 import { getZainsSummaryConcurrency, runPool } from '@/lib/zains-fetch-retry'
-import { buildBuckets, type TimePeriod } from '@/lib/financial-time-buckets'
+import {
+  buildBuckets,
+  countDaysInclusive,
+  FINANCIAL_RANGE_MAX_DAYS,
+  shiftIsoDate,
+  type TimePeriod,
+} from '@/lib/financial-time-buckets'
 import { fetchZainsRangeSum } from '@/lib/zains-series'
 import { parseCommaSeparatedIds } from '@/lib/zains-fins-totals'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 300
+
+const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/
 
 function splitCoa(raw: unknown): string[] {
   if (typeof raw !== 'string') return []
@@ -22,42 +30,108 @@ export async function GET(req: NextRequest) {
     const yearParam = url.searchParams.get('year')
     const periodParam = url.searchParams.get('period') as TimePeriod | null
     const bucketIdxParam = url.searchParams.get('bucket_idx')
+    const tglAwalQ = url.searchParams.get('tgl_awal')?.trim() ?? ''
+    const tglAkhirQ = url.searchParams.get('tgl_akhir')?.trim() ?? ''
 
     const now = new Date()
-    const year = yearParam ? Number(yearParam) || now.getFullYear() : now.getFullYear()
-    const period: TimePeriod =
+    let year = yearParam ? Number(yearParam) || now.getFullYear() : now.getFullYear()
+    let period: TimePeriod =
       periodParam === 'daily' || periodParam === 'weekly' || periodParam === 'monthly' || periodParam === 'quarterly'
         ? periodParam
         : 'monthly'
 
-    const buckets = buildBuckets({ period, year })
+    let currRange: { tgl_awal: string; tgl_akhir: string }
+    let prevRange: { tgl_awal: string; tgl_akhir: string }
+    let bucketMeta: {
+      idx: number
+      label: string
+      tgl_awal: string
+      tgl_akhir: string
+    }
+    let compareMeta: {
+      idx: number
+      label: string
+      tgl_awal: string
+      tgl_akhir: string
+    }
 
-    const defaultBucketIdx = (() => {
-      // Jika tahun yang dipilih adalah tahun berjalan, pilih bucket yang relevan (bukan otomatis bucket terakhir = Des/Q4 yang sering 0).
-      if (year === now.getFullYear()) {
-        if (period === 'monthly') return Math.max(0, Math.min(11, now.getMonth()))
-        if (period === 'quarterly') return Math.max(0, Math.min(3, Math.floor(now.getMonth() / 3)))
-        // daily/weekly dari buildBuckets memang \"ending current\", jadi bucket terakhir ok.
+    const rangeRequested =
+      tglAwalQ && tglAkhirQ && ISO_DATE_RE.test(tglAwalQ) && ISO_DATE_RE.test(tglAkhirQ)
+
+    if (rangeRequested) {
+      const n = countDaysInclusive(tglAwalQ, tglAkhirQ)
+      if (n <= 0) {
+        return NextResponse.json(
+          { success: false, message: 'Rentang tanggal tidak valid (tgl_awal harus ≤ tgl_akhir).' },
+          { status: 400 },
+        )
       }
-      return buckets.length - 1
-    })()
+      if (n > FINANCIAL_RANGE_MAX_DAYS) {
+        return NextResponse.json(
+          { success: false, message: `Rentang terlalu panjang (maksimal ${FINANCIAL_RANGE_MAX_DAYS} hari).` },
+          { status: 400 },
+        )
+      }
+      const prevEnd = shiftIsoDate(tglAwalQ, -1)
+      const prevStart = shiftIsoDate(tglAwalQ, -n)
+      if (!prevEnd || !prevStart) {
+        return NextResponse.json({ success: false, message: 'Gagal menghitung periode pembanding.' }, { status: 400 })
+      }
+      currRange = { tgl_awal: tglAwalQ, tgl_akhir: tglAkhirQ }
+      prevRange = { tgl_awal: prevStart, tgl_akhir: prevEnd }
+      year = Number(tglAkhirQ.slice(0, 4)) || year
+      period = 'monthly'
+      bucketMeta = {
+        idx: 0,
+        label: `${tglAwalQ} – ${tglAkhirQ}`,
+        tgl_awal: tglAwalQ,
+        tgl_akhir: tglAkhirQ,
+      }
+      compareMeta = {
+        idx: -1,
+        label: `${prevStart} – ${prevEnd}`,
+        tgl_awal: prevStart,
+        tgl_akhir: prevEnd,
+      }
+    } else {
+      const buckets = buildBuckets({ period, year })
 
-    const bucketIdx = bucketIdxParam
-      ? Math.max(0, Math.min(buckets.length - 1, Number(bucketIdxParam)))
-      : defaultBucketIdx
-    const curr = buckets[bucketIdx]
-    const prev = buckets[Math.max(0, bucketIdx - 1)]
+      const defaultBucketIdx = (() => {
+        if (year === now.getFullYear()) {
+          if (period === 'monthly') return Math.max(0, Math.min(11, now.getMonth()))
+          if (period === 'quarterly') return Math.max(0, Math.min(3, Math.floor(now.getMonth() / 3)))
+        }
+        return buckets.length - 1
+      })()
 
-    // Untuk monthly, samakan skala dengan chart monthly/pivot: gunakan YTD (Jan -> akhir bucket).
-    const currRange =
-      period === 'monthly'
-        ? { tgl_awal: `${year}-01-01`, tgl_akhir: curr.tgl_akhir }
-        : { tgl_awal: curr.tgl_awal, tgl_akhir: curr.tgl_akhir }
-    // NOTE: value_prev hanya untuk growth_pct; gunakan "bulan sebelumnya" untuk perbandingan yang stabil.
-    const prevRange =
-      period === 'monthly'
-        ? { tgl_awal: prev.tgl_awal, tgl_akhir: prev.tgl_akhir }
-        : { tgl_awal: prev.tgl_awal, tgl_akhir: prev.tgl_akhir }
+      const bucketIdx = bucketIdxParam
+        ? Math.max(0, Math.min(buckets.length - 1, Number(bucketIdxParam)))
+        : defaultBucketIdx
+      const curr = buckets[bucketIdx]
+      const prev = buckets[Math.max(0, bucketIdx - 1)]
+
+      currRange =
+        period === 'monthly'
+          ? { tgl_awal: `${year}-01-01`, tgl_akhir: curr.tgl_akhir }
+          : { tgl_awal: curr.tgl_awal, tgl_akhir: curr.tgl_akhir }
+      prevRange =
+        period === 'monthly'
+          ? { tgl_awal: prev.tgl_awal, tgl_akhir: prev.tgl_akhir }
+          : { tgl_awal: prev.tgl_awal, tgl_akhir: prev.tgl_akhir }
+
+      bucketMeta = {
+        idx: bucketIdx,
+        label: curr.label,
+        tgl_awal: curr.tgl_awal,
+        tgl_akhir: curr.tgl_akhir,
+      }
+      compareMeta = {
+        idx: Math.max(0, bucketIdx - 1),
+        label: prev.label,
+        tgl_awal: prev.tgl_awal,
+        tgl_akhir: prev.tgl_akhir,
+      }
+    }
 
     const sources = (await sql`
       SELECT id, name, slug, category, coa_debet, coa_kredit, only_id_contact, exclude_id_contact
@@ -152,18 +226,10 @@ export async function GET(req: NextRequest) {
         success: true,
         year,
         period,
-        bucket: {
-          idx: bucketIdx,
-          label: curr.label,
-          tgl_awal: curr.tgl_awal,
-          tgl_akhir: curr.tgl_akhir,
-        },
-        compare_to: {
-          idx: Math.max(0, bucketIdx - 1),
-          label: prev.label,
-          tgl_awal: prev.tgl_awal,
-          tgl_akhir: prev.tgl_akhir,
-        },
+        tgl_awal: rangeRequested ? tglAwalQ : undefined,
+        tgl_akhir: rangeRequested ? tglAkhirQ : undefined,
+        bucket: bucketMeta,
+        compare_to: compareMeta,
         top,
         bottom,
       },

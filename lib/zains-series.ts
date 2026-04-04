@@ -120,19 +120,29 @@ export async function fetchZainsGroupedTotals(params: {
   type: 'receipt' | 'expend'
   group_by: Exclude<FinsTotalsGroupBy, null>
   year?: number
+  /** Jika keduanya diisi (mis. daily dalam rentang), `year` tidak dikirim ke Zains agar tidak bentrok filter. */
+  tgl_awal?: string
+  tgl_akhir?: string
   filters: ZainsSourceFilters
 }): Promise<ZainsGroupedSeries> {
+  const rangeMode = Boolean(params.tgl_awal?.trim() && params.tgl_akhir?.trim())
+  const yearForQuery = rangeMode ? undefined : params.year
+
   const searchParams = buildSearchParamsFromFilters({
     type: params.type,
     group_by: params.group_by,
-    year: params.year,
+    year: yearForQuery,
+    tgl_awal: params.tgl_awal,
+    tgl_akhir: params.tgl_akhir,
     filters: params.filters,
   })
 
   const json: any = await queryFinsTotals({
     type: params.type,
     group_by: params.group_by,
-    year: params.year,
+    year: yearForQuery,
+    tgl_awal: rangeMode ? params.tgl_awal : undefined,
+    tgl_akhir: rangeMode ? params.tgl_akhir : undefined,
     approve: searchParams.get('approve') || undefined,
     id_kantor: searchParams.get('id_kantor') || undefined,
     id_program: searchParams.get('id_program') || undefined,
@@ -152,7 +162,7 @@ export async function fetchZainsGroupedTotals(params: {
 
   for (const row of rows) {
     if (params.group_by === 'daily') {
-      const date = String(row.date ?? '')
+      const date = String(row.date ?? row.tanggal ?? row.tgl ?? row.tgl_trans ?? '')
       const sum = Number(row.sum ?? 0)
       labels.push(date)
       buckets.push({
@@ -219,3 +229,18 @@ export async function fetchZainsGroupedTotals(params: {
   return { labels, buckets, values }
 }
 
+export function normalizeFinsDailyDateKey(raw: string): string {
+  const s = String(raw ?? '').trim()
+  const m = /^(\d{4}-\d{2}-\d{2})/.exec(s)
+  return m ? m[1] : s.slice(0, 10)
+}
+
+/** Samakan seri daily dari API (mungkin sparse) ke daftar tanggal ISO penuh. */
+export function alignGroupedDailyToDates(grouped: ZainsGroupedSeries, isoDates: string[]): number[] {
+  const map = new Map<string, number>()
+  for (let i = 0; i < grouped.labels.length; i++) {
+    const k = normalizeFinsDailyDateKey(String(grouped.labels[i]))
+    map.set(k, (map.get(k) ?? 0) + Number(grouped.values[i] || 0))
+  }
+  return isoDates.map((iso) => map.get(iso) ?? 0)
+}

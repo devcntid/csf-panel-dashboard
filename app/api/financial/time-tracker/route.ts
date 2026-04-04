@@ -1,7 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { sql } from '@/lib/db'
 import { getZainsSummaryConcurrency, runPool } from '@/lib/zains-fetch-retry'
-import { buildBuckets, type TimePeriod, type DateBucket } from '@/lib/financial-time-buckets'
+import {
+  buildBuckets,
+  buildDayBuckets,
+  countDaysInclusive,
+  FINANCIAL_RANGE_MAX_DAYS,
+  type TimePeriod,
+  type DateBucket,
+} from '@/lib/financial-time-buckets'
 import {
   fetchZainsRangeSum,
   fetchZainsGroupedTotals,
@@ -31,17 +38,50 @@ function normName(raw: unknown): string {
   return typeof raw === 'string' ? raw.trim() : ''
 }
 
+const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/
+
 export async function GET(req: NextRequest) {
   try {
     const url = new URL(req.url)
     const yearParam = url.searchParams.get('year')
     const periodParam = url.searchParams.get('period') as TimePeriod | null
+    const tglAwalQ = url.searchParams.get('tgl_awal')?.trim() ?? ''
+    const tglAkhirQ = url.searchParams.get('tgl_akhir')?.trim() ?? ''
+
     const now = new Date()
-    const year = yearParam ? Number(yearParam) || now.getFullYear() : now.getFullYear()
-    const period: TimePeriod =
+    let year = yearParam ? Number(yearParam) || now.getFullYear() : now.getFullYear()
+    let period: TimePeriod =
       periodParam === 'daily' || periodParam === 'weekly' || periodParam === 'monthly' || periodParam === 'quarterly' || periodParam === 'yearly'
         ? periodParam
         : 'monthly'
+
+    let rangeDayBuckets: DateBucket[] | null = null
+    let rangeTglAwal: string | null = null
+    let rangeTglAkhir: string | null = null
+
+    if (tglAwalQ && tglAkhirQ && ISO_DATE_RE.test(tglAwalQ) && ISO_DATE_RE.test(tglAkhirQ)) {
+      const n = countDaysInclusive(tglAwalQ, tglAkhirQ)
+      if (n <= 0) {
+        return NextResponse.json(
+          { success: false, message: 'Rentang tanggal tidak valid (tgl_awal harus ≤ tgl_akhir).' },
+          { status: 400 },
+        )
+      }
+      if (n > FINANCIAL_RANGE_MAX_DAYS) {
+        return NextResponse.json(
+          {
+            success: false,
+            message: `Rentang terlalu panjang (maksimal ${FINANCIAL_RANGE_MAX_DAYS} hari).`,
+          },
+          { status: 400 },
+        )
+      }
+      rangeDayBuckets = buildDayBuckets(tglAwalQ, tglAkhirQ)
+      rangeTglAwal = tglAwalQ
+      rangeTglAkhir = tglAkhirQ
+      period = 'daily'
+      year = Number(tglAkhirQ.slice(0, 4)) || year
+    }
 
     const sources = (await sql`
       SELECT 
@@ -75,9 +115,14 @@ export async function GET(req: NextRequest) {
       (s: any) => normSlug(s.slug) === 'penerimaan_lainnya' || normName(s.name) === 'Penerimaan Lainnya',
     )
 
-    const useGrouped = period === 'daily' || period === 'weekly' || period === 'quarterly' || period === 'yearly'
-    const buckets: DateBucket[] = useGrouped ? [] : buildBuckets({ period, year })
-    const labelsFromBuckets = useGrouped ? [] : buckets.map((b) => b.label)
+    // Rentang kustom: agregasi per hari via fetchZainsRangeSum (sama seperti heatmap) —
+    // group_by=daily + tgl_awal/akhir di API Zains sering kosong/salah format sehingga angka 0.
+    const usePerDayBucketFetch = Boolean(rangeDayBuckets?.length)
+    const useGrouped =
+      !usePerDayBucketFetch &&
+      (period === 'daily' || period === 'weekly' || period === 'quarterly' || period === 'yearly')
+    const buckets: DateBucket[] = rangeDayBuckets ?? (useGrouped ? [] : buildBuckets({ period, year }))
+    const labelsFromBuckets = useGrouped && !rangeDayBuckets ? [] : buckets.map((b) => b.label)
 
     type Task = {
       key: string
@@ -245,9 +290,9 @@ export async function GET(req: NextRequest) {
       })
 
       const firstWithMeta = perClinic.find((x) => x.meta && x.meta.labels.length > 0) ?? null
-      seKlinikMeta = firstWithMeta?.meta ?? null
+      seKlinikMeta = usePerDayBucketFetch ? null : firstWithMeta?.meta ?? null
 
-      const baseLen = useGrouped ? (seKlinikMeta?.values.length ?? 0) : buckets.length
+      const baseLen = useGrouped ? seKlinikMeta?.values.length ?? 0 : buckets.length
       seKlinikValues = Array.from({ length: baseLen }, () => 0)
       for (const c of perClinic) {
         for (let i = 0; i < seKlinikValues.length; i++) {
@@ -275,7 +320,10 @@ export async function GET(req: NextRequest) {
     let labels = labelsFromBuckets
     let effectiveBuckets: DateBucket[] = buckets
 
-    if (useGrouped) {
+    if (rangeDayBuckets) {
+      labels = rangeDayBuckets.map((b) => b.label)
+      effectiveBuckets = rangeDayBuckets
+    } else if (useGrouped) {
       const withMeta = (seriesResults as any[]).find((s) => s._groupedMeta)
       const firstMeta = (withMeta ? withMeta._groupedMeta : null) as ZainsGroupedSeries | null
       labels = firstMeta?.labels ?? []
@@ -319,6 +367,8 @@ export async function GET(req: NextRequest) {
         success: true,
         year,
         period,
+        tgl_awal: rangeTglAwal,
+        tgl_akhir: rangeTglAkhir,
         labels,
         buckets: effectiveBuckets,
         series,

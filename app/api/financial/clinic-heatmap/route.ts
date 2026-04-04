@@ -1,21 +1,54 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { sql } from '@/lib/db'
 import { getZainsSummaryConcurrency, runPool } from '@/lib/zains-fetch-retry'
-import { buildBuckets } from '@/lib/financial-time-buckets'
+import {
+  buildBuckets,
+  buildDayBuckets,
+  countDaysInclusive,
+  FINANCIAL_RANGE_MAX_DAYS,
+} from '@/lib/financial-time-buckets'
 import { fetchZainsRangeSum } from '@/lib/zains-series'
 import { parseCommaSeparatedIds } from '@/lib/zains-fins-totals'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 300
 
+const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/
+
 export async function GET(req: NextRequest) {
   try {
     const url = new URL(req.url)
     const yearParam = url.searchParams.get('year')
-    const now = new Date()
-    const year = yearParam ? Number(yearParam) || now.getFullYear() : now.getFullYear()
+    const tglAwalQ = url.searchParams.get('tgl_awal')?.trim() ?? ''
+    const tglAkhirQ = url.searchParams.get('tgl_akhir')?.trim() ?? ''
 
-    const buckets = buildBuckets({ period: 'monthly', year })
+    const now = new Date()
+    let year = yearParam ? Number(yearParam) || now.getFullYear() : now.getFullYear()
+
+    const rangeRequested =
+      tglAwalQ && tglAkhirQ && ISO_DATE_RE.test(tglAwalQ) && ISO_DATE_RE.test(tglAkhirQ)
+
+    let buckets: { tgl_awal: string; tgl_akhir: string; label: string }[]
+    if (rangeRequested) {
+      const n = countDaysInclusive(tglAwalQ, tglAkhirQ)
+      if (n <= 0) {
+        return NextResponse.json(
+          { success: false, message: 'Rentang tanggal tidak valid (tgl_awal harus ≤ tgl_akhir).' },
+          { status: 400 },
+        )
+      }
+      if (n > FINANCIAL_RANGE_MAX_DAYS) {
+        return NextResponse.json(
+          { success: false, message: `Rentang terlalu panjang (maksimal ${FINANCIAL_RANGE_MAX_DAYS} hari).` },
+          { status: 400 },
+        )
+      }
+      buckets = buildDayBuckets(tglAwalQ, tglAkhirQ)
+      year = Number(tglAkhirQ.slice(0, 4)) || year
+    } else {
+      buckets = buildBuckets({ period: 'monthly', year })
+    }
+
     const labels = buckets.map((b) => b.label)
 
     const sources = (await sql`
@@ -100,6 +133,9 @@ export async function GET(req: NextRequest) {
       {
         success: true,
         year,
+        tgl_awal: rangeRequested ? tglAwalQ : undefined,
+        tgl_akhir: rangeRequested ? tglAkhirQ : undefined,
+        granularity: rangeRequested ? 'daily' : 'monthly',
         labels,
         clinics: selected.map((c) => ({ id: c.clinic_id, name: c.clinic_name })),
         matrix,

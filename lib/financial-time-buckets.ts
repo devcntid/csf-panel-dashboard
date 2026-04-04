@@ -11,6 +11,62 @@ function pad2(n: number): string {
   return String(n).padStart(2, '0')
 }
 
+const SHORT_MONTH_ID = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'] as const
+
+/** Batas inklusif rentang harian untuk dashboard (cegah timeout). */
+export const FINANCIAL_RANGE_MAX_DAYS = 120
+
+/**
+ * Parse tanggal YYYY-MM-DD sebagai UTC midnight.
+ */
+export function parseIsoDateOnly(s: string): Date | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(s).trim())
+  if (!m) return null
+  const y = Number(m[1])
+  const mo = Number(m[2]) - 1
+  const d = Number(m[3])
+  if (!Number.isFinite(y) || mo < 0 || mo > 11 || d < 1 || d > 31) return null
+  const dt = utcDate(y, mo, d)
+  if (fmtDate(dt) !== String(s).trim()) return null
+  return dt
+}
+
+export function countDaysInclusive(tgl_awal: string, tgl_akhir: string): number {
+  const start = parseIsoDateOnly(tgl_awal)
+  const end = parseIsoDateOnly(tgl_akhir)
+  if (!start || !end || start.getTime() > end.getTime()) return 0
+  return Math.floor((end.getTime() - start.getTime()) / 86_400_000) + 1
+}
+
+/** Geser tanggal ISO YYYY-MM-DD sejumlah hari (UTC). */
+export function shiftIsoDate(iso: string, deltaDays: number): string | null {
+  const d = parseIsoDateOnly(iso)
+  if (!d) return null
+  const moved = addDaysUtc(d, deltaDays)
+  return fmtDate(moved)
+}
+
+/**
+ * Satu bucket per hari dari tgl_awal .. tgl_akhir (inklusif). Label singkat untuk kolom heatmap / chart.
+ */
+export function buildDayBuckets(tgl_awal: string, tgl_akhir: string): DateBucket[] {
+  const start = parseIsoDateOnly(tgl_awal)
+  const end = parseIsoDateOnly(tgl_akhir)
+  if (!start || !end || start.getTime() > end.getTime()) return []
+
+  const buckets: DateBucket[] = []
+  for (let d = start; d.getTime() <= end.getTime(); d = addDaysUtc(d, 1)) {
+    const iso = fmtDate(d)
+    buckets.push({
+      key: iso,
+      label: `${d.getUTCDate()} ${SHORT_MONTH_ID[d.getUTCMonth()]}`,
+      tgl_awal: iso,
+      tgl_akhir: iso,
+    })
+  }
+  return buckets
+}
+
 function fmtDate(d: Date): string {
   const y = d.getUTCFullYear()
   const m = pad2(d.getUTCMonth() + 1)
