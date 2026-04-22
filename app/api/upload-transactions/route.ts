@@ -298,17 +298,8 @@ export async function POST(request: NextRequest) {
         // ERM khusus untuk Zains (digabung clinicId + ermNo)
         const ermNoForZains = `${clinicId}${ermNo}`
 
-        // Cek apakah transaksi sudah ada (selaras UNIQUE clinic_id + trx_no + trx_date)
-        const existingTransactionRows = (await sql`
-          SELECT id FROM transactions
-          WHERE clinic_id = ${clinicId}
-            AND trx_no = ${trxNo}
-            AND trx_date = ${trxDateFormatted}
-          LIMIT 1
-        `) as any[]
-        const existingTransaction = existingTransactionRows[0]
-
-        const isNewTransaction = !existingTransaction
+        // isNewTransaction ditentukan setelah INSERT ... ON CONFLICT (dari xmax)
+        let isNewTransaction = true
 
         // patientId & visitCount akan diisi NANTI,
         // hanya jika transaksi ini benar-benar di-break ke transactions_to_zains
@@ -351,7 +342,7 @@ export async function POST(request: NextRequest) {
         // patient_id sementara NULL; akan di-update setelah patient ter-insert (jika perlu dikirim ke Zains)
         const insertedTransactionRows = (await sql`
           INSERT INTO transactions (
-            clinic_id, patient_id, poly_id, insurance_type_id, trx_date, trx_no, erm_no, nik, patient_name,
+            clinic_id, patient_id, poly_id, insurance_type_id, trx_date, trx_no, trx_line_no, erm_no, nik, patient_name,
             insurance_type, polyclinic, payment_method, voucher_code,
             bill_regist, bill_action, bill_lab, bill_drug, bill_alkes, bill_mcu, bill_radio, bill_total,
             bill_regist_discount, bill_action_discount, bill_lab_discount, bill_drug_discount, bill_alkes_discount, bill_mcu_discount, bill_radio_discount,
@@ -363,7 +354,7 @@ export async function POST(request: NextRequest) {
             raw_json_data, input_type
           )
           VALUES (
-            ${clinicId}, NULL, ${polyId}, ${insuranceTypeId}, ${trxDateFormatted}, ${trxNo}, ${ermNo}, ${nik || null}, ${patientName},
+            ${clinicId}, NULL, ${polyId}, ${insuranceTypeId}, ${trxDateFormatted}, ${trxNo}, 1, ${ermNo}, ${nik || null}, ${patientName},
             ${insuranceType}, ${polyclinic}, ${paymentMethod}, ${voucherCode === '-' ? null : voucherCode},
             ${billRegist}, ${billAction}, ${billLab}, ${billDrug}, ${billAlkes}, ${billMcu}, ${billRadio}, ${billTotal},
             ${billRegistDiscount}, ${billActionDiscount}, ${billLabDiscount}, ${billDrugDiscount}, ${billAlkesDiscount}, ${billMcuDiscount}, ${billRadioDiscount},
@@ -374,9 +365,8 @@ export async function POST(request: NextRequest) {
             ${receivableMcu}, ${receivableRadio}, ${receivableTotal},
             ${JSON.stringify(row)}, 'upload'
           )
-          ON CONFLICT (clinic_id, trx_no, trx_date)
+          ON CONFLICT (clinic_id, trx_no, trx_date, erm_no, trx_line_no)
           DO UPDATE SET
-            erm_no = EXCLUDED.erm_no,
             patient_name = EXCLUDED.patient_name,
             insurance_type = EXCLUDED.insurance_type,
             payment_method = EXCLUDED.payment_method,
@@ -393,11 +383,12 @@ export async function POST(request: NextRequest) {
             bill_mcu_discount = EXCLUDED.bill_mcu_discount,
             bill_radio_discount = EXCLUDED.bill_radio_discount,
             updated_at = NOW()
-          RETURNING id
+          RETURNING id, (xmax = 0) AS inserted
         `) as any[]
         const insertedTransaction = insertedTransactionRows[0]
 
         const transactionId = (insertedTransaction as any).id
+        isNewTransaction = (insertedTransaction as any).inserted === true
 
         insertedCount++
         results.push({ row: rowIndex, status: 'success' })

@@ -265,6 +265,7 @@ CREATE INDEX idx_bpjs_realization_clinic_period ON clinic_bpjs_realizations(clin
       -- === IDENTITAS TRANSAKSI ===
       trx_date DATE NOT NULL,
       trx_no VARCHAR(50),
+      trx_line_no INT NOT NULL DEFAULT 1,
       trx_time TIME,
       erm_no VARCHAR(50) NOT NULL,
       nik VARCHAR(20),
@@ -338,7 +339,7 @@ CREATE INDEX idx_bpjs_realization_clinic_period ON clinic_bpjs_realizations(clin
 
     -- PENTING: Primary Key pada partitioned table HARUS menyertakan kolom partisi (trx_date)
     PRIMARY KEY (id, trx_date),
-    CONSTRAINT unique_transaction_entry UNIQUE (clinic_id, trx_no, trx_date)
+    CONSTRAINT unique_transaction_entry UNIQUE (clinic_id, trx_no, trx_date, erm_no, trx_line_no)
 ) PARTITION BY RANGE (trx_date);
 
 -- =============================================

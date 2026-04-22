@@ -737,7 +737,7 @@ async function seed() {
               ${trx.paid_total},
               ${trx.zains_synced}
             )
-            ON CONFLICT (clinic_id, trx_no, trx_date) DO NOTHING
+            ON CONFLICT (clinic_id, trx_no, trx_date, erm_no, trx_line_no) DO NOTHING
           `;
         } else {
           await sql`
@@ -764,7 +764,7 @@ async function seed() {
               ${trx.paid_total},
               ${trx.zains_synced}
             )
-            ON CONFLICT (clinic_id, trx_no, trx_date) DO NOTHING
+            ON CONFLICT (clinic_id, trx_no, trx_date, erm_no, trx_line_no) DO NOTHING
           `;
         }
       }

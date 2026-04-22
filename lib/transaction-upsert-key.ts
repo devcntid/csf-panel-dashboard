@@ -1,5 +1,5 @@
 /**
- * Nilai trx_no untuk UNIQUE (clinic_id, trx_no, trx_date).
+ * Nilai trx_no untuk UNIQUE (clinic_id, trx_no, trx_date, erm_no, trx_line_no).
  * Upload Excel: jika nomor transaksi kosong, gunakan kunci sintetis agar idempoten
  * setara constraint lama (erm_no + tanggal + poli + total tagihan).
  */

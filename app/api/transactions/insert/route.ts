@@ -132,24 +132,23 @@ export async function POST(request: NextRequest) {
         const ermNo = row['erm_no'] || row['No. eRM'] || row['no_erm'] || ''
         const nik = row['nik'] || row['NIK'] || ''
 
-        // Cegah double proses: kunci unik DB = clinic_id + trx_no + trx_date
-        const existingByTrxNoRows = (await sql`
-          SELECT id FROM transactions
-          WHERE clinic_id = ${clinic_id}
-            AND trx_no = ${trxNo}
-            AND trx_date = ${formatDateToYYYYMMDD(trxDate)}
-          LIMIT 1
-        `) as any[]
-        const existingByTrxNo = existingByTrxNoRows[0]
+        const trxDateFormatted = formatDateToYYYYMMDD(trxDate)
 
-        if (existingByTrxNo) {
-          skippedCount++
-          errors.push({
-            index: i,
-            error: 'Transaksi sudah masuk (duplicate trx_no & tanggal)',
-            trx_no: trxNo,
-          })
-          continue
+        // trx_line_no: jika tidak disediakan, alokasi otomatis MAX+1 agar multi-row diperbolehkan
+        let trxLineNo: number
+        const rawLineNo = row['trx_line_no'] || row['line_no']
+        if (rawLineNo != null && Number.isFinite(Number(rawLineNo)) && Number(rawLineNo) >= 1) {
+          trxLineNo = Math.floor(Number(rawLineNo))
+        } else {
+          const maxLineRows = (await sql`
+            SELECT COALESCE(MAX(trx_line_no), 0) AS max_line
+            FROM transactions
+            WHERE clinic_id = ${clinic_id}
+              AND trx_no = ${trxNo}
+              AND trx_date = ${trxDateFormatted}
+              AND erm_no = ${ermNo}
+          `) as any[]
+          trxLineNo = (maxLineRows[0]?.max_line ?? 0) + 1
         }
 
         const patientName = row['patient_name'] || row['Nama Pasien'] || row['patient_name'] || ''
@@ -208,11 +207,8 @@ export async function POST(request: NextRequest) {
         const receivableRadio = parseIndonesianNumber(row['receivable_radio'] || row['Jumlah Piutang ( Rp. ) - Radiologi'] || 0)
         const receivableTotal = parseIndonesianNumber(row['receivable_total'] || row['Jumlah Piutang ( Rp. ) - Total'] || 0)
 
-        // Format tanggal untuk patient & transaksi
-        const trxDateFormatted = formatDateToYYYYMMDD(trxDate)
-
-        // Pre-check di atas memastikan belum ada baris (clinic_id, trx_no, trx_date); anggap kunjungan baru untuk visit_count
-        const isNewTransaction = true
+        // isNewTransaction ditentukan setelah INSERT ... ON CONFLICT (dari xmax)
+        let isNewTransaction = true
 
         // patientId & visitCount akan diisi NANTI,
         // hanya jika transaksi ini benar-benar di-break ke transactions_to_zains
@@ -251,7 +247,7 @@ export async function POST(request: NextRequest) {
         // patient_id sementara NULL; akan di-update setelah patient ter-insert (jika perlu dikirim ke Zains)
         const insertedTransactionRows = (await sql`
           INSERT INTO transactions (
-            clinic_id, patient_id, poly_id, insurance_type_id, trx_date, trx_no, erm_no, nik, patient_name,
+            clinic_id, patient_id, poly_id, insurance_type_id, trx_date, trx_no, trx_line_no, erm_no, nik, patient_name,
             insurance_type, polyclinic, payment_method, voucher_code,
             bill_regist, bill_action, bill_lab, bill_drug, bill_alkes, bill_mcu, bill_radio, bill_total,
             bill_regist_discount, bill_action_discount, bill_lab_discount, bill_drug_discount, bill_alkes_discount, bill_mcu_discount, bill_radio_discount,
@@ -263,7 +259,7 @@ export async function POST(request: NextRequest) {
             raw_json_data, input_type
           )
           VALUES (
-            ${clinic_id}, NULL, ${polyId}, ${insuranceTypeId}, ${trxDateFormatted}, ${trxNo}, ${ermNo}, ${nik || null}, ${patientName},
+            ${clinic_id}, NULL, ${polyId}, ${insuranceTypeId}, ${trxDateFormatted}, ${trxNo}, ${trxLineNo}, ${ermNo}, ${nik || null}, ${patientName},
             ${insuranceType}, ${polyclinic}, ${paymentMethod}, ${voucherCode === '-' ? null : voucherCode},
             ${billRegist}, ${billAction}, ${billLab}, ${billDrug}, ${billAlkes}, ${billMcu}, ${billRadio}, ${billTotal},
             ${billRegistDiscount}, ${billActionDiscount}, ${billLabDiscount}, ${billDrugDiscount}, ${billAlkesDiscount}, ${billMcuDiscount}, ${billRadioDiscount},
@@ -274,9 +270,8 @@ export async function POST(request: NextRequest) {
             ${receivableMcu}, ${receivableRadio}, ${receivableTotal},
             ${JSON.stringify(row)}, 'manual'
           )
-          ON CONFLICT (clinic_id, trx_no, trx_date)
+          ON CONFLICT (clinic_id, trx_no, trx_date, erm_no, trx_line_no)
           DO UPDATE SET
-            erm_no = EXCLUDED.erm_no,
             patient_name = EXCLUDED.patient_name,
             insurance_type = EXCLUDED.insurance_type,
             payment_method = EXCLUDED.payment_method,
@@ -291,11 +286,12 @@ export async function POST(request: NextRequest) {
             bill_mcu_discount = EXCLUDED.bill_mcu_discount,
             bill_radio_discount = EXCLUDED.bill_radio_discount,
             updated_at = NOW()
-          RETURNING id
+          RETURNING id, (xmax = 0) AS inserted
         `) as any[]
         const insertedTransaction = insertedTransactionRows[0]
 
         const transactionId = (insertedTransaction as any).id
+        isNewTransaction = (insertedTransaction as any).inserted === true
 
         insertedCount++
 
