@@ -151,6 +151,18 @@ export async function POST(request: NextRequest) {
           trxLineNo = (maxLineRows[0]?.max_line ?? 0) + 1
         }
 
+        // Pre-check: apakah baris ini sudah ada? (untuk isNewTransaction & visit_count)
+        const existingCheckRows = (await sql`
+          SELECT id FROM transactions
+          WHERE clinic_id = ${clinic_id}
+            AND trx_no = ${trxNo}
+            AND trx_date = ${trxDateFormatted}
+            AND erm_no = ${ermNo}
+            AND trx_line_no = ${trxLineNo}
+          LIMIT 1
+        `) as any[]
+        const alreadyExists = !!existingCheckRows[0]
+
         const patientName = row['patient_name'] || row['Nama Pasien'] || row['patient_name'] || ''
         const insuranceType = row['insurance_type'] || row['Asuransi'] || row['insurance_type'] || ''
         const polyclinic = row['polyclinic'] || row['Ruangan / Poli'] || row['polyclinic'] || ''
@@ -207,8 +219,7 @@ export async function POST(request: NextRequest) {
         const receivableRadio = parseIndonesianNumber(row['receivable_radio'] || row['Jumlah Piutang ( Rp. ) - Radiologi'] || 0)
         const receivableTotal = parseIndonesianNumber(row['receivable_total'] || row['Jumlah Piutang ( Rp. ) - Total'] || 0)
 
-        // isNewTransaction ditentukan setelah INSERT ... ON CONFLICT (dari xmax)
-        let isNewTransaction = true
+        const isNewTransaction = !alreadyExists
 
         // patientId & visitCount akan diisi NANTI,
         // hanya jika transaksi ini benar-benar di-break ke transactions_to_zains
@@ -286,12 +297,11 @@ export async function POST(request: NextRequest) {
             bill_mcu_discount = EXCLUDED.bill_mcu_discount,
             bill_radio_discount = EXCLUDED.bill_radio_discount,
             updated_at = NOW()
-          RETURNING id, (xmax = 0) AS inserted
+          RETURNING id
         `) as any[]
         const insertedTransaction = insertedTransactionRows[0]
 
         const transactionId = (insertedTransaction as any).id
-        isNewTransaction = (insertedTransaction as any).inserted === true
 
         insertedCount++
 
