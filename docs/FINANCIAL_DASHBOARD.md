@@ -25,17 +25,18 @@
 | [`app/dashboard/summary-dashboard/page.tsx`](../app/dashboard/summary-dashboard/page.tsx) | Tabel pivot + link ke visual. |
 | [`app/dashboard/layout.tsx`](../app/dashboard/layout.tsx) | Item menu Dashboard Finansial. |
 | [`app/api/financial/time-tracker/route.ts`](../app/api/financial/time-tracker/route.ts) | Time Performance Tracker: daily/weekly/quarterly langsung dari group_by Zains, monthly via `buildBuckets`. |
-| [`app/api/financial/clinic-ranking/route.ts`](../app/api/financial/clinic-ranking/route.ts) | Ranking capaian revenue SE Klinik per klinik (top list). |
+| [`app/api/financial/clinic-ranking/route.ts`](../app/api/financial/clinic-ranking/route.ts) | Ranking capaian revenue SE Klinik per klinik (top list). Response menyertakan `grand_total_curr` / `grand_total_prev` (jumlah semua klinik, bukan hanya top 10) untuk baris footer **Grand total** di tabel ranking. |
 | [`app/api/financial/clinic-heatmap/route.ts`](../app/api/financial/clinic-heatmap/route.ts) | Heatmap bulanan SE Klinik per klinik (top beberapa klinik utama). |
 
 ## Catatan
 
+- **Dashboard Lembaga** ([`app/dashboard/yayasan/page.tsx`](../app/dashboard/yayasan/page.tsx)): agregasi operasional dari Neon (`transactions`) via [`app/api/dashboard/yayasan-stats/route.ts`](../app/api/dashboard/yayasan-stats/route.ts). Bagian donasi/kampanye tetap contoh bila belum ada sumber data.
 - Tanpa cache/job; waktu muat mengikuti `se-yearly` (banyak call Zains).
 - **Sumber halaman visual (inline dengan repo):** salinan TypeScript ada di [`docs/financial-visual-page.tsx.md`](financial-visual-page.tsx.md) (blok `tsx`); diekstrak ke [`app/dashboard/financial-visual/page.tsx`](../app/dashboard/financial-visual/page.tsx) saat build/setup (atau sudah tersinkron di git). Halaman ini sekarang memuat:
   - KPI rollup + kartu tambahan **Growth Revenue (YoY)**.
   - **Time Performance Tracker** dengan tab Daily / Weekly / Monthly / Quarterly yang langsung mengikuti `labels` dan agregasi dari API `time-tracker`.
   - **Stacked chart weekly/monthly** (bar per kategori + line GRAND TOTAL).
-  - **Clinic Performance Ranking** (top klinik berdasarkan revenue SE Klinik).
+  - **Clinic Performance Ranking** (top klinik berdasarkan revenue SE Klinik + footer grand total semua klinik).
   - **Growth Heatmap per Klinik** berbasis total SE Klinik bulanan untuk beberapa klinik utama.
 
 ---

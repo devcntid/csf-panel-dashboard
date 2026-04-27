@@ -218,6 +218,9 @@ export async function GET(req: NextRequest) {
     // Urutkan berdasarkan capaian revenue SE Klinik (value_curr) terbesar ke terkecil
     const sorted = [...valid].sort((a, b) => b.value_curr - a.value_curr)
 
+    const grand_total_curr = sorted.reduce((s, r) => s + (Number.isFinite(r.value_curr) ? r.value_curr : 0), 0)
+    const grand_total_prev = sorted.reduce((s, r) => s + (Number.isFinite(r.value_prev) ? r.value_prev : 0), 0)
+
     const top = sorted.slice(0, 10)
     const bottom: Row[] = []
 
@@ -230,6 +233,8 @@ export async function GET(req: NextRequest) {
         tgl_akhir: rangeRequested ? tglAkhirQ : undefined,
         bucket: bucketMeta,
         compare_to: compareMeta,
+        grand_total_curr,
+        grand_total_prev,
         top,
         bottom,
       },

@@ -133,6 +133,8 @@ type ClinicRankingResponse = {
   period: TimePeriod
   bucket: { idx: number; label: string; tgl_awal: string; tgl_akhir: string }
   compare_to: { idx: number; label: string; tgl_awal: string; tgl_akhir: string }
+  grand_total_curr?: number
+  grand_total_prev?: number
   top: ClinicRankingRow[]
   bottom: ClinicRankingRow[]
   message?: string
@@ -1266,6 +1268,28 @@ export default function FinancialVisualDashboardPage() {
                           </tr>
                         ))}
                       </tbody>
+                      {typeof ranking.grand_total_curr === 'number' && (
+                        <tfoot className="bg-slate-50 border-t-2 border-slate-200">
+                          <tr>
+                            <td className="px-3 py-2 text-xs font-semibold text-slate-700" colSpan={2}>
+                              Grand total (semua klinik)
+                            </td>
+                            <td className="px-3 py-2 text-right text-sm font-bold text-slate-900 tabular-nums">
+                              {formatRupiah(ranking.grand_total_curr)}
+                            </td>
+                          </tr>
+                          {typeof ranking.grand_total_prev === 'number' && ranking.grand_total_prev > 0 && (
+                            <tr>
+                              <td className="px-3 py-1 text-xs text-slate-500" colSpan={2}>
+                                Periode pembanding ({ranking.compare_to?.label ?? 'sebelumnya'})
+                              </td>
+                              <td className="px-3 py-1 text-right text-xs text-slate-500 tabular-nums">
+                                {formatRupiah(ranking.grand_total_prev)}
+                              </td>
+                            </tr>
+                          )}
+                        </tfoot>
+                      )}
                     </table>
                   </div>
                 ) : (
