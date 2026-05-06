@@ -236,7 +236,7 @@ export async function POST(request: NextRequest) {
               AND trx_no = ${trxNo}
               AND trx_date = ${trxDateFormatted}
               AND erm_no = ${ermNo}
-              AND trx_line_no = 1
+              AND payment_method = ${paymentMethod}
             LIMIT 1
           `) as any[]
           let isNewTransaction = !existingCheckRows[0]
@@ -297,7 +297,7 @@ export async function POST(request: NextRequest) {
               ${receivableMcu}, ${receivableRadio}, ${receivableTotal},
               ${JSON.stringify(row)}, 'upload'
             )
-            ON CONFLICT (clinic_id, trx_no, trx_date, erm_no, trx_line_no)
+            ON CONFLICT (clinic_id, trx_no, trx_date, erm_no, payment_method)
             DO UPDATE SET
               patient_name = EXCLUDED.patient_name,
               insurance_type = EXCLUDED.insurance_type,

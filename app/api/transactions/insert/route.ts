@@ -134,22 +134,17 @@ export async function POST(request: NextRequest) {
 
         const trxDateFormatted = formatDateToYYYYMMDD(trxDate)
 
-        // trx_line_no: jika tidak disediakan, alokasi otomatis MAX+1 agar multi-row diperbolehkan
-        let trxLineNo: number
+        // trx_line_no: dipakai sebagai nomor urut saja, bukan bagian UNIQUE constraint
         const rawLineNo = row['trx_line_no'] || row['line_no']
-        if (rawLineNo != null && Number.isFinite(Number(rawLineNo)) && Number(rawLineNo) >= 1) {
-          trxLineNo = Math.floor(Number(rawLineNo))
-        } else {
-          const maxLineRows = (await sql`
-            SELECT COALESCE(MAX(trx_line_no), 0) AS max_line
-            FROM transactions
-            WHERE clinic_id = ${clinic_id}
-              AND trx_no = ${trxNo}
-              AND trx_date = ${trxDateFormatted}
-              AND erm_no = ${ermNo}
-          `) as any[]
-          trxLineNo = (maxLineRows[0]?.max_line ?? 0) + 1
-        }
+        const trxLineNo = (rawLineNo != null && Number.isFinite(Number(rawLineNo)) && Number(rawLineNo) >= 1)
+          ? Math.floor(Number(rawLineNo))
+          : 1
+
+        const patientName = row['patient_name'] || row['Nama Pasien'] || row['patient_name'] || ''
+        const insuranceType = row['insurance_type'] || row['Asuransi'] || row['insurance_type'] || ''
+        const polyclinic = row['polyclinic'] || row['Ruangan / Poli'] || row['polyclinic'] || ''
+        const paymentMethod = row['payment_method'] || row['Metode Pembayaran'] || row['payment_method'] || ''
+        const voucherCode = row['voucher_code'] || row['Voucher'] || row['voucher_code'] || '-'
 
         // Pre-check: apakah baris ini sudah ada? (untuk isNewTransaction & visit_count)
         const existingCheckRows = (await sql`
@@ -158,16 +153,10 @@ export async function POST(request: NextRequest) {
             AND trx_no = ${trxNo}
             AND trx_date = ${trxDateFormatted}
             AND erm_no = ${ermNo}
-            AND trx_line_no = ${trxLineNo}
+            AND payment_method = ${paymentMethod}
           LIMIT 1
         `) as any[]
         const alreadyExists = !!existingCheckRows[0]
-
-        const patientName = row['patient_name'] || row['Nama Pasien'] || row['patient_name'] || ''
-        const insuranceType = row['insurance_type'] || row['Asuransi'] || row['insurance_type'] || ''
-        const polyclinic = row['polyclinic'] || row['Ruangan / Poli'] || row['polyclinic'] || ''
-        const paymentMethod = row['payment_method'] || row['Metode Pembayaran'] || row['payment_method'] || ''
-        const voucherCode = row['voucher_code'] || row['Voucher'] || row['voucher_code'] || '-'
 
         // Parse semua field jumlah
         const billRegist = parseIndonesianNumber(row['bill_regist'] || row['Jumlah Tagihan ( Rp. ) - Karcis'] || 0)
@@ -281,7 +270,7 @@ export async function POST(request: NextRequest) {
             ${receivableMcu}, ${receivableRadio}, ${receivableTotal},
             ${JSON.stringify(row)}, 'manual'
           )
-          ON CONFLICT (clinic_id, trx_no, trx_date, erm_no, trx_line_no)
+          ON CONFLICT (clinic_id, trx_no, trx_date, erm_no, payment_method)
           DO UPDATE SET
             patient_name = EXCLUDED.patient_name,
             insurance_type = EXCLUDED.insurance_type,

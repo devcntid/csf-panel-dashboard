@@ -272,7 +272,7 @@ CREATE INDEX idx_bpjs_realization_clinic_period ON clinic_bpjs_realizations(clin
       patient_name VARCHAR(255),
       insurance_type VARCHAR(100),
       polyclinic VARCHAR(100),
-      payment_method VARCHAR(100),
+      payment_method VARCHAR(100) NOT NULL DEFAULT '',
       voucher_code VARCHAR(100),
     
     -- === 1. JUMLAH TAGIHAN ===
@@ -339,7 +339,7 @@ CREATE INDEX idx_bpjs_realization_clinic_period ON clinic_bpjs_realizations(clin
 
     -- PENTING: Primary Key pada partitioned table HARUS menyertakan kolom partisi (trx_date)
     PRIMARY KEY (id, trx_date),
-    CONSTRAINT unique_transaction_entry UNIQUE (clinic_id, trx_no, trx_date, erm_no, trx_line_no)
+    CONSTRAINT unique_transaction_entry UNIQUE (clinic_id, trx_no, trx_date, erm_no, payment_method)
 ) PARTITION BY RANGE (trx_date);
 
 -- =============================================
