@@ -26,7 +26,11 @@ type TransactionRow = {
   nominal: number
   coa_debet: string
   coa_kredit: string
+  coa_ca: string
+  nama_coa_debet: string
+  nama_coa_kredit: string
   id_kantor: number
+  nama_kantor: string
   id_program: number
   id_via_bayar: number
   approve: string
@@ -153,6 +157,9 @@ export function TransactionDetailModal({ state, onClose }: TransactionDetailModa
           r.id_transaksi?.toLowerCase().includes(q) ||
           r.coa_debet?.toLowerCase().includes(q) ||
           r.coa_kredit?.toLowerCase().includes(q) ||
+          r.nama_coa_debet?.toLowerCase().includes(q) ||
+          r.nama_coa_kredit?.toLowerCase().includes(q) ||
+          r.nama_kantor?.toLowerCase().includes(q) ||
           String(r.nominal).includes(q),
       )
     }
@@ -395,11 +402,11 @@ export function TransactionDetailModal({ state, onClose }: TransactionDetailModa
               Tidak ada transaksi cocok dengan filter aktif
             </div>
           ) : (
-            <table className="w-full text-sm min-w-[900px] font-sans">
+            <table className="w-full text-sm font-sans min-w-[1600px]">
               <thead className="sticky top-0 z-10">
                 <tr className="bg-slate-50 border-b border-slate-200">
-                  <th className="px-3 py-2.5 text-left text-xs font-semibold text-slate-600 w-10">#</th>
-                  <th className="px-3 py-2.5 text-left text-xs font-semibold text-slate-600">
+                  <th className="px-3 py-2.5 text-left text-xs font-semibold text-slate-600 whitespace-nowrap w-10">#</th>
+                  <th className="px-3 py-2.5 text-left text-xs font-semibold text-slate-600 whitespace-nowrap">
                     <button
                       type="button"
                       onClick={toggleDateSort}
@@ -409,63 +416,71 @@ export function TransactionDetailModal({ state, onClose }: TransactionDetailModa
                       <DateSortIcon className={`size-3.5 ${dateSort ? 'text-teal-600' : 'text-slate-400'}`} />
                     </button>
                   </th>
-                  <th className="px-3 py-2.5 text-left text-xs font-semibold text-slate-600">ID Transaksi</th>
-                  <th className="px-3 py-2.5 text-left text-xs font-semibold text-slate-600 min-w-[250px]">Keterangan</th>
-                  <th className="px-3 py-2.5 text-right text-xs font-semibold text-slate-600">Nominal</th>
-                  <th className="px-3 py-2.5 text-left text-xs font-semibold text-slate-600">COA Debet</th>
-                  <th className="px-3 py-2.5 text-left text-xs font-semibold text-slate-600">COA Kredit</th>
-                  <th className="px-3 py-2.5 text-center text-xs font-semibold text-slate-600">Kantor</th>
+                  <th className="px-3 py-2.5 text-left text-xs font-semibold text-slate-600 whitespace-nowrap">ID Transaksi</th>
+                  <th className="px-3 py-2.5 text-left text-xs font-semibold text-slate-600 whitespace-nowrap">Keterangan</th>
+                  <th className="px-3 py-2.5 text-right text-xs font-semibold text-slate-600 whitespace-nowrap">Nominal</th>
+                  <th className="px-3 py-2.5 text-left text-xs font-semibold text-slate-600 whitespace-nowrap">COA Debet</th>
+                  <th className="px-3 py-2.5 text-left text-xs font-semibold text-slate-600 whitespace-nowrap">Nama COA Debet</th>
+                  <th className="px-3 py-2.5 text-left text-xs font-semibold text-slate-600 whitespace-nowrap">COA Kredit</th>
+                  <th className="px-3 py-2.5 text-left text-xs font-semibold text-slate-600 whitespace-nowrap">Nama COA Kredit</th>
+                  <th className="px-3 py-2.5 text-left text-xs font-semibold text-slate-600 whitespace-nowrap">Kantor</th>
                 </tr>
               </thead>
               <tbody>
                 {filteredData.map((row, idx) => (
                   <tr key={row.id_trans || idx} className="border-b border-slate-100 hover:bg-slate-50/70">
-                    <td className="px-3 py-2 text-slate-500 text-xs tabular-nums">
+                    <td className="px-3 py-2 text-slate-500 text-xs tabular-nums whitespace-nowrap">
                       {(page - 1) * perPage + idx + 1}
                     </td>
-                    <td className="px-3 py-2 text-slate-700 whitespace-nowrap text-xs">
+                    <td className="px-3 py-2 text-slate-700 text-xs whitespace-nowrap">
                       {formatDate(row.tgl_exre)}
                     </td>
-                    <td className="px-3 py-2 text-slate-600 text-xs">
+                    <td className="px-3 py-2 text-slate-600 text-xs whitespace-nowrap">
                       {row.id_transaksi || '-'}
                     </td>
-                    <td className="px-3 py-2 text-slate-800">
+                    <td className="px-3 py-2 text-slate-800 whitespace-nowrap">
                       {row.keterangan || '-'}
                     </td>
-                    <td className="px-3 py-2 text-right tabular-nums font-medium text-slate-800">
+                    <td className="px-3 py-2 text-right tabular-nums font-medium text-slate-800 whitespace-nowrap">
                       {formatRupiah(row.nominal)}
                     </td>
-                    <td className="px-3 py-2 text-slate-600 text-xs">
+                    <td className="px-3 py-2 text-slate-600 text-xs whitespace-nowrap">
                       {row.coa_debet || '-'}
                     </td>
-                    <td className="px-3 py-2 text-slate-600 text-xs">
+                    <td className="px-3 py-2 text-slate-800 text-xs whitespace-nowrap">
+                      {row.nama_coa_debet || '-'}
+                    </td>
+                    <td className="px-3 py-2 text-slate-600 text-xs whitespace-nowrap">
                       {row.coa_kredit || '-'}
                     </td>
-                    <td className="px-3 py-2 text-center text-slate-600 text-xs">
-                      {row.id_kantor || '-'}
+                    <td className="px-3 py-2 text-slate-800 text-xs whitespace-nowrap">
+                      {row.nama_coa_kredit || '-'}
+                    </td>
+                    <td className="px-3 py-2 text-slate-800 text-xs whitespace-nowrap">
+                      {row.nama_kantor || '-'}
                     </td>
                   </tr>
                 ))}
               </tbody>
               <tfoot className="sticky bottom-0 z-10">
                 <tr className="bg-teal-50 border-t-2 border-teal-200">
-                  <td colSpan={4} className="px-3 py-2 text-right text-xs font-bold text-teal-800">
+                  <td colSpan={4} className="px-3 py-2 text-right text-xs font-bold text-teal-800 whitespace-nowrap">
                     Subtotal halaman ini{hasActiveFilters ? ' (filtered)' : ''}
                   </td>
-                  <td className="px-3 py-2 text-right tabular-nums text-xs font-bold text-teal-900">
+                  <td className="px-3 py-2 text-right tabular-nums text-xs font-bold text-teal-900 whitespace-nowrap">
                     {formatRupiah(pageSubtotal)}
                   </td>
-                  <td colSpan={3} />
+                  <td colSpan={5} />
                 </tr>
                 {allDataTotal != null && (
                   <tr className="bg-teal-100/80 border-t border-teal-200">
-                    <td colSpan={4} className="px-3 py-2.5 text-right text-sm font-bold text-teal-900">
+                    <td colSpan={4} className="px-3 py-2.5 text-right text-sm font-bold text-teal-900 whitespace-nowrap">
                       Grand Total (semua data)
                     </td>
-                    <td className="px-3 py-2.5 text-right tabular-nums text-sm font-bold text-teal-950">
+                    <td className="px-3 py-2.5 text-right tabular-nums text-sm font-bold text-teal-950 whitespace-nowrap">
                       {formatRupiah(allDataTotal)}
                     </td>
-                    <td colSpan={3} />
+                    <td colSpan={5} />
                   </tr>
                 )}
               </tfoot>

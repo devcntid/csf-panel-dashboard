@@ -35,14 +35,17 @@ type TransactionRow = {
   nominal: number
   coa_debet: string
   coa_kredit: string
+  coa_ca: string
+  nama_coa_debet: string
+  nama_coa_kredit: string
   id_kantor: number
+  nama_kantor: string
   id_program: number
   id_via_bayar: number
   approve: string
   jenis: string
   mutasi: string
   id_contact: string
-  coa_ca: string
 }
 
 function formatDate(raw: string): string {
@@ -128,8 +131,11 @@ export async function GET(req: NextRequest) {
         'Keterangan',
         'Nominal',
         'COA Debet',
+        'Nama COA Debet',
         'COA Kredit',
+        'Nama COA Kredit',
         'ID Kantor',
+        'Nama Kantor',
         'ID Program',
         'Via Bayar',
         'Approve',
@@ -145,8 +151,11 @@ export async function GET(req: NextRequest) {
         row.keterangan || '',
         row.nominal ?? 0,
         row.coa_debet || '',
+        row.nama_coa_debet || '',
         row.coa_kredit || '',
+        row.nama_coa_kredit || '',
         row.id_kantor ?? '',
+        row.nama_kantor || '',
         row.id_program ?? '',
         row.id_via_bayar ?? '',
         row.approve || '',
@@ -166,8 +175,11 @@ export async function GET(req: NextRequest) {
       { wch: 50 },
       { wch: 16 },
       { wch: 18 },
+      { wch: 40 },
       { wch: 18 },
+      { wch: 40 },
       { wch: 10 },
+      { wch: 30 },
       { wch: 10 },
       { wch: 10 },
       { wch: 8 },
