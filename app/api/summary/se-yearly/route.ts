@@ -9,6 +9,7 @@ import {
   runPool,
 } from '@/lib/zains-fetch-retry'
 import { queryFinsTotals } from '@/lib/fins-totals'
+import type { RowFilterParams } from '@/lib/summary-se-yearly-types'
 
 export const dynamic = 'force-dynamic'
 /** Banyak call paralel ke Zains; naikkan batas agar tidak putus di 60s (Vercel / hosting). */
@@ -22,6 +23,7 @@ type MonthlyPoint = {
 type PivotRow = {
   label: string
   monthly: MonthlyPoint[]
+  filterParams?: RowFilterParams
 }
 
 type PivotGroup = {
@@ -486,22 +488,34 @@ export async function GET(req: NextRequest) {
       }))
     }
 
+    function taskToFilterParams(t: Task): RowFilterParams {
+      const fp: RowFilterParams = { type: t.params.type, approve: 'a' }
+      if (t.params.onlyCoaDebet.length > 0) fp.only_coa_debet = t.params.onlyCoaDebet.join(',')
+      if (t.params.onlyCoaKredit.length > 0) fp.only_coa_kredit = t.params.onlyCoaKredit.join(',')
+      if (t.params.idKantorZains) fp.id_kantor = t.params.idKantorZains
+      if (t.params.onlyIdContact.length > 0) fp.only_id_contact = t.params.onlyIdContact.join(',')
+      if (t.params.excludeIdContact.length > 0) fp.exclude_id_contact = t.params.excludeIdContact.join(',')
+      return fp
+    }
+
     // Bangun rows per task
-    const klinikRows: { label: string; monthly: MonthlyPoint[] }[] = []
-    const ambulanRows: { label: string; monthly: MonthlyPoint[] }[] = []
-    const fundraisingRows: { label: string; monthly: MonthlyPoint[] }[] = []
-    let penerimaanLainnyaMonthly: MonthlyPoint[] | null = null
+    type RowWithParams = { label: string; monthly: MonthlyPoint[]; filterParams?: RowFilterParams }
+    const klinikRows: RowWithParams[] = []
+    const ambulanRows: RowWithParams[] = []
+    const fundraisingRows: RowWithParams[] = []
+    let penerimaanLainnyaRow: RowWithParams | null = null
 
     for (const r of taskResults) {
       const vector = toMonthlyVector(r.monthly)
+      const fp = taskToFilterParams(r)
       if (r.section === 'SE' && r.group === 'KLINIK') {
-        klinikRows.push({ label: r.label, monthly: vector })
+        klinikRows.push({ label: r.label, monthly: vector, filterParams: fp })
       } else if (r.section === 'SE' && r.group === 'AMBULAN') {
-        ambulanRows.push({ label: r.label, monthly: vector })
+        ambulanRows.push({ label: r.label, monthly: vector, filterParams: fp })
       } else if (r.section === 'FUNDRAISING' && r.group === 'FUNDRAISING') {
-        fundraisingRows.push({ label: r.label, monthly: vector })
+        fundraisingRows.push({ label: r.label, monthly: vector, filterParams: fp })
       } else if (r.section === 'FUNDRAISING' && r.group === 'PENERIMAAN_LAINNYA') {
-        penerimaanLainnyaMonthly = r.monthly
+        penerimaanLainnyaRow = { label: r.label, monthly: vector, filterParams: fp }
       }
     }
 
@@ -520,8 +534,8 @@ export async function GET(req: NextRequest) {
     const totalAmbulanVector = sumVectors(ambulanRows.map((r) => r.monthly))
     const totalSEVector = sumVectors([totalKlinikVector, totalAmbulanVector])
     const totalFundraisingVector = sumVectors(fundraisingRows.map((r) => r.monthly))
-    const penerimaanLainnyaVector = penerimaanLainnyaMonthly
-      ? toMonthlyVector(penerimaanLainnyaMonthly)
+    const penerimaanLainnyaVector = penerimaanLainnyaRow
+      ? penerimaanLainnyaRow.monthly
       : months.map((m) => ({ month: m, sum: 0 }))
     const grandTotalVector = sumVectors([totalSEVector, totalFundraisingVector, penerimaanLainnyaVector])
 
@@ -535,6 +549,7 @@ export async function GET(req: NextRequest) {
               ...klinikRows.map((r) => ({
                 label: r.label,
                 monthly: r.monthly,
+                filterParams: r.filterParams,
               })),
               {
                 label: 'TOTAL KLINIK',
@@ -548,6 +563,7 @@ export async function GET(req: NextRequest) {
               ...ambulanRows.map((r) => ({
                 label: r.label,
                 monthly: r.monthly,
+                filterParams: r.filterParams,
               })),
               {
                 label: 'TOTAL AMBULAN',
@@ -575,6 +591,7 @@ export async function GET(req: NextRequest) {
               ...fundraisingRows.map((r) => ({
                 label: r.label,
                 monthly: r.monthly,
+                filterParams: r.filterParams,
               })),
               {
                 label: 'TOTAL FUNDRAISING',
@@ -588,6 +605,7 @@ export async function GET(req: NextRequest) {
               {
                 label: 'PENERIMAAN LAINNYA',
                 monthly: penerimaanLainnyaVector,
+                filterParams: penerimaanLainnyaRow?.filterParams,
               },
               {
                 label: 'GRAND TOTAL',

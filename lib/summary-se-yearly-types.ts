@@ -1,11 +1,22 @@
 /** Tipe respons `GET /api/summary/se-yearly` — dipakai Summary Dashboard & Dashboard Finansial. */
 
+export type RowFilterParams = {
+  type: string
+  only_coa_debet?: string
+  only_coa_kredit?: string
+  id_kantor?: string
+  only_id_contact?: string
+  exclude_id_contact?: string
+  approve?: string
+}
+
 export type PivotRow = {
   label: string
   monthly: {
     month: number
     sum: number
   }[]
+  filterParams?: RowFilterParams
 }
 
 export type PivotSection = {

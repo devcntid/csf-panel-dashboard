@@ -1,6 +1,6 @@
 'use client'
 
-import { Fragment, useEffect, useState } from 'react'
+import { Fragment, useEffect, useState, useCallback } from 'react'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
@@ -8,12 +8,16 @@ import { Spinner } from '@/components/ui/spinner'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import Link from 'next/link'
 import { Clock, RefreshCw } from 'lucide-react'
-import type { PivotResponse } from '@/lib/summary-se-yearly-types'
+import type { PivotResponse, RowFilterParams } from '@/lib/summary-se-yearly-types'
 import { formatRupiah } from '@/lib/summary-se-yearly-types'
 import {
   fetchSeYearlySummary,
   SE_YEARLY_MAX_ATTEMPTS,
 } from '@/lib/fetch-se-yearly-summary'
+import {
+  TransactionDetailModal,
+  type TransactionModalState,
+} from './transaction-detail-modal'
 
 const monthOptions = [
   { value: '1', label: 'Jan' },
@@ -33,6 +37,13 @@ const monthOptions = [
 export default function SummaryDashboardPage() {
   const now = new Date()
   const [year, setYear] = useState<number>(now.getFullYear())
+
+  // State untuk modal detail transaksi
+  const [txModal, setTxModal] = useState<TransactionModalState>(null)
+
+  const openTransactionModal = useCallback((label: string, filterParams: RowFilterParams, y: number, month: number) => {
+    setTxModal({ open: true, label, filterParams, year: y, month })
+  }, [])
 
   // State untuk tabel pivot SE & Fundraising
   const [loadingTable, setLoadingTable] = useState(false)
@@ -228,6 +239,7 @@ export default function SummaryDashboardPage() {
                                 const isGrandTotal = row.label
                                   .toUpperCase()
                                   .includes('GRAND TOTAL')
+                                const canDrillDown = !!row.filterParams && !isGrandTotal
                                 const valueByMonth = new Map<number, number>()
                                 row.monthly.forEach((p) => {
                                   valueByMonth.set(p.month, p.sum)
@@ -246,6 +258,7 @@ export default function SummaryDashboardPage() {
                                     </td>
                                     {tableData.months.map((m) => {
                                       const val = valueByMonth.get(m.month) || 0
+                                      const cellClickable = canDrillDown && val !== 0
                                       return (
                                         <td
                                           key={`cell-${section.title}-${group.title}-${row.label}-${m.month}`}
@@ -254,8 +267,13 @@ export default function SummaryDashboardPage() {
                                               ? 'font-bold text-emerald-700'
                                               : isTotal
                                                 ? 'font-semibold text-slate-800'
-                                                : 'text-slate-800'
+                                                : cellClickable
+                                                  ? 'text-teal-700 cursor-pointer hover:underline hover:text-teal-900'
+                                                  : 'text-slate-800'
                                           }`}
+                                          onClick={cellClickable
+                                            ? () => openTransactionModal(row.label, row.filterParams!, tableData.year, m.month)
+                                            : undefined}
                                         >
                                           {formatRupiah(val)}
                                         </td>
@@ -306,94 +324,12 @@ export default function SummaryDashboardPage() {
         </div>
 
         {/* Chart SE per bulan disembunyikan sementara */}
-        {/* <div className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">
-                Grafik Capaian SE per Bulan
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 gap-4">
-                <div className="h-[280px]">
-                  {clinicChartData && clinicChartData.labels.length > 0 ? (
-                    <Bar data={clinicChartData} options={horizontalBarOptions('Capaian SE per Klinik')} />
-                  ) : loadingChart ? (
-                    <div className="flex flex-col items-center justify-center h-full gap-3 text-slate-400 text-sm">
-                      <Spinner className="size-6 text-teal-600" />
-                      <span>Memuat grafik...</span>
-                    </div>
-                  ) : (
-                    <div className="flex items-center justify-center h-full text-slate-400 text-sm">
-                      Tidak ada data grafik
-                    </div>
-                  )}
-                </div>
-                <div>
-                  {chartData ? (
-                    <table className="w-full text-xs">
-                      <thead>
-                        <tr className="border-b border-slate-200 bg-slate-50">
-                          <th className="py-2 px-3 text-left font-semibold text-slate-600">
-                            Bulan
-                          </th>
-                          <th className="py-2 px-3 text-right font-semibold text-slate-600">
-                            Capaian
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {!chartData.monthly.length ? (
-                          <tr>
-                            <td
-                              colSpan={2}
-                              className="py-4 px-3 text-center text-slate-400"
-                            >
-                              Tidak ada data
-                            </td>
-                          </tr>
-                        ) : (
-                          monthOptions.map((m, idx) => {
-                            const item = chartData.monthly.find((it) => Number(it.month) === idx + 1)
-                            const value = item ? item.sum : 0
-                            return (
-                              <tr key={m.value} className="border-b border-slate-100">
-                                <td className="py-1.5 px-3 text-slate-700">{m.label}</td>
-                                <td className="py-1.5 px-3 text-right text-slate-800 tabular-nums">
-                                  {formatRupiah(value)}
-                                </td>
-                              </tr>
-                            )
-                          })
-                        )}
-                      </tbody>
-                      <tfoot>
-                        <tr className="border-t border-slate-300 bg-slate-50">
-                          <td className="py-2 px-3 font-semibold text-slate-700">
-                            Total Tahun {chartData.year}
-                          </td>
-                          <td className="py-2 px-3 font-semibold text-right text-slate-900 tabular-nums">
-                            {formatRupiah(chartData.grand_total.sum)}
-                          </td>
-                        </tr>
-                      </tfoot>
-                    </table>
-                  ) : loadingChart ? (
-                    <div className="flex flex-col items-center justify-center gap-3 py-6 text-slate-400 text-xs">
-                      <Spinner className="size-5 text-teal-600" />
-                      <span>Memuat ringkasan grafik...</span>
-                    </div>
-                  ) : (
-                    <div className="flex items-center justify-center py-6 text-slate-400 text-xs">
-                      Belum ada data grafik yang bisa ditampilkan
-                    </div>
-                  )}
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div> */}
       </div>
+
+      <TransactionDetailModal
+        state={txModal}
+        onClose={() => setTxModal(null)}
+      />
     </div>
   )
 }
