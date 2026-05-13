@@ -302,7 +302,7 @@ export async function GET(req: NextRequest) {
 
       tasks.push({
         key: 'ambulance',
-        label: 'TOTAL AMBULAN',
+        label: 'Ambulan',
         section: 'SE',
         group: 'AMBULAN',
         params: {
