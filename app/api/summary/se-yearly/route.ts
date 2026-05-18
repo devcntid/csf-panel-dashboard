@@ -23,6 +23,7 @@ type MonthlyPoint = {
 type PivotRow = {
   label: string
   monthly: MonthlyPoint[]
+  monthlyTargets?: MonthlyPoint[]
   filterParams?: RowFilterParams
 }
 
@@ -205,6 +206,8 @@ export async function GET(req: NextRequest) {
       label: string
       section: 'SE' | 'FUNDRAISING'
       group: 'KLINIK' | 'AMBULAN' | 'FUNDRAISING' | 'PENERIMAAN_LAINNYA'
+      clinicId?: number
+      sourceId?: number
       params: {
         type: string
         subtractType?: string
@@ -266,6 +269,8 @@ export async function GET(req: NextRequest) {
           label: alias,
           section: 'SE',
           group: 'KLINIK',
+          clinicId: Number(c.id),
+          sourceId: Number(seClinicSource.id),
           params: {
             type: 'receipt',
             subtractType: 'expend',
@@ -305,6 +310,7 @@ export async function GET(req: NextRequest) {
         label: 'Ambulan',
         section: 'SE',
         group: 'AMBULAN',
+        sourceId: Number(seAmbulanceSource.id),
         params: {
           type: 'receipt',
           onlyCoaDebet: debet,
@@ -343,6 +349,7 @@ export async function GET(req: NextRequest) {
         label: 'Funding',
         section: 'FUNDRAISING',
         group: 'FUNDRAISING',
+        sourceId: Number(fundraisingProjectSource.id),
         params: {
           type: 'receipt',
           onlyCoaDebet: debet,
@@ -380,6 +387,7 @@ export async function GET(req: NextRequest) {
         label: 'DM',
         section: 'FUNDRAISING',
         group: 'FUNDRAISING',
+        sourceId: Number(fundraisingDigitalSource.id),
         params: {
           type: 'receipt',
           onlyCoaDebet: debet,
@@ -418,6 +426,7 @@ export async function GET(req: NextRequest) {
         label: 'PENERIMAAN LAINNYA',
         section: 'FUNDRAISING',
         group: 'PENERIMAAN_LAINNYA',
+        sourceId: Number(penerimaanLainnyaSource.id),
         params: {
           type: 'receipt',
           onlyCoaDebet: debet,
@@ -428,40 +437,85 @@ export async function GET(req: NextRequest) {
       })
     }
 
-    // Call ke Zains dibatasi paralelisme (ZAINS_SUMMARY_CONCURRENCY, default 5) + retry per request
+    // Fetch monthly targets from Postgres AND Zains data in parallel
     const concurrency = getZainsSummaryConcurrency()
-    const taskResults = await runPool(tasks, concurrency, async (t) => {
-      const base = {
-        year,
-        onlyCoaDebet: t.params.onlyCoaDebet,
-        onlyCoaKredit: t.params.onlyCoaKredit,
-        onlyIdContact: t.params.onlyIdContact,
-        excludeIdContact: t.params.excludeIdContact,
-        idKantor: t.params.idKantorZains,
+
+    type MonthlyTarget = { clinic_id: number | null; source_id: number; target_month: number; target_revenue: number }
+    const monthlyTargetsPromise = sql`
+      SELECT
+        cdt.clinic_id,
+        cdt.source_id,
+        cdt.target_month,
+        COALESCE(SUM(cdt.target_revenue), 0)::numeric AS target_revenue
+      FROM clinic_daily_targets cdt
+      WHERE (
+        (cdt.target_type = 'cumulative' AND cdt.target_year = ${year})
+        OR (
+          cdt.target_type = 'daily'
+          AND cdt.target_date IS NOT NULL
+          AND EXTRACT(YEAR FROM cdt.target_date::date) = ${year}
+          AND EXTRACT(MONTH FROM cdt.target_date::date) = cdt.target_month
+        )
+      )
+      GROUP BY cdt.clinic_id, cdt.source_id, cdt.target_month
+    `.then((rows) => (Array.isArray(rows) ? rows : []) as unknown as MonthlyTarget[])
+      .catch((err) => {
+        console.error('summary se-yearly: gagal fetch monthly targets:', err)
+        return [] as MonthlyTarget[]
+      })
+
+    const [taskResults, monthlyTargetRows] = await Promise.all([
+      runPool(tasks, concurrency, async (t) => {
+        const base = {
+          year,
+          onlyCoaDebet: t.params.onlyCoaDebet,
+          onlyCoaKredit: t.params.onlyCoaKredit,
+          onlyIdContact: t.params.onlyIdContact,
+          excludeIdContact: t.params.excludeIdContact,
+          idKantor: t.params.idKantorZains,
+        }
+        let monthly: MonthlyPoint[]
+        if (t.params.subtractType) {
+          const [receiptPts, expendPts] = await Promise.all([
+            fetchZainsMonthlySeries({ ...base, type: t.params.type }),
+            fetchZainsMonthlySeries({
+              year,
+              onlyCoaDebet: t.params.onlyCoaKredit,
+              onlyCoaKredit: t.params.onlyCoaDebet,
+              onlyIdContact: t.params.onlyIdContact,
+              excludeIdContact: t.params.excludeIdContact,
+              idKantor: t.params.idKantorZains,
+              type: t.params.subtractType,
+            }),
+          ])
+          monthly = netMonthlySeries(receiptPts, expendPts)
+        } else {
+          monthly = await fetchZainsMonthlySeries({
+            ...base,
+            type: t.params.type,
+          })
+        }
+        return { ...t, monthly }
+      }),
+      monthlyTargetsPromise,
+    ])
+
+    // Build monthly target lookup: "clinicId-sourceId-month" → target_revenue
+    // Also "source-sourceId-month" → sum of all clinic targets for that source+month
+    const targetLookup = new Map<string, number>()
+    for (const row of monthlyTargetRows) {
+      const cid = Number(row.clinic_id || 0)
+      const sid = Number(row.source_id || 0)
+      const m = Number(row.target_month || 0)
+      const rev = Number(row.target_revenue || 0)
+      if (!sid || !m) continue
+      if (cid) {
+        const key = `${cid}-${sid}-${m}`
+        targetLookup.set(key, (targetLookup.get(key) || 0) + rev)
       }
-      let monthly: MonthlyPoint[]
-      if (t.params.subtractType) {
-        const [receiptPts, expendPts] = await Promise.all([
-          fetchZainsMonthlySeries({ ...base, type: t.params.type }),
-          fetchZainsMonthlySeries({
-            year,
-            onlyCoaDebet: t.params.onlyCoaKredit,
-            onlyCoaKredit: t.params.onlyCoaDebet,
-            onlyIdContact: t.params.onlyIdContact,
-            excludeIdContact: t.params.excludeIdContact,
-            idKantor: t.params.idKantorZains,
-            type: t.params.subtractType,
-          }),
-        ])
-        monthly = netMonthlySeries(receiptPts, expendPts)
-      } else {
-        monthly = await fetchZainsMonthlySeries({
-          ...base,
-          type: t.params.type,
-        })
-      }
-      return { ...t, monthly }
-    })
+      const sourceKey = `source-${sid}-${m}`
+      targetLookup.set(sourceKey, (targetLookup.get(sourceKey) || 0) + rev)
+    }
 
     // Kumpulkan semua bulan unik yang punya data di salah satu row
     const monthSet = new Set<number>()
@@ -498,8 +552,21 @@ export async function GET(req: NextRequest) {
       return fp
     }
 
+    // Helper to build monthly target vector for a task
+    const buildMonthlyTargets = (t: typeof taskResults[0]): MonthlyPoint[] => {
+      return months.map((m) => {
+        let target = 0
+        if (t.clinicId && t.sourceId) {
+          target = targetLookup.get(`${t.clinicId}-${t.sourceId}-${m}`) || 0
+        } else if (t.sourceId) {
+          target = targetLookup.get(`source-${t.sourceId}-${m}`) || 0
+        }
+        return { month: m, sum: target }
+      })
+    }
+
     // Bangun rows per task
-    type RowWithParams = { label: string; monthly: MonthlyPoint[]; filterParams?: RowFilterParams }
+    type RowWithParams = { label: string; monthly: MonthlyPoint[]; monthlyTargets: MonthlyPoint[]; filterParams?: RowFilterParams }
     const klinikRows: RowWithParams[] = []
     const ambulanRows: RowWithParams[] = []
     const fundraisingRows: RowWithParams[] = []
@@ -508,14 +575,15 @@ export async function GET(req: NextRequest) {
     for (const r of taskResults) {
       const vector = toMonthlyVector(r.monthly)
       const fp = taskToFilterParams(r)
+      const targets = buildMonthlyTargets(r)
       if (r.section === 'SE' && r.group === 'KLINIK') {
-        klinikRows.push({ label: r.label, monthly: vector, filterParams: fp })
+        klinikRows.push({ label: r.label, monthly: vector, monthlyTargets: targets, filterParams: fp })
       } else if (r.section === 'SE' && r.group === 'AMBULAN') {
-        ambulanRows.push({ label: r.label, monthly: vector, filterParams: fp })
+        ambulanRows.push({ label: r.label, monthly: vector, monthlyTargets: targets, filterParams: fp })
       } else if (r.section === 'FUNDRAISING' && r.group === 'FUNDRAISING') {
-        fundraisingRows.push({ label: r.label, monthly: vector, filterParams: fp })
+        fundraisingRows.push({ label: r.label, monthly: vector, monthlyTargets: targets, filterParams: fp })
       } else if (r.section === 'FUNDRAISING' && r.group === 'PENERIMAAN_LAINNYA') {
-        penerimaanLainnyaRow = { label: r.label, monthly: vector, filterParams: fp }
+        penerimaanLainnyaRow = { label: r.label, monthly: vector, monthlyTargets: targets, filterParams: fp }
       }
     }
 
@@ -539,6 +607,15 @@ export async function GET(req: NextRequest) {
       : months.map((m) => ({ month: m, sum: 0 }))
     const grandTotalVector = sumVectors([totalSEVector, totalFundraisingVector, penerimaanLainnyaVector])
 
+    const totalKlinikTargetVector = sumVectors(klinikRows.map((r) => r.monthlyTargets))
+    const totalAmbulanTargetVector = sumVectors(ambulanRows.map((r) => r.monthlyTargets))
+    const totalSETargetVector = sumVectors([totalKlinikTargetVector, totalAmbulanTargetVector])
+    const totalFundraisingTargetVector = sumVectors(fundraisingRows.map((r) => r.monthlyTargets))
+    const penerimaanLainnyaTargetVector = penerimaanLainnyaRow
+      ? penerimaanLainnyaRow.monthlyTargets
+      : months.map((m) => ({ month: m, sum: 0 }))
+    const grandTotalTargetVector = sumVectors([totalSETargetVector, totalFundraisingTargetVector, penerimaanLainnyaTargetVector])
+
     const sections: PivotSection[] = [
       {
         title: 'SE',
@@ -549,11 +626,13 @@ export async function GET(req: NextRequest) {
               ...klinikRows.map((r) => ({
                 label: r.label,
                 monthly: r.monthly,
+                monthlyTargets: r.monthlyTargets,
                 filterParams: r.filterParams,
               })),
               {
                 label: 'TOTAL KLINIK',
                 monthly: totalKlinikVector,
+                monthlyTargets: totalKlinikTargetVector,
               },
             ],
           },
@@ -563,11 +642,13 @@ export async function GET(req: NextRequest) {
               ...ambulanRows.map((r) => ({
                 label: r.label,
                 monthly: r.monthly,
+                monthlyTargets: r.monthlyTargets,
                 filterParams: r.filterParams,
               })),
               {
                 label: 'TOTAL AMBULAN',
                 monthly: totalAmbulanVector,
+                monthlyTargets: totalAmbulanTargetVector,
               },
             ],
           },
@@ -577,6 +658,7 @@ export async function GET(req: NextRequest) {
               {
                 label: 'TOTAL SE',
                 monthly: totalSEVector,
+                monthlyTargets: totalSETargetVector,
               },
             ],
           },
@@ -591,11 +673,13 @@ export async function GET(req: NextRequest) {
               ...fundraisingRows.map((r) => ({
                 label: r.label,
                 monthly: r.monthly,
+                monthlyTargets: r.monthlyTargets,
                 filterParams: r.filterParams,
               })),
               {
                 label: 'TOTAL FUNDRAISING',
                 monthly: totalFundraisingVector,
+                monthlyTargets: totalFundraisingTargetVector,
               },
             ],
           },
@@ -605,11 +689,13 @@ export async function GET(req: NextRequest) {
               {
                 label: 'PENERIMAAN LAINNYA',
                 monthly: penerimaanLainnyaVector,
+                monthlyTargets: penerimaanLainnyaTargetVector,
                 filterParams: penerimaanLainnyaRow?.filterParams,
               },
               {
                 label: 'GRAND TOTAL',
                 monthly: grandTotalVector,
+                monthlyTargets: grandTotalTargetVector,
               },
             ],
           },
@@ -630,36 +716,17 @@ export async function GET(req: NextRequest) {
     }
 
     type TargetBySource = Record<string, number>
-    let targetsBySourceId: TargetBySource = {}
+    const targetsBySourceId: TargetBySource = {}
     const bySourceId = new Map<number, number>()
 
-    try {
-      const targetAggRows = await sql`
-        SELECT
-          cdt.source_id,
-          COALESCE(SUM(cdt.target_revenue), 0)::numeric AS total_target
-        FROM clinic_daily_targets cdt
-        WHERE (
-          (cdt.target_type = 'cumulative' AND cdt.target_year = ${year})
-          OR (
-            cdt.target_type = 'daily'
-            AND cdt.target_date IS NOT NULL
-            AND EXTRACT(YEAR FROM cdt.target_date::date) = ${year}
-          )
-        )
-        GROUP BY cdt.source_id
-      `
-      const rows = Array.isArray(targetAggRows) ? targetAggRows : []
-      for (const row of rows as { source_id: unknown; total_target: unknown }[]) {
-        const sid = Number(row.source_id || 0)
-        const t = Number(row.total_target || 0)
-        if (!sid) continue
-        bySourceId.set(sid, t)
-        targetsBySourceId[String(sid)] = t
-      }
-    } catch (targetErr) {
-      console.error('summary se-yearly: gagal agregasi clinic_daily_targets.target_revenue:', targetErr)
-      targetsBySourceId = {}
+    for (const row of monthlyTargetRows) {
+      const sid = Number(row.source_id || 0)
+      const rev = Number(row.target_revenue || 0)
+      if (!sid) continue
+      bySourceId.set(sid, (bySourceId.get(sid) || 0) + rev)
+    }
+    for (const [sid, total] of bySourceId.entries()) {
+      targetsBySourceId[String(sid)] = total
     }
 
     const sumTargetForIds = (ids: number[]) =>

@@ -16,6 +16,10 @@ export type PivotRow = {
     month: number
     sum: number
   }[]
+  monthlyTargets?: {
+    month: number
+    sum: number
+  }[]
   filterParams?: RowFilterParams
 }
 
